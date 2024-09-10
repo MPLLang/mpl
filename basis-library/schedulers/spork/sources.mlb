@@ -22,7 +22,7 @@ local
 
   ../shh/CumulativePerProcTimer.sml
   SPORK_JOIN.sig
-  FORK_JOIN.sig
+  (*FORK_JOIN.sig*)
   ../shh/SimpleRandom.sml
   ../shh/queue/DequeABP.sml
   (*Stack.sml*)

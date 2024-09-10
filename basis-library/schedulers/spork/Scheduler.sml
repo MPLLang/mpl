@@ -94,53 +94,53 @@ struct
   val nextPromotionTokenPolicy =
     _import "GC_HH_getNextPromotionTokenPolicy" runtime private: gcstate -> Word32.word;
   val nextPromotionTokenPolicy =
-    (fn () => case nextPromotionTokenPolicy (gcstate ()) of
+    (fn __inline_always__ () => case nextPromotionTokenPolicy (gcstate ()) of
                   0w0 => TokenPolicyFair
                 | 0w1 => TokenPolicyKeep
                 | 0w2 => TokenPolicyGive
                 | w => die (fn _ => "Unknown token policy " ^ Word32.toString w))
   
-  val primSporkFair =
+  val primSporkFair' =
       _prim "spork_fair"
-        : ('aa -> 'ar)	(* cont *)
-        * 'aa
-        * ('ba * 'd -> 'br)	(* spwn *)
-        * 'ba
-        * ('ar -> 'c)	(* seq  *)
-        * ('ar * 'd -> 'c)	(* sync *)
+        : ('aa -> 'ar)		(* body     *)
+        * 'aa			(* body arg *)
+        * ('ba * 'd -> 'br)	(* spwn     *)
+        * 'ba			(* spwn arg *)
+        * ('ar -> 'c)		(* seq      *)
+        * ('ar * 'd -> 'c)	(* sync     *)
         -> 'c;
-  val primSporkKeep =
+  val primSporkKeep' =
       _prim "spork_keep"
-        : ('aa -> 'ar)	(* cont *)
-        * 'aa
-        * ('ba * 'd -> 'br)	(* spwn *)
-        * 'ba
-        * ('ar -> 'c)	(* seq  *)
-        * ('ar * 'd -> 'c)	(* sync *)
+        : ('aa -> 'ar)		(* body     *)
+        * 'aa			(* body arg *)
+        * ('ba * 'd -> 'br)	(* spwn     *)
+        * 'ba			(* spwn arg *)
+        * ('ar -> 'c)		(* seq      *)
+        * ('ar * 'd -> 'c)	(* sync     *)
         -> 'c;
-  val primSporkGive =
+  val primSporkGive' =
       _prim "spork_give"
-        : ('aa -> 'ar)	(* cont *)
-        * 'aa
-        * ('ba * 'd -> 'br)	(* spwn *)
-        * 'ba
-        * ('ar -> 'c)	(* seq  *)
-        * ('ar * 'd -> 'c)	(* sync *)
+        : ('aa -> 'ar)		(* body     *)
+        * 'aa			(* body arg *)
+        * ('ba * 'd -> 'br)	(* spwn     *)
+        * 'ba			(* spwn arg *)
+        * ('ar -> 'c)		(* seq      *)
+        * ('ar * 'd -> 'c)	(* sync     *)
         -> 'c;
-  val primSporkFair = fn __inline_always__ (cont, spwn, seq, sync) =>
-                         __inline_always__ primSporkFair (cont, (), spwn, (), seq, sync)
-  val primSporkKeep = fn __inline_always__ (cont, spwn, seq, sync) =>
-                         __inline_always__ primSporkKeep (cont, (), spwn, (), seq, sync)
-  val primSporkGive = fn __inline_always__ (cont, spwn, seq, sync) =>
-                         __inline_always__ primSporkGive (cont, (), spwn, (), seq, sync)
-
+  fun __inline_always__ primSporkFair (body, spwn, seq, sync) =
+      __inline_always__ primSporkFair' (body, (), spwn, (), seq, sync)
+  fun __inline_always__ primSporkKeep (body, spwn, seq, sync) =
+      __inline_always__ primSporkKeep' (body, (), spwn, (), seq, sync)
+  fun __inline_always__ primSporkGive (body, spwn, seq, sync) =
+      __inline_always__ primSporkGive' (body, (), spwn, (), seq, sync)
+  
   val primForkThreadAndSetData = _prim "spork_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
   val primForkThreadAndSetData_youngest = _prim "spork_forkThreadAndSetData_youngest": Thread.t * 'a -> Thread.p;
 
   val findNextPromotableFrame =
     _import "GC_HH_findNextPromotableFrame" runtime private: gcstate * bool * Thread.t -> bool;
   val findNextPromotableFrame =
-      (fn ({youngestOptimization}, p) =>
+      (fn __inline_always__ ({youngestOptimization}, p) =>
           findNextPromotableFrame (gcstate (), youngestOptimization, p))
       : {youngestOptimization: bool} * Thread.t -> bool;
 
@@ -1027,11 +1027,11 @@ struct
   
     val sched_package_data = ref
       { syncEndAtomic = syncEndAtomic maybeParClearSuspectsAtDepth
-      (*, maybeSpawn = maybeSpawn*)
+      , maybeSpawn = maybeSpawn
       , setQueueDepth = setQueueDepth
       , returnToSchedEndAtomic = returnToSchedEndAtomic
       , tryConsumeSpareHeartbeats = tryConsumeSpareHeartbeats
-      (*, addEagerSpawns = addEagerSpawns*)
+      , addEagerSpawns = addEagerSpawns
       , assertAtomic = assertAtomic
       , error = (fn s => die (fn _ => s)) : string -> unit
       }
@@ -1044,129 +1044,30 @@ struct
      * spork definition
      *)
 
-    fun __inline_always__ spork (primSpork: (unit -> 'a Result.t) * (unit * Universal.t joinpoint -> unit) * ('a Result.t -> 'c) * ('a Result.t * Universal.t joinpoint -> 'c) -> 'c, cont: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
-      let
-        val (inject, project) = Universal.embed ()
-
-        (* TODO: talk with Matthew about the overheads associated with result wrappers *)
-        fun __inline_always__ cont' () = __inline_always__ Result.result cont
-
-        fun __inline_never__ spwn' ((), J jp) =
-          let
-            val _ = #assertAtomic (sched_package ()) "spork rightside begin" 1
-            val () = DE.decheckSetTid (#tidRight jp)
-
-            val thread = Thread.current ()
-            val depth = HH.getDepth thread
-            val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
-
-            val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            val _ = addSpareHeartbeats (#spareHeartbeatsGiven jp)
-            val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
-            val _ = Thread.atomicEnd()
-
-            val spwnr = Result.result (inject o spwn)
-
-            val _ = Thread.atomicBegin ()
-            val depth' = HH.getDepth (Thread.current ())
-            val _ =
-              if depth = depth' then ()
-              else #error (sched_package ()) ("scheduler bug: rightide depth mismatch: " ^ Int.toString depth ^ " vs " ^ Int.toString depth')
-            val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Int.toString depth')
-            val _ = #assertAtomic (sched_package ()) "spork rightside begin synchronize" 1
-          in
-            #rightSideThread jp := SOME thread;
-            #rightSideResult jp := SOME spwnr;
-
-            if decrementHitsZero (#incounter jp) then
-              ( ()
-              ; dbgmsg'' (fn _ => "rightside synchronize: become left")
-              ; #setQueueDepth (sched_package ()) (myWorkerId ()) depth
-                (** Atomic 1 *)
-              ; Thread.atomicBegin ()
-
-                (** Atomic 2 *)
-
-                (** (When sibling is resumed, it needs to be atomic 1.
-                  * Switching threads is implicit atomicEnd(), so we need
-                  * to be at atomic2
-                  *)
-              ; #assertAtomic (sched_package ()) "spork rightside switch-to-left" 2
-              ; threadSwitchEndAtomic (#leftSideThread jp)
-              )
-            else
-              ( dbgmsg'' (fn _ => "rightside synchronize: back to sched")
-              ; #assertAtomic (sched_package ()) "spork rightside before returnToSched" 1
-              ; #returnToSchedEndAtomic (sched_package ()) ()
-              )
-          end
-
-        fun __inline_always__ seq' contr =
-          __inline_always__ seq (Result.extractResult contr)
-
-        fun __inline_never__ sync' (contr, jp) =
-          let
-            val _ = dbgmsg'' (fn _ => "hello from sync continuation")
-            val _ = Thread.atomicBegin ()
-            val _ = #assertAtomic (sched_package ()) "sync continuation" 1
-            val spwnrOpt = #syncEndAtomic (sched_package ()) jp
-            val contr' = Result.extractResult contr
-          in
-            case spwnrOpt of
-                (* spwn was unstolen: actually, use seq continuation here! *)
-                NONE => seq contr'
-              (* spwn was stolen and synced in syncEndAtomic *)
-              | SOME spwnr =>
-                case project (Result.extractResult spwnr) of
-                    SOME r => sync (contr', r)
-                  | NONE => (#error (sched_package ())
-                                    "scheduler bug: spork sync: failed project right-side result";
-                             raise SchedulerError)
-          end
-      in
-        __inline_always__ primSpork (cont', spwn', seq', sync')
-      end
-
     fun __inline_always__ noTokens () = __inline_always__ currentSpareHeartbeatTokens () < spawnCost
 
     fun __inline_always__ tryPromoteNow yo =
       ( Thread.atomicBegin ()
       ; if
           not (noTokens ()) andalso
-          (*#maybeSpawn (sched_package ())*) maybeSpawn yo (Thread.current ())
+          #maybeSpawn (sched_package ()) yo (Thread.current ())
         then
-          (*#addEagerSpawns (sched_package ())*) addEagerSpawns 1
+          #addEagerSpawns (sched_package ()) 1
         else
           ()
       ; Thread.atomicEnd ()
       )
 
-    fun __inline_always__ tryPromoteFirst (cont: unit -> 'a) : unit -> 'a =
-        let fun __inline_always__ tryPromoteFirstCont () =
-                ((if noTokens () then () else tryPromoteNow {youngestOptimization = true});
-                 __inline_always__ cont ())
-        in
-          tryPromoteFirstCont
-        end
-           
-
-    fun __inline_always__ sporkFair (cont, spwn, seq, sync) =
-        spork (primSporkFair, tryPromoteFirst cont, spwn, seq, sync)
-
-    fun __inline_always__ sporkKeep (cont, spwn, seq, sync) =
-        spork (primSporkKeep, tryPromoteFirst cont, spwn, seq, sync)
-
-    fun __inline_always__ sporkGive (cont, spwn, seq, sync) =
-        spork (primSporkGive, tryPromoteFirst cont, spwn, seq, sync)
-
-    fun __inline_always__ sporkSam (primSpork: (unit -> 'a Result.t) * (unit * Universal.t joinpoint -> unit) * ('a Result.t -> 'c) * ('a Result.t * Universal.t joinpoint -> 'c) -> 'c, cont: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c) : 'c =
+    fun __inline_always__ sporkSam (primSpork: (unit -> 'a Result.t) * (unit * Universal.t joinpoint -> unit) * ('a Result.t -> 'c) * ('a Result.t * Universal.t joinpoint -> 'c) -> 'c, body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c) : 'c =
       let
         val (inject, project) = Universal.embed ()
 
         (* TODO: talk with Matthew about the overheads associated with result wrappers *)
-        fun __inline_always__ cont' () = __inline_always__ Result.result cont
+        fun __inline_always__ body' () =
+            ((if noTokens () then () else tryPromoteNow {youngestOptimization = true});
+             Result.result body)
 
-        fun __inline_never__ spwn' ((), J jp) =
+        fun __inline_always__ spwn' ((), J jp) =
           let
             val _ = #assertAtomic (sched_package ()) "spork rightside begin" 1
             val () = DE.decheckSetTid (#tidRight jp)
@@ -1216,41 +1117,53 @@ struct
               )
           end
 
-        fun __inline_always__ seq' contr =
-          __inline_always__ seq (Result.extractResult contr)
+        fun __inline_always__ seq' bodyr =
+          __inline_always__ seq (Result.extractResult bodyr)
 
-        fun __inline_never__ sync' (contr, jp) =
+        fun __inline_always__ sync' (bodyr, jp) =
           let
             val _ = dbgmsg'' (fn _ => "hello from sync continuation")
             val _ = Thread.atomicBegin ()
             val _ = #assertAtomic (sched_package ()) "sync continuation" 1
             val spwnrOpt = #syncEndAtomic (sched_package ()) jp
-            val contr' = Result.extractResult contr
+            val bodyr' = Result.extractResult bodyr
           in
             case spwnrOpt of
               (* spwn was unstolen *)
-                NONE => unstolen contr'
+                NONE => unstolen bodyr'
               (* spwn was stolen and synced in syncEndAtomic *)
               | SOME spwnr =>
                 case project (Result.extractResult spwnr) of
-                    SOME r => sync (contr', r)
+                    SOME r => sync (bodyr', r)
                   | NONE => (#error (sched_package ())
                                     "scheduler bug: spork sync: failed project right-side result";
                              raise SchedulerError)
           end
       in
-        __inline_always__ primSpork (cont', spwn', seq', sync')
+        __inline_always__ primSpork (body', spwn', seq', sync')
       end
 
-    fun __inline_always__ sporkSamFair (cont, spwn, seq, sync, unstolen) =
-        __inline_always__ sporkSam (primSporkFair, tryPromoteFirst cont, spwn, seq, sync, unstolen)
+    fun __inline_always__ spork (primSpork: (unit -> 'a Result.t) * (unit * Universal.t joinpoint -> unit) * ('a Result.t -> 'c) * ('a Result.t * Universal.t joinpoint -> 'c) -> 'c,
+                                 body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
+        sporkSam (primSpork, body, spwn, seq, sync, seq)
 
-    fun __inline_always__ sporkSamKeep (cont, spwn, seq, sync, unstolen) =
-        __inline_always__ sporkSam (primSporkKeep, tryPromoteFirst cont, spwn, seq, sync, unstolen)
+    fun __inline_always__ sporkFair {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
+        spork (primSporkFair, body, spwn, seq, sync)
 
-    fun __inline_always__ sporkSamGive (cont, spwn, seq, sync, unstolen) =
-        __inline_always__ sporkSam (primSporkGive, tryPromoteFirst cont, spwn, seq, sync, unstolen)
+    fun __inline_always__ sporkKeep {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
+        spork (primSporkKeep, body, spwn, seq, sync)
 
+    fun __inline_always__ sporkGive {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
+        spork (primSporkGive, body, spwn, seq, sync)
+
+    fun __inline_always__ sporkSamFair {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
+        sporkSam (primSporkFair, body, spwn, seq, sync, unstolen)
+
+    fun __inline_always__ sporkSamKeep {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
+        sporkSam (primSporkKeep, body, spwn, seq, sync, unstolen)
+
+    fun __inline_always__ sporkSamGive {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
+        sporkSam (primSporkGive, body, spwn, seq, sync, unstolen)
   end
 
   (* ========================================================================
@@ -1522,6 +1435,11 @@ struct
    * will be optimized away, causing the compiler to crash because it doesn't
    * know how to pass a useless argument to the corresponding runtime func.
    *)
-  val () = SporkJoin.sporkSamFair (fn () => (), fn () => (), fn _ => (), fn _ => (), fn () => ())
-
+  val () = SporkJoin.sporkSamFair {
+        body = fn () => (),
+        spwn = fn () => (),
+        seq  = fn () => (),
+        sync = fn ((), ()) => (),
+        unstolen = fn () => ()
+      }
 end
