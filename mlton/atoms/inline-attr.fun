@@ -34,6 +34,14 @@ fun equals (i, i'): bool =
     | (Never, Never) => true
     | _ => false
 
+fun join (i, i'): t =
+    case (i, i') of
+        (Never, _) => Never
+      | (_, Never) => Never
+      | (Always, _) => Always
+      | (_, Always) => Always
+      | (Auto, Auto) => Auto
+
 fun toString i =
    case i of
       Always => "Always"

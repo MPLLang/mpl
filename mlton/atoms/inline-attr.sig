@@ -23,4 +23,5 @@ signature INLINE_ATTR =
       val mayInline: t -> bool
       val mustInline: t -> bool
       val parse: t Parse.t
+      val join: t * t -> t
    end
