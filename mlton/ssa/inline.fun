@@ -489,7 +489,7 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                                  new (Goto {dst = dst,
                                             args = args})
                               end
-                           fun findLoop (nest, allTails) hist =
+                           fun findLoop (nest, allTails) =
                               case nest of
                                  [] => NONE
                                | (func',start',return')::nest =>
@@ -503,10 +503,10 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                                           then if allTails
                                                   then SOME (SOME start')
                                                else SOME NONE
-                                       else findLoop (nest, allTails') (func' :: hist)
+                                       else findLoop (nest, allTails')
                                     end
                         in
-                           case findLoop (nest, Return.isTail return') [] of
+                           case findLoop (nest, Return.isTail return') of
                               SOME (SOME start) => new (Transfer.Goto
                                                         {dst = start,
                                                          args = args})
