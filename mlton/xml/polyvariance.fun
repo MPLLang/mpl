@@ -11,6 +11,9 @@
  * Duplicate a let bound function at each variable reference
  * if cost is smaller than threshold.
  * 
+ * TODO: currently, this pass only takes into account
+ * function inline attrs, not application (call site)
+ * inline attrs. Perhaps we want to account for those too!
  *)
 functor Polyvariance (S: XML_TRANSFORM_STRUCTS): XML_TRANSFORM = 
 struct
@@ -93,19 +96,21 @@ fun shouldDuplicate (program as Program.T {body, ...}, hofo, small, product)
    let
       val costs: (Var.t * int * int * int) list ref = ref []
       val lambdaSize = lambdaSize program
-      fun isOK (var: Var.t, size: int, numOccurrences: int): bool =
+      fun isOK (var: Var.t, size: int, numOccurrences: int, inline: InlineAttr.t): bool =
          let val cost = (numOccurrences - 1) * (size - small)
          in List.push (costs, (var, size, numOccurrences, cost))
-            ; cost <= product
+            ; ((cost <= product) orelse InlineAttr.mustInline inline) andalso InlineAttr.mayInline inline
          end
       type info = {numOccurrences: int ref,
                    shouldDuplicate: bool ref}
       val {get = varInfo: Var.t -> info option, set = setVarInfo, ...} =
          Property.getSetOnce (Var.plist, Property.initConst NONE)
-      fun new {lambda = _, ty, var}: unit =
-         if not hofo orelse Type.isHigherOrder ty
-            then setVarInfo (var, SOME {numOccurrences = ref 0,
-                                        shouldDuplicate = ref false})
+      fun new {lambda = l, ty, var}: unit =
+         if (not hofo orelse Type.isHigherOrder ty
+             orelse InlineAttr.mustInline (Lambda.inline l))
+            andalso InlineAttr.mayInline (Lambda.inline l)
+         then setVarInfo (var, SOME {numOccurrences = ref 0,
+                                     shouldDuplicate = ref false})
          else ()
       fun loopExp (e: Exp.t, numDuplicates: int): unit =
          let
@@ -133,7 +138,8 @@ fun shouldDuplicate (program as Program.T {body, ...}, hofo, small, product)
                                                | SOME {numOccurrences,
                                                        shouldDuplicate} =>
                                                  if isOK (var, lambdaSize l,
-                                                          !numOccurrences)
+                                                          !numOccurrences,
+                                                          Lambda.inline l)
                                                     then (shouldDuplicate := true
                                                           ; !numOccurrences)
                                                  else numDuplicates
@@ -195,11 +201,15 @@ fun shouldDuplicate (program as Program.T {body, ...}, hofo, small, product)
                                        (dups, 0,
                                         fn ({info = {numOccurrences, ...}, ...},
                                             n) => n + !numOccurrences)
-                                 in if isOK (if Vector.isEmpty lambdas
-                                                then Error.bug "Polyvariance.loopExp.loopDecs: empty lambdas"
-                                             else
-                                                #var (Vector.first lambdas),
-                                             size, numOccurrences)
+                                    val firstVar = if Vector.isEmpty lambdas then
+                                                        Error.bug "Polyvariance.loopExp.loopDecs: empty lambdas"
+                                                      else
+                                                        #var (Vector.first lambdas)
+                                    val inline =
+                                        Vector.foldr
+                                          (Vector.map (lambdas, Lambda.inline o #lambda),
+                                           InlineAttr.Auto, InlineAttr.join)
+                                 in if isOK (firstVar, size, numOccurrences, inline)
                                        then (List.foreach
                                              (dups,
                                               fn {body,
