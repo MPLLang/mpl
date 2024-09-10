@@ -1058,7 +1058,7 @@ struct
       ; Thread.atomicEnd ()
       )
 
-    fun __inline_always__ sporkSam (primSpork: (unit -> 'a Result.t) * (unit * Universal.t joinpoint -> unit) * ('a Result.t -> 'c) * ('a Result.t * Universal.t joinpoint -> 'c) -> 'c, body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c) : 'c =
+    fun __inline_always__ sporkBase (primSpork: (unit -> 'a Result.t) * (unit * Universal.t joinpoint -> unit) * ('a Result.t -> 'c) * ('a Result.t * Universal.t joinpoint -> 'c) -> 'c, body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c) : 'c =
       let
         val (inject, project) = Universal.embed ()
 
@@ -1145,7 +1145,7 @@ struct
 
     fun __inline_always__ spork (primSpork: (unit -> 'a Result.t) * (unit * Universal.t joinpoint -> unit) * ('a Result.t -> 'c) * ('a Result.t * Universal.t joinpoint -> 'c) -> 'c,
                                  body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
-        sporkSam (primSpork, body, spwn, seq, sync, seq)
+        sporkBase (primSpork, body, spwn, seq, sync, seq)
 
     fun __inline_always__ sporkFair {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
         spork (primSporkFair, body, spwn, seq, sync)
@@ -1156,14 +1156,14 @@ struct
     fun __inline_always__ sporkGive {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
         spork (primSporkGive, body, spwn, seq, sync)
 
-    fun __inline_always__ sporkSamFair {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
-        sporkSam (primSporkFair, body, spwn, seq, sync, unstolen)
+    fun __inline_always__ sporkFair' {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
+        sporkBase (primSporkFair, body, spwn, seq, sync, unstolen)
 
-    fun __inline_always__ sporkSamKeep {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
-        sporkSam (primSporkKeep, body, spwn, seq, sync, unstolen)
+    fun __inline_always__ sporkKeep' {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
+        sporkBase (primSporkKeep, body, spwn, seq, sync, unstolen)
 
-    fun __inline_always__ sporkSamGive {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
-        sporkSam (primSporkGive, body, spwn, seq, sync, unstolen)
+    fun __inline_always__ sporkGive' {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
+        sporkBase (primSporkGive, body, spwn, seq, sync, unstolen)
   end
 
   (* ========================================================================
@@ -1435,7 +1435,7 @@ struct
    * will be optimized away, causing the compiler to crash because it doesn't
    * know how to pass a useless argument to the corresponding runtime func.
    *)
-  val () = SporkJoin.sporkSamFair {
+  val () = SporkJoin.sporkFair' {
         body = fn () => (),
         spwn = fn () => (),
         seq  = fn () => (),

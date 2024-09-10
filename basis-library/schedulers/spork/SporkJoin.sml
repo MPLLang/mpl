@@ -15,9 +15,9 @@ struct
   fun __inline_always__ sporkFair y = __inline_always__ Scheduler.SporkJoin.sporkFair y
   fun __inline_always__ sporkGive y = __inline_always__ Scheduler.SporkJoin.sporkGive y
   fun __inline_always__ sporkKeep y = __inline_always__ Scheduler.SporkJoin.sporkKeep y
-  fun __inline_always__ sporkSamFair y = __inline_always__ Scheduler.SporkJoin.sporkSamFair y
-  fun __inline_always__ sporkSamGive y = __inline_always__ Scheduler.SporkJoin.sporkSamGive y
-  fun __inline_always__ sporkSamKeep y = __inline_always__ Scheduler.SporkJoin.sporkSamKeep y
+  fun __inline_always__ sporkFair' y = __inline_always__ Scheduler.SporkJoin.sporkFair' y
+  fun __inline_always__ sporkGive' y = __inline_always__ Scheduler.SporkJoin.sporkGive' y
+  fun __inline_always__ sporkKeep' y = __inline_always__ Scheduler.SporkJoin.sporkKeep' y
 
   (* fun __inline_always__ specialize (f: 'a -> 'b): 'a -> 'b = *)
   (*     let fun specializedF a = f a in *)
@@ -40,25 +40,20 @@ struct
 
   fun __inline_always__ wpareduce (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun iter (b: 'a) (i: word, j: word): 'a =
-              if i >= j then
-                b
-              else
+              if i >= j then b else
                 let val i' = i + 0w1
                     fun __inline_never__ unstolen b' =
-                        if i' >= j then
-                          b'
-                        else
+                        if i' >= j then b' else
                           let val mid = midpoint (i', j) in
-                            sporkSamFair {
+                            sporkFair {
                               body = fn __inline_always__ () => iter b' (i', mid),
                               spwn = fn __inline_always__ () => iter z (mid, j),
                               seq  = fn __inline_always__ b' => iter b' (mid, j),
-                              sync = merge,
-                              unstolen = fn __inline_always__ b' => iter b' (mid, j)
-                            }
+                              sync = merge
+                          }
                           end
                 in
-                  sporkSamGive {
+                  sporkGive' {
                     body = fn __inline_always__ () => __inline_always__ step (i, b),
                     spwn = fn __inline_always__ () => unstolen z,
                     seq = fn __inline_always__ b' => iter b' (i', j),
@@ -68,6 +63,33 @@ struct
                 end
       in
         __inline_always__ iter z (i, j)
+      end
+
+  fun __inline_always__ wpareduceSplit (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      let fun split (b: 'a) (i: word, j: word): 'a =
+              if i >= j then b else
+                let val mid = midpoint (i + 0w1, j) in
+                  sporkFair {
+                    body = fn __inline_always__ () =>
+                              let fun loop b i =
+                                      if i >= mid then b else
+                                        sporkGive' {
+                                          body = fn __inline_always__ () => step (i, b),
+                                          spwn = fn __inline_always__ () => split z (i + 0w1, mid),
+                                          seq  = fn __inline_always__ b' => loop b' (i + 0w1),
+                                          sync = merge,
+                                          unstolen = fn __inline_always__ b' => split b' (i + 0w1, mid)
+                                        }
+                              in
+                                __inline_always__ loop b i
+                              end,
+                    spwn = fn __inline_always__ () => split z (mid, j),
+                    seq  = fn __inline_always__ b' => split b' (mid, j),
+                    sync = merge
+                  }
+                end
+      in
+        __inline_always__ split z (i, j)
       end
 
   (* No inlining version *)
@@ -82,7 +104,7 @@ struct
                           b'
                         else
                           let val mid = midpoint (i', j) in
-                            sporkSamFair {
+                            sporkFair' {
                               body = fn () => iter b' (i', mid),
                               spwn = fn () => iter z (mid, j),
                               seq  = fn b' => iter b' (mid, j),
@@ -91,7 +113,7 @@ struct
                             }
                           end
                 in
-                  sporkSamGive {
+                  sporkGive' {
                     body = fn () => step (i, b),
                     spwn = fn () => unstolen z,
                     seq = fn b' => iter b' (i', j),
@@ -112,6 +134,8 @@ struct
       wrap wpareduce (i, j) b step merge
   fun __inline_never__ pareduce' (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       wrap wpareduce' (i, j) b step merge
+  fun __inline_always__ pareduceSplit (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      wrap wpareduceSplit (i, j) b step merge
   end
 
   fun __inline_always__ parfor (grain: int) (i: int, j: int) (f: int -> unit): unit =
