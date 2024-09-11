@@ -19,7 +19,7 @@ Pointers to objects always point to the beginning of the payload. These
 pointers are known as "object pointers", and are identified by the C type
 [`objptr`](https://github.com/MPLLang/mpl/blob/5bcbcc1883a12edf0dd0f29bc46e65c2cc2ff65e/runtime/gc/objptr.h#L13) throughout `runtime/gc/`. 
 
-![General layout of any MPL heap object](/assets/heap-obj-model.png){:width="50%"}
+![General layout of any MPL heap object]({{site.baseurl}}/assets/heap-obj-model.png){:width="50%"}
 
 ## Object Types
 
@@ -28,7 +28,7 @@ sequence objects, and stack objects. (See `NORMAL_TAG`, `SEQUENCE_TAG`, and
 `STACK_TAG` in the definition of the enum [`GC_objectTypeTag`](https://github.com/MPLLang/mpl/blob/5bcbcc1883a12edf0dd0f29bc46e65c2cc2ff65e/runtime/gc/object.h#L19-L26).)
 The type of every object is recorded in its [header](header.html).
 
-![Normal, sequence, and stack objects](/assets/heap-obj-types.png){:width="85%"}
+![Normal, sequence, and stack objects]({{site.baseurl}}/assets/heap-obj-types.png){:width="85%"}
 
 * **Normal objects** are flexible: they may contain any number of fields, fixed at
 the time of allocation (and known at compile time). Each field contains

@@ -24,8 +24,8 @@ description: >- # this means to ignore newlines until "baseurl:"
   Documentation for the MPLLang/mpl repo, especially source-code documentation
   of the MPL compiler and run-time system. This is intended for the developers
   of MPL and anyone interested in contributing to the MPL project. 
-baseurl: "" # the subpath of your site, e.g. /blog
-url: "" # the base hostname & protocol for your site, e.g. http://example.com
+baseurl: "/mpl" # the subpath of your site, e.g. /blog
+url: "https://mpllang.github.io" # the base hostname & protocol for your site, e.g. http://example.com
 # twitter_username: jekyllrb
 # github_username:  jekyll
 
