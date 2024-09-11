@@ -37,6 +37,10 @@ jobs:
           ruby-version: "3.3"
           bundler-cache: true # runs 'bundle install' and caches installed gems automatically
           cache-version: 0 # Increment this number if you need to re-download cached gems
+      - name: Bundle install
+        run: bundle install
+        env:
+          JEKYLL_ENV: production
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
