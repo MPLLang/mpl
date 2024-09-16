@@ -74,7 +74,7 @@ struct
                               let fun loop b i =
                                       if i >= mid then b else
                                         sporkGive' {
-                                          body = fn __inline_always__ () => step (i, b),
+                                          body = fn __inline_always__ () => __inline_always__ step (i, b),
                                           spwn = fn __inline_always__ () => split z (i + 0w1, mid),
                                           seq  = fn __inline_always__ b' => loop b' (i + 0w1),
                                           sync = merge,
@@ -99,24 +99,24 @@ struct
                 b
               else
                 let val i' = i + 0w1
-                    fun unstolen b' =
+                    fun __inline_never__ unstolen b' =
                         if i' >= j then
                           b'
                         else
                           let val mid = midpoint (i', j) in
                             sporkFair' {
-                              body = fn () => iter b' (i', mid),
-                              spwn = fn () => iter z (mid, j),
-                              seq  = fn b' => iter b' (mid, j),
+                              body = fn __inline_never__ () => iter b' (i', mid),
+                              spwn = fn __inline_never__ () => iter z (mid, j),
+                              seq  = fn __inline_never__ b' => iter b' (mid, j),
                               sync = merge,
-                              unstolen = fn b' => iter b' (mid, j)
+                              unstolen = fn __inline_never__ b' => iter b' (mid, j)
                             }
                           end
                 in
                   sporkGive' {
-                    body = fn () => step (i, b),
-                    spwn = fn () => unstolen z,
-                    seq = fn b' => iter b' (i', j),
+                    body = fn __inline_never__ () => step (i, b),
+                    spwn = fn __inline_never__ () => unstolen z,
+                    seq = fn __inline_never__ b' => iter b' (i', j),
                     sync = merge,
                     unstolen = unstolen
                   }
