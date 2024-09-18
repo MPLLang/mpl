@@ -450,7 +450,7 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                                transfer = transfer}
                 in
                   case transfer of
-                     Call {func, args, inline = callInline, return = return'} =>
+                     Call {func, args, inline = callInline, return = callReturn} =>
                         let
                            val funcInline = #inline (Function.dest (function func))
                            val joinInline = InlineAttr.join (callInline, funcInline)
@@ -460,7 +460,7 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                                ; new (Call {func = func,
                                             args = args,
                                             inline = callInline,
-                                            return = Return.compose (return, return')}))
+                                            return = Return.compose (return, callReturn)}))
                            fun doInline () =
                               let
                                  val dst =
@@ -473,7 +473,7 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                                        val blocks =
                                           doit
                                           (blocks,
-                                           (func, start', return')::nest,
+                                           (func, start', callReturn)::nest,
                                            Vector.new1
                                            (Block.T
                                             {label = start',
@@ -506,7 +506,7 @@ fun transform {program as Program.T {datatypes, globals, functions, main},
                                        else findLoop (nest, allTails')
                                     end
                         in
-                           case findLoop (nest, Return.isTail return') of
+                           case findLoop (nest, Return.isTail callReturn) of
                               SOME (SOME start) => new (Transfer.Goto
                                                         {dst = start,
                                                          args = args})
