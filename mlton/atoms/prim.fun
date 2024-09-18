@@ -1258,6 +1258,16 @@ fun 'a checkApp (prim: 'a t,
          andalso equals (arg3', arg 3)
          andalso equals (arg4', arg 4)
          andalso equals (arg5', arg 5)
+      fun eightArgs (arg0', arg1', arg2', arg3', arg4', arg5', arg6', arg7') () =
+         8 = Vector.length args
+         andalso equals (arg0', arg 0)
+         andalso equals (arg1', arg 1)
+         andalso equals (arg2', arg 2)
+         andalso equals (arg3', arg 3)
+         andalso equals (arg4', arg 4)
+         andalso equals (arg5', arg 5)
+         andalso equals (arg6', arg 6)
+         andalso equals (arg7', arg 7)
       fun nArgs args' () =
          Vector.equals (args', args, equals)
       fun done (args, result') =
@@ -1418,15 +1428,18 @@ fun 'a checkApp (prim: 'a t,
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
        | MLton_touch => oneTarg (fn t => (oneArg t, unit))
        | Spork _ =>
-            (* spork : ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) -> 'c; *)
+            (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
+            (*        ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
             sixTargs (fn (taa, tar, tba, tbr, td, tc) =>
                        let
                           val cont = arrow (taa, tar)
                           val spwn = arrow (tuple (Vector.new2 (tba, td)), tbr)
                           val seq = arrow (tar, tc)
                           val sync = arrow (tuple (Vector.new2 (tar, td)), tc)
+                          val exnseq = arrow (exn, tc)
+                          val exnsync = arrow (tuple (Vector.new2 (exn, td)), tc)
                        in
-                          (sixArgs (cont, taa, spwn, tba, seq, sync), tc)
+                          (eightArgs (cont, taa, spwn, tba, seq, sync, exnseq, exnsync), tc)
                        end)
        | Spork_forkThreadAndSetData _ => oneTarg (fn t => (twoArgs (thread, t), thread))
        | Spork_getData _ => oneTarg (fn t => (noArgs, t))
@@ -1572,7 +1585,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
        | Spork _ =>
-            (* spork : ('aa -> 'ar) * 'aa * ('ba -> 'br) * 'ba * ('ar -> 'c) * ('ar -> 'c) -> 'c; *)
+            (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
             let
                val (taa, tar) = deArrow (arg 0)
                val (tba_td, tbr) = deArrow (arg 2)

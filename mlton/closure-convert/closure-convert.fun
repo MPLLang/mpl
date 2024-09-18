@@ -195,12 +195,16 @@ structure VarInfo =
                 lambda: Slambda.t option,
                 replacement: Var.t ref,
                 sporkInfo: {contres: Var.t,
+                            exncontres: Var.t,
                             data: Var.t,
                             spwnarg_data: Var.t,
                             spwnres: Var.t,
                             seqres: Var.t,
                             contres_data: Var.t,
-                            syncres: Var.t} option ref,
+                            syncres: Var.t,
+                            exnseqres: Var.t,
+                            exncontres_data: Var.t,
+                            exnsyncres: Var.t} option ref,
                 status: Status.t ref,
                 value: Value.t}
 
@@ -363,7 +367,7 @@ fun closureConvert
                         end
                    | Lambda l => set (loopLambda (l, var))
                    | PrimApp {prim = Prim.Spork {tokenSplitPolicy}, targs, args} =>
-                     (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) -> 'c *)
+                     (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
                      let fun targ i = Vector.sub (targs, i)
                          fun arg i = Vector.sub (args, i)
                          val tar = targ 1
@@ -377,25 +381,38 @@ fun closureConvert
                          val spwnarg = arg 3
                          val seq = arg 4
                          val sync = arg 5
+                         val exnseq = arg 6
+                         val exnsync = arg 7
                          val contres = Var.newString "contres"
                          val data = Var.newString "data"
                          val _ = newVar (data, Value.fromType td)
+
+                         val exncontres = Var.newString "cont_exn"
+                         val _ = newVar (exncontres, Value.fromType Stype.exn)
+
                          val spwnarg_data = Var.newString "spwnarg_data"
                          val spwnres = Var.newString "spwnres"
                          val seqres = Var.newString "seqres"
                          val contres_data = Var.newString "contres_data"
                          val syncres = Var.newString "syncres"
+                         val exnseqres = Var.newString "exnseqres"
+                         val exncontres_data = Var.newString "exncontres_data"
+                         val exnsyncres = Var.newString "exnsyncres"
                          val result = new ()
 
                          val inline = InlineAttr.Auto (* doesn't matter *)
                          val {sporkInfo, ...} = varInfo var
                          val _ = sporkInfo := SOME {contres = contres,
+                                                    exncontres = exncontres,
                                                     data = data,
                                                     spwnarg_data = spwnarg_data,
                                                     spwnres = spwnres,
                                                     seqres = seqres,
                                                     contres_data = contres_data,
-                                                    syncres = syncres}
+                                                    syncres = syncres,
+                                                    exncontres_data = exncontres_data,
+                                                    exnseqres = exnseqres,
+                                                    exnsyncres = exnsyncres}
 
                          val _ = loopBind {var = contres,
                                            ty = tar,
@@ -415,6 +432,7 @@ fun closureConvert
                                            exp = App {func = spwn,
                                                       arg = SvarExp.mono spwnarg_data,
                                                       inline = inline}}
+
                          val _ = loopBind {var = seqres,
                                            ty = tc,
                                            exp = App {func = seq,
@@ -432,6 +450,24 @@ fun closureConvert
                                                       arg = SvarExp.mono contres_data,
                                                       inline = inline}}
                          val _ = Value.coerce {from = value syncres, to = result}
+
+                         val _ = loopBind {var = exnseqres,
+                                           ty = tc,
+                                           exp = App {func = exnseq,
+                                                      arg = SvarExp.mono exncontres,
+                                                      inline = inline}}
+                         val _ = Value.coerce {from = value exnseqres, to = result}
+                         val _ = loopBind {var = exncontres_data,
+                                           ty = Stype.tuple (Vector.new2 (Stype.exn, td)),
+                                           exp = Tuple (Vector.new2
+                                                        (SvarExp.mono exncontres,
+                                                         SvarExp.mono data))}
+                         val _ = loopBind {var = exnsyncres,
+                                           ty = tc,
+                                           exp = App {func = exnsync,
+                                                      arg = SvarExp.mono exncontres_data,
+                                                      inline = inline}}
+                         val _ = Value.coerce {from = value exnsyncres, to = result}
                      in
                        ()
                      end
@@ -1070,9 +1106,11 @@ fun closureConvert
                  val spwnarg = arg 3
                  val seq = arg 4
                  val sync = arg 5
+                 val exnseq = arg 6
+                 val exnsync = arg 7
                  val spid = Spid.newNoname ()
                  val _ = Spid.setTokenSplitPolicy (spid, tokenSplitPolicy)
-                 val {contres, data, spwnarg_data, spwnres, contres_data, ...} =
+                 val {contres, exncontres, data, spwnarg_data, spwnres, contres_data, exncontres_data, ...} =
                     valOf (! (#sporkInfo info))
 
                  val {value = contres_value, ...} = varInfo contres
@@ -1080,11 +1118,50 @@ fun closureConvert
                  val {value = spwnarg_data_value, ...} = varInfo spwnarg_data
                  val {value = spwnres_value, ...} = varInfo spwnres
                  val {value = contres_data_value, ...} = varInfo contres_data
+                 val {value = exncontres_data_value, ...} = varInfo exncontres_data
                  val contres_ty = valueType contres_value
                  val data_ty = valueType data_value
                  val spwnarg_data_ty = valueType spwnarg_data_value
                  val spwnres_ty = valueType spwnres_value
                  val contres_data_ty = valueType contres_data_value
+                 val exncontres_data_ty = valueType exncontres_data_value
+
+                 val handleExn =
+                     let val exnseq =
+                             apply {func = exnseq,
+                                    arg = SvarExp.mono exncontres,
+                                    inline = InlineAttr.Auto,
+                                    resultVal = v}
+                         val exnsync =
+                             apply {func = exnsync,
+                                    arg = SvarExp.mono exncontres_data,
+                                    inline = InlineAttr.Auto,
+                                    resultVal = v}
+                         val exnsync =
+                             newScope
+                               (Vector.new1 data,
+                                fn xs =>
+                                   let val data' = Vector.first xs in
+                                     Dexp.lett
+                                       {decs = [{var = data',
+                                                 exp = Dexp.primApp {args = Vector.new0 (),
+                                                                     prim = Prim.Spork_getData spid,
+                                                                     targs = Vector.new1 data_ty,
+                                                                     ty = data_ty}},
+                                                {var = exncontres_data,
+                                                 exp = Dexp.tuple {exps = Vector.new2 (convertVar exncontres,
+                                                                                       convertVar data),
+                                                                   ty = exncontres_data_ty}}],
+                                        body = exnsync}
+                                   end)
+                     in
+                       Dexp.spoin
+                         {spid = spid,
+                          seq = exnseq,
+                          sync = exnsync,
+                          ty = ty}
+                     end
+
                  val cont = apply {func = cont,
                                    arg = contarg,
                                    inline = InlineAttr.Auto,
@@ -1096,8 +1173,8 @@ fun closureConvert
                           Dexp.handlee
                           {try = cont,
                            ty = contres_ty,
-                           catch = (Var.newNoname (), raiseTy),
-                           handler = Dexp.bug "Spork cont raised"}
+                           catch = (exncontres, raiseTy),
+                           handler = handleExn}
                  val spwn = apply {func = spwn,
                                    arg = SvarExp.mono spwnarg_data,
                                    inline = InlineAttr.Auto,

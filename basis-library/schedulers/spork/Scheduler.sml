@@ -73,9 +73,6 @@ struct
   
   val currentSpareHeartbeatTokens = _prim "Heartbeat_tokens": unit -> Word32.word;
 
-  val bogus =
-      _prim "MLton_bogus": unit -> 'a;
-
   datatype TokenPolicy =
       TokenPolicyFair (* 0w0 *)
     | TokenPolicyKeep (* 0w1 *)
@@ -111,6 +108,8 @@ struct
         * 'ba			(* spwn arg *)
         * ('ar -> 'c)		(* seq      *)
         * ('ar * 'd -> 'c)	(* sync     *)
+        * (exn -> 'c)		(* exn seq  *)
+        * (exn * 'd -> 'c)	(* exn sync *)
         -> 'c;
   val primSporkKeep' =
       _prim "spork_keep"
@@ -120,6 +119,8 @@ struct
         * 'ba			(* spwn arg *)
         * ('ar -> 'c)		(* seq      *)
         * ('ar * 'd -> 'c)	(* sync     *)
+        * (exn -> 'c)		(* exn seq  *)
+        * (exn * 'd -> 'c)	(* exn sync *)
         -> 'c;
   val primSporkGive' =
       _prim "spork_give"
@@ -129,13 +130,15 @@ struct
         * 'ba			(* spwn arg *)
         * ('ar -> 'c)		(* seq      *)
         * ('ar * 'd -> 'c)	(* sync     *)
+        * (exn -> 'c)		(* exn seq  *)
+        * (exn * 'd -> 'c)	(* exn sync *)
         -> 'c;
-  fun __inline_always__ primSporkFair (body, spwn, seq, sync) =
-      __inline_always__ primSporkFair' (body, (), spwn, (), seq, sync)
-  fun __inline_always__ primSporkKeep (body, spwn, seq, sync) =
-      __inline_always__ primSporkKeep' (body, (), spwn, (), seq, sync)
-  fun __inline_always__ primSporkGive (body, spwn, seq, sync) =
-      __inline_always__ primSporkGive' (body, (), spwn, (), seq, sync)
+  fun __inline_always__ primSporkFair (body, spwn, seq, sync, exnseq, exnsync) =
+      __inline_always__ primSporkFair' (body, (), spwn, (), seq, sync, exnseq, exnsync)
+  fun __inline_always__ primSporkKeep (body, spwn, seq, sync, exnseq, exnsync) =
+      __inline_always__ primSporkKeep' (body, (), spwn, (), seq, sync, exnseq, exnsync)
+  fun __inline_always__ primSporkGive (body, spwn, seq, sync, exnseq, exnsync) =
+      __inline_always__ primSporkGive' (body, (), spwn, (), seq, sync, exnseq, exnsync)
   
   val primForkThreadAndSetData = _prim "spork_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
   val primForkThreadAndSetData_youngest = _prim "spork_forkThreadAndSetData_youngest": Thread.t * 'a -> Thread.p;
@@ -1061,56 +1064,24 @@ struct
       ; Thread.atomicEnd ()
       )
 
-    exception NoExn
-    (* type 'a res = unit -> 'a *)
-    type 'a res = 'a Result.t
+    type ('a, 'c) sporkT =
+           (unit -> 'a)
+         * (unit * Universal.t joinpoint -> unit)
+         * ('a -> 'c)
+         * ('a * Universal.t joinpoint -> 'c)
+         * (exn -> 'c)
+         * (exn * Universal.t joinpoint -> 'c)
+         -> 'c
 
-    fun __inline_always__ sporkBase (primSpork: (unit -> 'a res) * (unit * Universal.t joinpoint -> unit) * ('a res -> 'c) * ('a res * Universal.t joinpoint -> 'c) -> 'c, body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c) : 'c =
+    fun __inline_always__ sporkBase (primSpork: ('a, 'c) sporkT, body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c) : 'c =
       let
         val (inject, project) = Universal.embed ()
-        
-        (* val bodyResult = ref (mkbogus (): 'a) *)
-        (* val bodyExn = ref NoExn *)
-        (* fun __inline_always__ setBodyResult (a: 'a): 'a res = *)
-        (*     (bodyResult := a; *)
-        (*      true) *)
-        (* fun __inline_always__ setBodyExn (e: exn): 'a res = *)
-        (*     (bodyExn := e; *)
-        (*      false) *)
-        (* fun __inline_always__ getBodyResult (r: 'a res): 'a = *)
-        (*     if r then *)
-        (*       !bodyResult *)
-        (*     else *)
-        (*       raise (!bodyExn) *)
-        (* fun __inline_always__ runBody () = *)
-        (*     setBodyResult (__inline_always__ body ()) *)
-        (*     handle e => setBodyExn e *)
-        fun __inline_always__ runBody () = Result.result body
-        fun __inline_always__ getBodyResult (r: 'a res) = Result.extractResult r
 
-        (* val bodyResult = ref (fn () => die (fn () => "sporkBase: bodyResult null"): 'a) *)
-        (* val bodyExn = ref NoExn *)
-        (* fun __inline_always__ setBodyResult (a: 'a): 'a res = *)
-        (*     (bodyResult := (fn __inline_always__ () => a); *)
-        (*      true) *)
-        (* fun __inline_always__ setBodyExn (e: exn): 'a res = *)
-        (*     (bodyExn := e; *)
-        (*      false) *)
-        (* fun __inline_always__ getBodyResult (r: 'a res): 'a = *)
-        (*     if r then *)
-        (*       !bodyResult () *)
-        (*     else *)
-        (*       raise (!bodyExn) *)
-        (* fun __inline_always__ runBody () = *)
-        (*     setBodyResult (__inline_always__ body ()) *)
-        (*     handle e => setBodyExn e *)
-
-        (* TODO: talk with Matthew about the overheads associated with result wrappers *)
-        fun __inline_always__ body' () =
+        fun __inline_always__ body' (): 'a =
             ((if noTokens () then () else tryPromoteNow {youngestOptimization = true});
-             runBody ())
+             __inline_always__ body ())
 
-        fun spwn' ((), J jp) =
+        fun spwn' ((), J jp): unit =
           let
             val _ = #assertAtomic (sched_package ()) "spork rightside begin" 1
             val () = DE.decheckSetTid (#tidRight jp)
@@ -1160,18 +1131,16 @@ struct
               )
           end
 
-        (* fun __inline_always__ seq' bodyr = __inline_always__ seq (__inline_always__ bodyr ()) *)
-        fun __inline_always__ seq' bodyr =
-            __inline_always__ seq (getBodyResult bodyr)
+        fun __inline_always__ seq' (bodyr: 'a): 'c =
+            __inline_always__ seq bodyr
 
-        fun __inline_always__ sync' (bodyr, jp) =
+        fun __inline_always__ sync' (bodyr: 'a, jp: Universal.t joinpoint): 'c =
           let
             val _ = dbgmsg'' (fn _ => "hello from sync continuation")
             val _ = Thread.atomicBegin ()
             val _ = #assertAtomic (sched_package ()) "sync continuation" 1
             val spwnrOpt = #syncEndAtomic (sched_package ()) jp
-            val bodyr' = getBodyResult bodyr
-            (* val bodyr' = __inline_always__ bodyr () *)
+            val bodyr' = bodyr
           in
             case spwnrOpt of
               (* spwn was unstolen *)
@@ -1184,11 +1153,22 @@ struct
                                     "scheduler bug: spork sync: failed project right-side result";
                              raise SchedulerError)
           end
+
+        fun __inline_always__ exnseq' (e: exn): 'c = raise e
+
+        fun __inline_always__ exnsync' (e: exn, jp: Universal.t joinpoint): 'c =
+            let val _ = dbgmsg'' (fn _ => "hello from exn sync continuation")
+                val _ = Thread.atomicBegin ()
+                val _ = #assertAtomic (sched_package ()) "exn sync continuation" 1
+                val _ = #syncEndAtomic (sched_package ()) jp
+            in
+              raise e
+            end
       in
-        __inline_always__ primSpork (body', spwn', seq', sync')
+        __inline_always__ primSpork (body', spwn', seq', sync', exnseq', exnsync')
       end
 
-    fun __inline_always__ spork (primSpork: (unit -> 'a res) * (unit * Universal.t joinpoint -> unit) * ('a res -> 'c) * ('a res * Universal.t joinpoint -> 'c) -> 'c,
+    fun __inline_always__ spork (primSpork: ('a, 'c) sporkT,
                                  body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
         sporkBase (primSpork, body, spwn, seq, sync, seq)
 
