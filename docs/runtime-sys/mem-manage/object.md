@@ -12,7 +12,7 @@ laid out carefully and tagged with GC metadata.
 Every object has two components: a payload, and metadata. The payload is where
 the actual program data is stored. The metadata records information about the
 contents and size of the payload, as well as other info used by the garbage
-collector. The metadata usually consists of just a [header](header.md), which is
+collector. The metadata usually consists of just a [header](header.html), which is
 8 bytes. (Exception: sequence objects have 24 bytes of metadata. See below.)
 
 Pointers to objects always point to the beginning of the payload. These
