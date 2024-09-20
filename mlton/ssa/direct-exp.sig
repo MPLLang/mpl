@@ -69,6 +69,26 @@ signature DIRECT_EXP =
                         offset: int, 
                         ty: Type.t} -> t
            val truee: t
+           (* try {exp, ty, valCont, exnCont} evaluates t;
+            * if it yields a value, bind it to (#arg valCont) and evaluate (#body valCont);
+            * if it raises an exn, bind it to (#arg exnCont) and evaluate (#body exnCont).
+            * This is not the same as
+            *   handlee {try = lett {decs = [{var = #1 (#arg valCont),
+            *                                 exp = exp}],
+            *                        body = #body valCont},
+            *            ty = ty,
+            *            catch = #arg exnCont,
+            *            handler = #body exnCont}
+            * because it doesn't evaluate (#body valCont) in the context of the
+            * exnCont handler.
+            * See "Exceptional Syntax" by Benton and Kennedy.
+            *)
+           val try: {exp: t,
+                     ty: Type.t,
+                     valCont: {arg: Var.t * Type.t,
+                               body: t},
+                     exnCont: {arg: Var.t * Type.t,
+                               body: t}} -> t
            val tuple: {exps: t vector, ty: Type.t} -> t
            val unit: t
            val var: Var.t * Type.t -> t

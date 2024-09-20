@@ -64,6 +64,12 @@ datatype t =
               offset: int,
               ty: Type.t}
  | Seq of t * t
+ | Try of {exp: t,
+           ty: Type.t,
+           valCont: {arg: Var.t * Type.t,
+                     body: t},
+           exnCont: {arg: Var.t * Type.t,
+                     body: t}}
  | Tuple of {exps: t vector,
              ty: Type.t}
  | Var of Var.t * Type.t
@@ -98,6 +104,7 @@ val spoin = Spoin
 val profile = Profile
 val raisee = Raise
 val select = Select
+val try = Try
 val word = Const o Const.word
 
 fun tuple (r as {exps, ...}) =
@@ -232,6 +239,14 @@ in
                  layout tuple]
        | Seq (e1, e2) => seq [layout e1, str "; ", layout e2]
        | Tuple {exps, ...} => layouts exps
+       | Try {exp, valCont, exnCont, ...} =>
+            align [seq [str "try ", layout exp, str " of"],
+                   indent
+                   (align [seq [str "  val ", Var.layout (#1 (#arg valCont)),
+                                str " => ", layout (#body valCont)],
+                           seq [str "| exn ", Var.layout (#1 (#arg exnCont)),
+                                str " => ", layout (#body exnCont)]],
+                    2)]
        | Var (x, t) =>
             seq [Var.layout x, str ": ", Type.layout t]
    and layouts es = Vector.layout layout es
@@ -619,6 +634,36 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
                       Cont.sendExp (k, ty, Exp.Select {tuple = tuple,
                                                        offset = offset}))
           | Seq (e1, e2) => loopf (e1, h, fn _ => loop (e2, h, k))
+          | Try {exp, ty, valCont, exnCont} =>
+               let
+                  val k = Cont.goto (reify (k, ty))
+                  val valContLab = Label.newNoname ()
+                  val _ =
+                     let
+                        val {statements, transfer} = loop (#body valCont, h, k)
+                        val statements = Vector.fromList statements
+                     in
+                        List.push (blocks,
+                                   Block.T {label = valContLab,
+                                            args = Vector.new1 (#arg valCont),
+                                            statements = statements,
+                                            transfer = transfer})
+                     end
+                  val exnContLab = Label.newNoname ()
+                  val _ =
+                     let
+                        val {statements, transfer} = loop (#body exnCont, h, k)
+                        val statements = Vector.fromList statements
+                     in
+                        List.push (blocks,
+                                   Block.T {label = exnContLab,
+                                            args = Vector.new1 (#arg exnCont),
+                                            statements = statements,
+                                            transfer = transfer})
+                     end
+               in
+                  loop (exp, Handler.Handle exnContLab, Cont.goto valContLab)
+               end
           | Tuple {exps, ty} =>
                loops (exps, h, fn xs => Cont.sendExp (k, ty, Exp.Tuple xs))
           | Var (x, ty) => Cont.sendVar (k, ty, x)) arg
