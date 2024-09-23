@@ -1,0 +1,235 @@
+diff --git a/basis-library/schedulers/hybrid/Scheduler.sml b/basis-library/schedulers/hybrid/Scheduler.sml
+index b655a0ead..e2a10156b 100644
+--- a/basis-library/schedulers/hybrid/Scheduler.sml
++++ b/basis-library/schedulers/hybrid/Scheduler.sml
+@@ -84,15 +84,20 @@ struct
+   datatype task =
+     NormalTask of (unit -> unit) * int (* function and depth *)
+   | Continuation of Thread.t * int
+-  | GCTask of gctask_data
++  | GCTask of gctask_data * int
+ 
+ 
+-  fun cmpContinuationTaskDepth (t1, t2) =
+-    case (t1, t2) of
+-      (Continuation (_, d1), Continuation (_, d2)) => Int.compare (d1, d2)
+-    | _ =>
+-        die (fn _ =>
+-          "scheduler bug: cmpContinuationTaskDepth: not both continuations")
++  fun taskDepth t =
++    case t of
++      NormalTask (_, d) => d
++    | Continuation (_, d) => d
++    | GCTask (_, d) => d
++    | _ => die (fn _ => "scheduler bug: taskDepth(GCTask ...)")
++
++
++  fun cmpTaskDepth (t1, t2) =
++    Int.compare (taskDepth t1, taskDepth t2)
++
+ 
+   structure DE = MLton.Thread.Disentanglement
+ 
+@@ -367,7 +372,7 @@ struct
+ 
+   type worker_local_data =
+     { queue: task Queue.t
+-    , sideQueue: task RingBuffer.t
++    , sideQueue: task ConcurrentBinaryHeap.t
+     , pendingChoices: task ConcurrentBinaryHeap.t
+     , schedThread: Thread.t option ref
+     , gcTask: gctask_data option ref
+@@ -375,10 +380,10 @@ struct
+ 
+   fun wldInit p : worker_local_data =
+     { queue = Queue.new ()
+-    , sideQueue = RingBuffer.new {capacity = 200}
++    , sideQueue = ConcurrentBinaryHeap.new {capacity = 200, cmp = cmpTaskDepth}
+     , pendingChoices =
+         ConcurrentBinaryHeap.new
+-          {capacity = 200, cmp = cmpContinuationTaskDepth}
++          {capacity = 200, cmp = cmpTaskDepth}
+     , schedThread = ref NONE
+     , gcTask = ref NONE
+     }
+@@ -410,12 +415,12 @@ struct
+ 
+   fun tryStealSide p =
+     let val {sideQueue, ...} = vectorSub (workerLocalData, p)
+-    in RingBuffer.popTop sideQueue
++    in ConcurrentBinaryHeap.popMin sideQueue
+     end
+ 
+   fun tryPopSide p =
+     let val {sideQueue, ...} = vectorSub (workerLocalData, p)
+-    in RingBuffer.popBot sideQueue
++    in ConcurrentBinaryHeap.popNearMax sideQueue
+     end
+ 
+   fun tryStealPendingChoice p =
+@@ -478,7 +483,18 @@ struct
+       val myId = myWorkerId ()
+       val {sideQueue, ...} = vectorSub (workerLocalData, myId)
+     in
+-      RingBuffer.pushBot (sideQueue, x)
++      if ConcurrentBinaryHeap.push sideQueue x then ()
++      else die (fn _ => "scheduler bug: pushSide: full")
++    end
++
++  fun sideQueueIsAlmostFull () =
++    let
++      val myId = myWorkerId ()
++      val {sideQueue, ...} = vectorSub (workerLocalData, myId)
++      val cap = ConcurrentBinaryHeap.capacity sideQueue
++      val sz = ConcurrentBinaryHeap.size sideQueue 
++    in
++      cap - sz <= 50
+     end
+ 
+   fun clear () =
+@@ -530,7 +546,7 @@ struct
+           case trySteal myId of
+             NONE => loop ()
+           | SOME task =>
+-              ( if RingBuffer.pushBot (sideQueue, task) then ()
++              ( if ConcurrentBinaryHeap.push sideQueue task then ()
+                 else die (fn _ => "scheduler bug: side queue full")
+               ; loop ()
+               )
+@@ -556,6 +572,43 @@ struct
+     end
+ 
+ 
++  fun announceCurrentThreadPendingChoice () =
++    if queueSize () > 0 then
++      ( moveAllTasksIntoSideQueue ()
++      ; setQueueDepth (myWorkerId ()) (HH.getDepth (Thread.current ()))
++      ; clear ()
++      ; announceCurrentThreadPendingChoice
++          () (* this should succeed on second go, now that main deque is empty *)
++      )
++    else
++      let
++        val thread = Thread.current ()
++        val depth = HH.getDepth thread
++        val selfTask = Continuation (thread, depth)
++        val sendSucceeded = tryPushPendingChoice (myWorkerId ()) selfTask
++      in
++        if sendSucceeded then returnToSched () else ()
++      end
++
++
++  fun lookElsewhere () =
++    if queueSize () > 0 then
++      ( moveAllTasksIntoSideQueue ()
++      ; setQueueDepth (myWorkerId ()) (HH.getDepth (Thread.current ()))
++      ; clear ()
++      ; lookElsewhere
++          () (* this should succeed on second go, now that main deque is empty *)
++      )
++    else
++      let
++        val thread = Thread.current ()
++        val depth = HH.getDepth thread
++        val selfTask = Continuation (thread, depth)
++      in
++        pushSide selfTask;
++        returnToSched ()
++      end
++
+   (* ========================================================================
+    * DEVICES AND DEVICE IDENTIFIERS
+    *)
+@@ -741,19 +794,6 @@ struct
+               returnToSched ()
+           end
+         val _ = push (NormalTask (g', depth))
+-        (* val _ =
+-              if (depth < internalGCThresh) then
+-                let
+-                  val cont_arr1 =  Array.array (1, SOME(f))
+-                  val cont_arr2 =  Array.array (1, SOME(g))
+-                  val cont_arr3 =  Array.array (0, NONE)
+-                in
+-                    HH.registerCont(cont_arr1,  cont_arr2, cont_arr3, thread)
+-                  ; HH.setDepth (thread, depth + 1)
+-                  ; HH.forceLeftHeap(myWorkerId(), thread)
+-                end
+-              else
+-                (HH.setDepth (thread, depth + 1)) *)
+         val _ = HH.setDepth (thread, depth + 1)
+ 
+         (* val _ =
+@@ -763,6 +803,7 @@ struct
+         val _ = recordForkDepth depth
+ 
+         val _ = DE.decheckSetTid tidLeft
++        val _ = if not (sideQueueIsAlmostFull ()) then lookElsewhere () else ()
+         val fr = result f
+         val tidLeft = DE.decheckGetTid thread
+ 
+@@ -811,7 +852,7 @@ struct
+         val heapId = ref (HH.getRoot thread)
+         val gcTaskTuple = (thread, heapId)
+         val gcTaskData = SOME gcTaskTuple
+-        val gcTask = GCTask gcTaskTuple
++        val gcTask = GCTask (gcTaskTuple, depth)
+         val cont_arr1 = ref (SOME continuation)
+         val cont_arr2 = ref (SOME (fn _ =>
+           (gcTask, gcTaskData))) (* a hack, I hope it works. *)
+@@ -937,26 +978,6 @@ struct
+       end
+ 
+ 
+-    fun announceCurrentThreadPendingChoice () =
+-      if queueSize () > 0 then
+-        ( moveAllTasksIntoSideQueue ()
+-        ; setQueueDepth (myWorkerId ()) (HH.getDepth (Thread.current ()))
+-        ; clear ()
+-        ; announceCurrentThreadPendingChoice
+-            () (* this should succeed on second go, now that main deque is empty *)
+-        )
+-      else
+-        let
+-          val thread = Thread.current ()
+-          val depth = HH.getDepth thread
+-          val selfTask = Continuation (thread, depth)
+-          val sendSucceeded = tryPushPendingChoice (myWorkerId ()) selfTask
+-        (* val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask) *)
+-        in
+-          if sendSucceeded then returnToSched () else ()
+-        end
+-
+-
+     fun choice (args as {prefer_cpu = cpuTask, prefer_gpu = gpuTask}) =
+       let
+         val _ = tryAcquireDeviceIdx ()
+@@ -982,17 +1003,9 @@ struct
+               val thread = Thread.current ()
+               val depth = HH.getDepth thread
+               val selfTask = Continuation (thread, depth)
+-              val sendSucceeded =
+-                (*RingBuffer.pushBot (hybridDoneQueue, selfTask)*)
+-                pushSide selfTask
+             in
+-              if sendSucceeded then
+-                ( (*dbgmsg'' (fn _ => "choice: send back succeeded");*)
+-                  returnToSched ())
+-              else
+-                die (fn _ => "scheduler: choice: send back failed\n");
+-
+-              (* dbgmsg'' (fn _ => "choice: after send back"); *)
++              pushSide selfTask;
++              returnToSched ();
+               result
+             end
+       end
+@@ -1338,7 +1351,7 @@ struct
+           val task = findWork ()
+         in
+           case task of
+-            GCTask (thread, hh) =>
++            GCTask ((thread, hh), _) =>
+               (HH.collectThreadRoot (thread, !hh); acquireWork ())
+           | Continuation (thread, depth) =>
+               ( (*dbgmsg' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")

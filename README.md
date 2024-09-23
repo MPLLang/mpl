@@ -16,6 +16,40 @@ You might also be interested in exploring
 (a library for MPL) and the
 [Parallel ML benchmark suite](https://github.com/MPLLang/parallel-ml-bench).
 
+
+## References
+
+[<a name="rmab16">1</a>]
+[Hierarchical Memory Management for Parallel Programs](http://cs.iit.edu/~smuller/papers/icfp16-preprint.pdf).
+Ram Raghunathan, Stefan K. Muller, Umut A. Acar, and Guy Blelloch.
+ICFP 2016.
+
+[<a name="gwraf18">2</a>]
+[Hierarchical Memory Management for Mutable State](http://www.cs.cmu.edu/~swestric/18/ppopp.pdf).
+Adrien Guatto, Sam Westrick, Ram Raghunathan, Umut Acar, and Matthew Fluet.
+PPoPP 2018.
+
+[<a name="wyfa20">3</a>]
+[Disentanglement in Nested-Parallel Programs](http://www.cs.cmu.edu/~swestric/20/popl-disentangled.pdf).
+Sam Westrick, Rohan Yadav, Matthew Fluet, and Umut A. Acar.
+POPL 2020.
+
+[<a name="awa21">4</a>]
+[Provably Space-Efficient Parallel Functional Programming](http://www.cs.cmu.edu/~swestric/21/popl.pdf).
+Jatin Arora, Sam Westrick, and Umut A. Acar.
+POPL 2021.
+
+[<a name="waa22">5</a>]
+[Entanglement Detection with Near-Zero Cost](http://www.cs.cmu.edu/~swestric/22/icfp-detect.pdf).
+Sam Westrick, Jatin Arora, and Umut A. Acar.
+ICFP 2022.
+
+[<a name="awa23">6</a>]
+[Efficient Parallel Functional Programming with Effects](https://www.cs.cmu.edu/~swestric/23/epfpe.pdf).
+Jatin Arora, Sam Westrick, and Umut A. Acar.
+PLDI 2023.
+
+
 ## Docker
 
 Try out MPL with Docker:
@@ -269,35 +303,3 @@ or to a custom directory with the `PREFIX` option:
 ```
 $ make PREFIX=/opt/mpl install
 ```
-
-## References
-
-[<a name="rmab16">1</a>]
-[Hierarchical Memory Management for Parallel Programs](http://cs.iit.edu/~smuller/papers/icfp16-preprint.pdf).
-Ram Raghunathan, Stefan K. Muller, Umut A. Acar, and Guy Blelloch.
-ICFP 2016.
-
-[<a name="gwraf18">2</a>]
-[Hierarchical Memory Management for Mutable State](http://www.cs.cmu.edu/~swestric/18/ppopp.pdf).
-Adrien Guatto, Sam Westrick, Ram Raghunathan, Umut Acar, and Matthew Fluet.
-PPoPP 2018.
-
-[<a name="wyfa20">3</a>]
-[Disentanglement in Nested-Parallel Programs](http://www.cs.cmu.edu/~swestric/20/popl-disentangled.pdf).
-Sam Westrick, Rohan Yadav, Matthew Fluet, and Umut A. Acar.
-POPL 2020.
-
-[<a name="awa21">4</a>]
-[Provably Space-Efficient Parallel Functional Programming](http://www.cs.cmu.edu/~swestric/21/popl.pdf).
-Jatin Arora, Sam Westrick, and Umut A. Acar.
-POPL 2021.
-
-[<a name="waa22">5</a>]
-[Entanglement Detection with Near-Zero Cost](http://www.cs.cmu.edu/~swestric/22/icfp-detect.pdf).
-Sam Westrick, Jatin Arora, and Umut A. Acar.
-ICFP 2022.
-
-[<a name="awa23">6</a>]
-[Efficient Parallel Functional Programming with Effects](https://www.cs.cmu.edu/~swestric/23/epfpe.pdf).
-Jatin Arora, Sam Westrick, and Umut A. Acar.
-PLDI 2023.
