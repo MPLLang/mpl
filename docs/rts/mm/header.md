@@ -22,7 +22,8 @@ to most-significant bit).
       * Bits 28-29: the **pin type** of the object, used to distinguish between
         pinned and unpinned objects.
       * Bit 30: indicates whether or not the object is an **entanglement suspect**.
-  * Bit 31: unused.
+  * Bit 31: the **mark bit**, used to mark live objects during
+    [Concurrent Garbage Collection](cgc.html).
 
 ![Header bit layout]({{site.baseurl}}/assets/header.png){:width="80%"}
 
