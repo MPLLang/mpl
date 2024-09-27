@@ -24,4 +24,5 @@ in `runtime/gc/hierarchical-heap.h`. A companion type,
 and also keep track of old `HM_HierarchicalHeap` structs that can be
 reclaimed.
 
-TODO...
+{: .todo}
+...

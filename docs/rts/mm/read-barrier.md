@@ -1,10 +1,8 @@
 ---
 layout: page
-title: Object Type Table
+title: Read Barrier
 parent: Memory Management
 ---
-
-# The Object Type Table
 
 {: .todo}
 ...

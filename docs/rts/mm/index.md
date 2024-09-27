@@ -6,6 +6,7 @@ parent: Runtime System
 
 # Memory Management
 
-TODO...
+{: .todo}
+...
 
 Main source location: [`runtime/gc/`](https://github.com/MPLLang/mpl/tree/main/runtime/gc)

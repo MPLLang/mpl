@@ -46,6 +46,12 @@ callouts:
   note:
     title: Note
     color: blue
+  remark:
+    title: Remark
+    color: green
+  todo:
+    title: TODO
+    color: red
 aux_links:
   MaPLe on GitHub:
     - https://github.com/MPLLang/mpl
