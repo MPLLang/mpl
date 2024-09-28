@@ -559,7 +559,7 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   s->controls->heartbeatStats = FALSE;
   s->controls->heartbeatMicroseconds = 500;
-  s->controls->heartbeatTokens = 30;
+  s->controls->heartbeatTokens = 5;
   s->controls->heartbeatRelayerThreshold = 16;
 
   /* Not arbitrary; should be at least the page size and must also respect the
