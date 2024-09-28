@@ -42,7 +42,7 @@ struct
       let fun iter (b: 'a) (i: word, j: word): 'a =
               if i >= j then b else
                 let val i' = i + 0w1
-                    fun __inline_never__ unstolen b' =
+                    fun __inline_never__ spwn b' =
                         if i' >= j then b' else
                           let val mid = midpoint (i', j) in
                             sporkFair {
@@ -55,15 +55,16 @@ struct
                 in
                   sporkGive' {
                     body = fn __inline_always__ () => __inline_always__ step (i, b),
-                    spwn = fn __inline_always__ () => unstolen z,
+                    spwn = fn __inline_always__ () => spwn z,
                     seq = fn __inline_always__ b' => iter b' (i', j),
                     sync = merge,
-                    unstolen = unstolen
+                    unstolen = spwn
                   }
                 end
       in
         __inline_always__ iter z (i, j)
       end
+
 
   fun __inline_always__ wpareduceSplit (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun split (b: 'a) (i: word, j: word): 'a =
@@ -93,13 +94,13 @@ struct
       end
 
   (* No inlining version *)
-  fun __inline_never__ wpareduce' (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+  fun __inline_never__ wpareduceNoInline (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun iter (b: 'a) (i: word, j: word): 'a =
               if i >= j then
                 b
               else
                 let val i' = i + 0w1
-                    fun __inline_never__ unstolen b' =
+                    fun __inline_never__ spwn b' =
                         if i' >= j then
                           b'
                         else
@@ -115,10 +116,10 @@ struct
                 in
                   sporkGive' {
                     body = fn __inline_never__ () => step (i, b),
-                    spwn = fn __inline_never__ () => unstolen z,
+                    spwn = fn __inline_never__ () => spwn z,
                     seq = fn __inline_never__ b' => iter b' (i', j),
                     sync = merge,
-                    unstolen = unstolen
+                    unstolen = spwn
                   }
                 end
       in
@@ -132,8 +133,8 @@ struct
   in
   fun __inline_always__ pareduce (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       wrap wpareduce (i, j) b step merge
-  fun __inline_never__ pareduce' (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
-      wrap wpareduce' (i, j) b step merge
+  fun __inline_never__ pareduceNoInline (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      wrap wpareduceNoInline (i, j) b step merge
   fun __inline_always__ pareduceSplit (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       wrap wpareduceSplit (i, j) b step merge
   end
