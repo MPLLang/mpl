@@ -356,9 +356,14 @@ structure AnalyzeDom =
               (functions,
                fn func
                 => let
-                     val {name = f, blocks, ...} = Function.dest func
+                     val {name = f, inline, blocks, ...} = Function.dest func
                      val f_reach = FuncData.reach (getFuncData f)
                      val f_node = getFuncNode f
+                     val _ =
+                        if InlineAttr.mayInline inline
+                           then ()
+                        else addEdge {from = Root,
+                                      to = f_node}
                    in
                      if f_reach
                        then Vector.foreach
