@@ -203,6 +203,7 @@ struct
       , incounter: int ref
       , tidRight: Word64.word
       , spareHeartbeatsGiven: Word32.word
+      , tokenPolicy: TokenPolicy
       , gcj: gc_joinpoint option
       }
 
@@ -645,7 +646,8 @@ struct
 
         val _ = tryConsumeSpareHeartbeats spawnCost
 
-        val giveTokens = case nextPromotionTokenPolicy () of
+        val tokenPolicy = nextPromotionTokenPolicy ()
+        val giveTokens = case tokenPolicy of
                              TokenPolicyFair => Word32.>> (currentSpareHeartbeatTokens (), 0w1)
                            | TokenPolicyKeep => 0w0
                            | TokenPolicyGive => currentSpareHeartbeatTokens ()
@@ -659,6 +661,7 @@ struct
             , incounter = incounter
             , tidRight = tidRight
             , spareHeartbeatsGiven = giveTokens
+            , tokenPolicy = tokenPolicy
             , gcj = gcj
             }
 
@@ -792,6 +795,7 @@ struct
           , incounter = incounter
           , tidRight = tidRight
           , spareHeartbeatsGiven = halfSpare
+          , tokenPolicy = TokenPolicyFair
           , gcj = gcj
           }
       end
@@ -811,7 +815,7 @@ struct
     (** Must be called in an atomic section. Implicit atomicEnd() *)
     fun syncEndAtomic
         (doClearSuspects: Thread.t * int -> unit)
-        (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, spareHeartbeatsGiven, ...} : 'a joinpoint)
+        (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, spareHeartbeatsGiven, tokenPolicy, ...} : 'a joinpoint)
         : 'a Result.t option
       =
       let
@@ -841,7 +845,9 @@ struct
                 val _ = Thread.atomicEnd ()
                 val _ = doClearSuspects (thread, newDepth)
                 val _ = if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
-                val _ = addSpareHeartbeats spareHeartbeatsGiven
+                val _ = case tokenPolicy of
+                            TokenPolicyGive => addSpareHeartbeats spareHeartbeatsGiven
+                          | _ => 0w0
                 val _ = incrementNumFastJoins ()
             in
               NONE
