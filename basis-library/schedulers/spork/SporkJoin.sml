@@ -38,7 +38,7 @@ struct
   fun __inline_always__ midpoint (i: word, j: word) =
         i + (Word64.>> (j - i, 0w1))
 
-  fun __inline_always__ wpareduce (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+  fun __inline_always__ pareduce (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun iter (b: 'a) (i: word, j: word): 'a =
               if i >= j then b else
                 let val i' = i + 0w1
@@ -54,7 +54,7 @@ struct
                           end
                 in
                   sporkGive' {
-                    body = fn __inline_always__ () => __inline_always__ step (i, b),
+                    body = fn __inline_always__ () => __inline_always__ step (w2i i, b),
                     spwn = fn __inline_always__ () => spwn z,
                     seq = fn __inline_always__ b' => iter b' (i', j),
                     sync = merge,
@@ -62,11 +62,10 @@ struct
                   }
                 end
       in
-        __inline_always__ iter z (i, j)
+        __inline_always__ iter z (i2w i, i2w j)
       end
 
-
-  fun __inline_always__ wpareduceSplit (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+  fun __inline_always__ pareduceSplit (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun split (b: 'a) (i: word, j: word): 'a =
               if i >= j then b else
                 let val mid = midpoint (i + 0w1, j) in
@@ -75,7 +74,7 @@ struct
                               let fun loop b i =
                                       if i >= mid then b else
                                         sporkGive' {
-                                          body = fn __inline_always__ () => __inline_always__ step (i, b),
+                                          body = fn __inline_always__ () => __inline_always__ step (w2i i, b),
                                           spwn = fn __inline_always__ () => split z (i + 0w1, mid),
                                           seq  = fn __inline_always__ b' => loop b' (i + 0w1),
                                           sync = merge,
@@ -90,54 +89,8 @@ struct
                   }
                 end
       in
-        __inline_always__ split z (i, j)
+        __inline_always__ split z (i2w i, i2w j)
       end
-
-  (* No inlining version *)
-  fun __inline_never__ wpareduceNoInline (i: word, j: word) (z: 'a) (step: word * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
-      let fun iter (b: 'a) (i: word, j: word): 'a =
-              if i >= j then
-                b
-              else
-                let val i' = i + 0w1
-                    fun __inline_never__ spwn b' =
-                        if i' >= j then
-                          b'
-                        else
-                          let val mid = midpoint (i', j) in
-                            sporkFair' {
-                              body = fn __inline_never__ () => iter b' (i', mid),
-                              spwn = fn __inline_never__ () => iter z (mid, j),
-                              seq  = fn __inline_never__ b' => iter b' (mid, j),
-                              sync = merge,
-                              unstolen = fn __inline_never__ b' => iter b' (mid, j)
-                            }
-                          end
-                in
-                  sporkGive' {
-                    body = fn __inline_never__ () => step (i, b),
-                    spwn = fn __inline_never__ () => spwn z,
-                    seq = fn __inline_never__ b' => iter b' (i', j),
-                    sync = merge,
-                    unstolen = spwn
-                  }
-                end
-      in
-        iter z (i, j)
-      end
-
-  local
-    fun __inline_always__ wrap (reduce: word * word -> 'a -> (word * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a)
-             (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
-        __inline_always__ reduce (i2w i, i2w j) b (fn __inline_always__ (w, a) => __inline_always__ step (w2i w, a)) merge
-  in
-  fun __inline_always__ pareduce (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
-      wrap wpareduce (i, j) b step merge
-  fun __inline_never__ pareduceNoInline (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
-      wrap wpareduceNoInline (i, j) b step merge
-  fun __inline_always__ pareduceSplit (i: int, j: int) (b: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
-      wrap wpareduceSplit (i, j) b step merge
-  end
 
   fun __inline_always__ parfor (grain: int) (i: int, j: int) (f: int -> unit): unit =
       pareduce (i, j) () (fn __inline_always__ (i, ()) => __inline_always__ f i) (fn ((), ()) => ())
@@ -166,3 +119,5 @@ struct
 
   fun communicate () = ()
 end
+
+structure ForkJoin = SporkJoin

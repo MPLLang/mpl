@@ -1079,7 +1079,12 @@ struct
          * (exn * Universal.t joinpoint -> 'c)
          -> 'c
 
-    fun __inline_always__ sporkBase (primSpork: ('a, 'c) sporkT, body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c) : 'c =
+    fun __inline_always__ sporkBase (primSpork: ('a, 'c) sporkT,
+                                     body: unit -> 'a,
+                                     spwn: unit -> 'b,
+                                     seq: 'a -> 'c,
+                                     sync: 'a * 'b -> 'c,
+                                     unstolen: 'a -> 'c): 'c =
       let
         val (inject, project) = Universal.embed ()
 
@@ -1174,18 +1179,14 @@ struct
         __inline_always__ primSpork (body', spwn', seq', sync', exnseq', exnsync')
       end
 
-    fun __inline_always__ spork (primSpork: ('a, 'c) sporkT,
-                                 body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c) : 'c =
-        sporkBase (primSpork, body, spwn, seq, sync, seq)
-
     fun __inline_always__ sporkFair {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
-        spork (primSporkFair, body, spwn, seq, sync)
+        sporkBase (primSporkFair, body, spwn, seq, sync, seq)
 
     fun __inline_always__ sporkKeep {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
-        spork (primSporkKeep, body, spwn, seq, sync)
+        sporkBase (primSporkKeep, body, spwn, seq, sync, seq)
 
     fun __inline_always__ sporkGive {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
-        spork (primSporkGive, body, spwn, seq, sync)
+        sporkBase (primSporkGive, body, spwn, seq, sync, seq)
 
     fun __inline_always__ sporkFair' {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
         sporkBase (primSporkFair, body, spwn, seq, sync, unstolen)

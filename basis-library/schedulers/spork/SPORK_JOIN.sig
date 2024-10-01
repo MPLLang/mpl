@@ -11,10 +11,8 @@ sig
   val sporkGive': {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c} -> 'c
 
   val pareduce: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
-  val pareduceNoInline: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val pareduceSplit: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val parfor: int -> (int * int) -> (int -> unit) -> unit
-  (* val pareduceInitStepMerge : int -> (int * int) -> (int -> 'a) -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a *)
   val alloc: int -> 'a array
 
   val idleTimeSoFar: unit -> Time.time
