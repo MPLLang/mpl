@@ -973,7 +973,7 @@ struct
               (* val _ = dbgmsg (fn _ => "choice: gpu after send") *)
 
               val _ = markDeviceIdxInUse deviceIdx
-              val result = doGpuTask gpuTask (Array.sub (devices, deviceIdx))
+              val result = doGpuTask gpuTask deviceIdx
               val _ = reacquireDeviceIdx deviceIdx
 
               (* after finishing gpu task, we expect to run CPU code again, so try to
