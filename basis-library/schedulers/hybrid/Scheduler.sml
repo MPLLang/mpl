@@ -61,6 +61,11 @@ struct
       (1000000 * C_Time.toLargeInt (!sec)) + C_SUSeconds.toLargeInt (!usec)
     end
 
+  val doHybridSchedMessages = parseFlag "hybrid-sched-messages"
+  fun hsm_print s =
+    if not doHybridSchedMessages then ()
+    else print s
+
   val programStartTimeMicroseconds = timeNowMicroseconds ()
 
   fun timeNowMicrosecondsSinceProgramStart () : Int64.int =
@@ -605,7 +610,7 @@ struct
               (DEVICE_NOT_RESERVED, myWorkerId ())
         in
           if prevWorkerId = DEVICE_NOT_RESERVED then
-            ( print
+            ( hsm_print
                 ("worker " ^ Int.toString (myWorkerId ()) ^ " acquired "
                  ^ Int.toString i ^ ":" ^ Array.sub (devices, i) ^ "\n")
             ; SOME i
@@ -639,7 +644,7 @@ struct
         MLton.Parallel.arrayCompareAndSwap (deviceReservation, deviceIdx)
           (DEVICE_IN_USE, myId)
       then
-        print
+        hsm_print
           ("worker " ^ Int.toString (myWorkerId ()) ^ " reacquired "
            ^ Int.toString deviceIdx ^ ":" ^ Array.sub (devices, deviceIdx)
            ^ "\n")
@@ -665,7 +670,7 @@ struct
                 (myId, DEVICE_NOT_RESERVED)
           in
             if old = myId then
-              print
+              hsm_print
                 ("worker " ^ Int.toString myId ^ " released " ^ Int.toString i
                  ^ ":" ^ Array.sub (devices, i) ^ "\n")
             else
