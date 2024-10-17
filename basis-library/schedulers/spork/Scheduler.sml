@@ -1179,6 +1179,18 @@ struct
         __inline_always__ primSpork (body', spwn', seq', sync', exnseq', exnsync')
       end
 
+    (* fun __inline_always__ spork {tokenPolicy: TokenPolicy, body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: ('a -> 'c) option} = *)
+    (*     let val primSpork = case tokenPolicy of *)
+    (*                             TokenPolicyFair => primSporkFair *)
+    (*                           | TokenPolicyGive => primSporkGive *)
+    (*                           | TokenPolicyKeep => primSporkKeep *)
+    (*         val unstolen = case unstolen of *)
+    (*                            NONE => seq *)
+    (*                          | SOME unstolen => unstolen *)
+    (*     in *)
+    (*       sporkBase (primSpork, body, spwn, seq, sync, unstolen) *)
+    (*     end *)
+
     fun __inline_always__ sporkFair {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
         sporkBase (primSporkFair, body, spwn, seq, sync, seq)
 

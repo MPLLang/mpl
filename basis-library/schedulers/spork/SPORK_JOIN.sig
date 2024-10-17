@@ -12,6 +12,8 @@ sig
 
   val pareduce: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val pareduceSplit: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
+  (* val pareduceBreak: (int * int) -> 'a -> (int * 'a -> 'a * bool) -> ('a * 'a -> 'a) -> 'a *)
+  val pareduceBreakExn: (int * int) -> 'a -> (('a -> exn) * int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val parfor: int -> (int * int) -> (int -> unit) -> unit
   val alloc: int -> 'a array
 
