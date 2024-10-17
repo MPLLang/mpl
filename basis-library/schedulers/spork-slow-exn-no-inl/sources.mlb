@@ -21,7 +21,6 @@ local
   end
 
   ../shh/CumulativePerProcTimer.sml
-  ../spork/SPORK_JOIN.sig
   ../shh/SimpleRandom.sml
   ../shh/queue/DequeABP.sml
   Result.sml

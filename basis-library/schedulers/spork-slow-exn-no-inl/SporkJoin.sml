@@ -1,6 +1,22 @@
 structure SporkJoin :>
 sig
-  include SPORK_JOIN
+  type TokenPolicy
+  (* synonym for par *)
+  val fork: (unit -> 'a) * (unit -> 'b) -> 'a * 'b 
+  val par: (unit -> 'a) * (unit -> 'b) -> 'a * 'b
+  val spork: {tokenPolicy: TokenPolicy, body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: ('a -> 'c) option} -> 'c
+
+  val pareduce: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
+  (* val pareduceSplit: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a *)
+  (* val pareduceBreak: (int * int) -> 'a -> (int * 'a -> 'a * bool) -> ('a * 'a -> 'a) -> 'a *)
+  val pareduceBreakExn: (int * int) -> 'a -> (('a -> exn) * int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
+  val parfor: int -> (int * int) -> (int -> unit) -> unit
+  val alloc: int -> 'a array
+
+  val idleTimeSoFar: unit -> Time.time
+  val workTimeSoFar: unit -> Time.time
+  val maxForkDepthSoFar: unit -> int
+
   val numSpawnsSoFar: unit -> int
   val numEagerSpawnsSoFar: unit -> int
   val numHeartbeatsSoFar: unit -> int
@@ -8,16 +24,12 @@ sig
   val numStealsSoFar: unit -> int
 end =
 struct
+  datatype TokenPolicy = datatype Scheduler.TokenPolicy
   type word = Word64.word
   fun w2i w = Word64.toIntX w
   fun i2w i = Word64.fromInt i
 
-  fun sporkFair y = Scheduler.SporkJoin.sporkFair y
-  fun sporkGive y = Scheduler.SporkJoin.sporkGive y
-  fun sporkKeep y = Scheduler.SporkJoin.sporkKeep y
-  fun sporkFair' y = Scheduler.SporkJoin.sporkFair' y
-  fun sporkGive' y = Scheduler.SporkJoin.sporkGive' y
-  fun sporkKeep' y = Scheduler.SporkJoin.sporkKeep' y
+  val spork = Scheduler.SporkJoin.spork
 
   (* fun specialize (f: 'a -> 'b): 'a -> 'b = *)
   (*     let fun specializedF a = f a in *)
@@ -25,11 +37,13 @@ struct
   (*     end *)
 
   fun par (f: unit -> 'a, g: unit -> 'b): 'a * 'b =
-      sporkFair {
-        body = fn () => f (),
-        spwn = fn () => g (),
+      spork {
+        tokenPolicy = TokenPolicyFair,
+        body = f,
+        spwn = g,
         seq  = fn a => (a, g ()),
-        sync = fn ab => ab
+        sync = fn ab => ab,
+        unstolen = NONE
       }
 
   val fork = par
@@ -38,59 +52,141 @@ struct
   fun midpoint (i: word, j: word) =
         i + (Word64.>> (j - i, 0w1))
 
-  fun pareduce (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
-      let fun iter (b: 'a) (i: word, j: word): 'a =
-              if i >= j then b else
+  (* fun pareduce (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a = *)
+  (*     let fun iter (b: 'a) (i: word, j: word): 'a = *)
+  (*             if i >= j then b else *)
+  (*               let val i' = i + 0w1 *)
+  (*                   fun spwn b' = *)
+  (*                       if i' >= j then b' else *)
+  (*                         let val mid = midpoint (i', j) in *)
+  (*                           sporkFair { *)
+  (*                             body = fn () => iter b' (i', mid), *)
+  (*                             spwn = fn () => iter z (mid, j), *)
+  (*                             seq  = fn b' => iter b' (mid, j), *)
+  (*                             sync = merge *)
+  (*                         } *)
+  (*                         end *)
+  (*               in *)
+  (*                 sporkGive' { *)
+  (*                   body = fn () => step (w2i i, b), *)
+  (*                   spwn = fn () => spwn z, *)
+  (*                   seq = fn b' => iter b' (i', j), *)
+  (*                   sync = merge, *)
+  (*                   unstolen = spwn *)
+  (*                 } *)
+  (*               end *)
+  (*     in *)
+  (*       iter z (i2w i, i2w j) *)
+  (*     end *)
+
+
+  fun pareduceBreak (i: int, j: int) (z: 'a) (step: int * 'a -> 'a * bool) (merge: 'a * 'a -> 'a): 'a =
+      let fun merge' ((b1, cont1), (b2, cont2)) =
+              if cont1 then (merge (b1, b2), cont2) else (b1, false)
+
+          fun continue (f : 'a -> 'a * bool) : 'a * bool -> 'a * bool =
+              fn (b, cont) => if cont then f b else (b, cont)
+
+          fun iter (b: 'a) (i: word, j: word): 'a * bool =
+              if i >= j then (b, true) else
                 let val i' = i + 0w1
                     fun spwn b' =
-                        if i' >= j then b' else
+                        if i' >= j then (b', true) else
                           let val mid = midpoint (i', j) in
-                            sporkFair {
+                            spork {
+                              tokenPolicy = TokenPolicyFair,
                               body = fn () => iter b' (i', mid),
                               spwn = fn () => iter z (mid, j),
-                              seq  = fn b' => iter b' (mid, j),
-                              sync = merge
+                              seq = continue (fn b' => iter b' (mid, j)),
+                              sync = merge',
+                              unstolen = NONE
                           }
                           end
                 in
-                  sporkGive' {
+                  spork {
+                    tokenPolicy = TokenPolicyGive,
                     body = fn () => step (w2i i, b),
                     spwn = fn () => spwn z,
-                    seq = fn b' => iter b' (i', j),
-                    sync = merge,
-                    unstolen = spwn
+                    seq = continue (fn b' => iter b' (i', j)),
+                    sync = merge',
+                    unstolen = SOME (continue spwn)
                   }
                 end
+          val (result, cont) = iter z (i2w i, i2w j)
       in
-        iter z (i2w i, i2w j)
+        result
       end
 
-  fun pareduceSplit (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
-      let fun split (b: 'a) (i: word, j: word): 'a =
-              if i >= j then b else
-                let val mid = midpoint (i + 0w1, j) in
-                  sporkFair {
-                    body = fn () =>
-                              let fun loop b i =
-                                      if i >= mid then b else
-                                        sporkGive' {
-                                          body = fn () => step (w2i i, b),
-                                          spwn = fn () => split z (i + 0w1, mid),
-                                          seq  = fn b' => loop b' (i + 0w1),
-                                          sync = merge,
-                                          unstolen = fn b' => split b' (i + 0w1, mid)
-                                        }
-                              in
-                                loop b i
-                              end,
-                    spwn = fn () => split z (mid, j),
-                    seq  = fn b' => split b' (mid, j),
-                    sync = merge
-                  }
-                end
-      in
-        split z (i2w i, i2w j)
+
+  fun pareduceBreakExn (i: int, j: int) (z: 'a) (step: ('a -> exn) * int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      let exception Break of 'a in
+        pareduceBreak (i, j) z (fn (i, a) => (step (Break, i, a), true) handle (Break b) => (b, false)) merge
       end
+
+  (* fun pareduceBreakExn (i: int, j: int) (z: 'a) (step: ('a -> exn) * int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a = *)
+  (*     let exception Break of 'a *)
+  (*         fun merge' ((b1, cont1), (b2, cont2)) = *)
+  (*             if cont1 then (merge (b1, b2), cont2) else (b1, cont1) *)
+
+  (*         fun continue (f : 'a -> 'a * bool) : 'a * bool -> 'a * bool = *)
+  (*             fn (b, cont) => if cont then f b else (b, cont) *)
+
+  (*         fun iter (b: 'a) (i: word, j: word): 'a * bool = *)
+  (*             if i >= j then (b, true) else *)
+  (*               let val i' = i + 0w1 *)
+  (*                   fun spwn b' = *)
+  (*                       if i' >= j then (b', true) else *)
+  (*                         let val mid = midpoint (i', j) in *)
+  (*                           sporkFair { *)
+  (*                             body = fn () => iter b' (i', mid), *)
+  (*                             spwn = fn () => iter z (mid, j), *)
+  (*                             seq = continue (fn b' => iter b' (mid, j)), *)
+  (*                             sync = merge' *)
+  (*                         } *)
+  (*                         end *)
+  (*               in *)
+  (*                 sporkGive' { *)
+  (*                   body = fn () => (step (Break, w2i i, b), true) handle (Break b) => (b, false), *)
+  (*                   spwn = fn () => spwn z, *)
+  (*                   seq = continue (fn b' => iter b' (i', j)), *)
+  (*                   sync = merge', *)
+  (*                   unstolen = continue spwn *)
+  (*                 } *)
+  (*               end *)
+  (*         val (result, cont) = iter z (i2w i, i2w j) *)
+  (*     in *)
+  (*       result *)
+  (*     end *)
+
+  fun pareduce (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      pareduceBreakExn (i, j) z (fn (break, i, a) => step (i, a)) merge
+
+  (* fun pareduceSplit (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a = *)
+  (*     let fun split (b: 'a) (i: word, j: word): 'a = *)
+  (*             if i >= j then b else *)
+  (*               let val mid = midpoint (i + 0w1, j) in *)
+  (*                 sporkFair { *)
+  (*                   body = fn () => *)
+  (*                             let fun loop b i = *)
+  (*                                     if i >= mid then b else *)
+  (*                                       sporkGive' { *)
+  (*                                         body = fn () => step (w2i i, b), *)
+  (*                                         spwn = fn () => split z (i + 0w1, mid), *)
+  (*                                         seq  = fn b' => loop b' (i + 0w1), *)
+  (*                                         sync = merge, *)
+  (*                                         unstolen = fn b' => split b' (i + 0w1, mid) *)
+  (*                                       } *)
+  (*                             in *)
+  (*                               loop b i *)
+  (*                             end, *)
+  (*                   spwn = fn () => split z (mid, j), *)
+  (*                   seq  = fn b' => split b' (mid, j), *)
+  (*                   sync = merge *)
+  (*                 } *)
+  (*               end *)
+  (*     in *)
+  (*       split z (i2w i, i2w j) *)
+  (*     end *)
 
   fun parfor (grain: int) (i: int, j: int) (f: int -> unit): unit =
       pareduce (i, j) () (fn (i, ()) => f i) (fn ((), ()) => ())

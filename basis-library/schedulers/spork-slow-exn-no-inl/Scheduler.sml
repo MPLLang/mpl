@@ -1088,7 +1088,7 @@ struct
       let
         val (inject, project) = Universal.embed ()
 
-        fun body' (): 'a Result.t =
+        fun body' (): 'a =
             ((if noTokens () then () else tryPromoteNow {youngestOptimization = true});
              Result.result body)
 
@@ -1179,23 +1179,23 @@ struct
         primSpork (body', spwn', seq', sync', exnseq', exnsync')
       end
 
-    fun sporkFair {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
-        sporkBase (primSporkFair, body, spwn, seq, sync, seq)
-
-    fun sporkKeep {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
-        sporkBase (primSporkKeep, body, spwn, seq, sync, seq)
-
-    fun sporkGive {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
-        sporkBase (primSporkGive, body, spwn, seq, sync, seq)
-
-    fun sporkFair' {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
-        sporkBase (primSporkFair, body, spwn, seq, sync, unstolen)
-
-    fun sporkKeep' {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
-        sporkBase (primSporkKeep, body, spwn, seq, sync, unstolen)
-
-    fun sporkGive' {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
-        sporkBase (primSporkGive, body, spwn, seq, sync, unstolen)
+    fun spork
+                          {tokenPolicy: TokenPolicy,
+                           body: unit -> 'a,
+                           spwn: unit -> 'b,
+                           seq: 'a -> 'c,
+                           sync: 'a * 'b -> 'c,
+                           unstolen: ('a -> 'c) option} =
+        let val primSpork = case tokenPolicy of
+                                TokenPolicyFair => primSporkFair
+                              | TokenPolicyGive => primSporkGive
+                              | TokenPolicyKeep => primSporkKeep
+            val unstolen = case unstolen of
+                               NONE => seq
+                             | SOME unstolen => unstolen
+        in
+          sporkBase (primSpork, body, spwn, seq, sync, unstolen)
+        end
   end
 
   (* ========================================================================
@@ -1467,11 +1467,12 @@ struct
    * will be optimized away, causing the compiler to crash because it doesn't
    * know how to pass a useless argument to the corresponding runtime func.
    *)
-  val () = SporkJoin.sporkFair' {
+  val () = SporkJoin.spork {
+        tokenPolicy = TokenPolicyFair,
         body = fn () => (),
         spwn = fn () => (),
         seq  = fn () => (),
         sync = fn ((), ()) => (),
-        unstolen = fn () => ()
+        unstolen = NONE
       }
 end

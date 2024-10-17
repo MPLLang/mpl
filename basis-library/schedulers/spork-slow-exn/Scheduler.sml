@@ -1088,7 +1088,7 @@ struct
       let
         val (inject, project) = Universal.embed ()
 
-        fun __inline_always__ body' (): 'a Result.t =
+        fun __inline_always__ body' (): 'a =
             ((if noTokens () then () else tryPromoteNow {youngestOptimization = true});
              Result.result body)
 
@@ -1179,23 +1179,23 @@ struct
         __inline_always__ primSpork (body', spwn', seq', sync', exnseq', exnsync')
       end
 
-    fun __inline_always__ sporkFair {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
-        sporkBase (primSporkFair, body, spwn, seq, sync, seq)
-
-    fun __inline_always__ sporkKeep {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
-        sporkBase (primSporkKeep, body, spwn, seq, sync, seq)
-
-    fun __inline_always__ sporkGive {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c}: 'c =
-        sporkBase (primSporkGive, body, spwn, seq, sync, seq)
-
-    fun __inline_always__ sporkFair' {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
-        sporkBase (primSporkFair, body, spwn, seq, sync, unstolen)
-
-    fun __inline_always__ sporkKeep' {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
-        sporkBase (primSporkKeep, body, spwn, seq, sync, unstolen)
-
-    fun __inline_always__ sporkGive' {body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: 'a -> 'c}: 'c =
-        sporkBase (primSporkGive, body, spwn, seq, sync, unstolen)
+    fun __inline_always__ spork
+                          {tokenPolicy: TokenPolicy,
+                           body: unit -> 'a,
+                           spwn: unit -> 'b,
+                           seq: 'a -> 'c,
+                           sync: 'a * 'b -> 'c,
+                           unstolen: ('a -> 'c) option} =
+        let val primSpork = case tokenPolicy of
+                                TokenPolicyFair => primSporkFair
+                              | TokenPolicyGive => primSporkGive
+                              | TokenPolicyKeep => primSporkKeep
+            val unstolen = case unstolen of
+                               NONE => seq
+                             | SOME unstolen => unstolen
+        in
+          sporkBase (primSpork, body, spwn, seq, sync, unstolen)
+        end
   end
 
   (* ========================================================================
@@ -1409,7 +1409,7 @@ struct
   val originalThread = Thread.current ()
   val _ =
     if HH.getDepth originalThread = 0 then ()
-    else die (fn _ => "scheduler bug: root depth <> 0: " ^ Int.toString (HH.getDepth originalThread))
+    else die (fn _ => "scheduler bug: root depth <> 0")
   val _ = HH.setDepth (originalThread, 1)
 
   (* implicitly attaches worker child heaps *)
@@ -1467,11 +1467,12 @@ struct
    * will be optimized away, causing the compiler to crash because it doesn't
    * know how to pass a useless argument to the corresponding runtime func.
    *)
-  val () = SporkJoin.sporkFair' {
+  val () = SporkJoin.spork {
+        tokenPolicy = TokenPolicyFair,
         body = fn () => (),
         spwn = fn () => (),
         seq  = fn () => (),
         sync = fn ((), ()) => (),
-        unstolen = fn () => ()
+        unstolen = NONE
       }
 end
