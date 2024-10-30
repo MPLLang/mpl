@@ -10,6 +10,7 @@ struct
 open S
 
 structure BounceVars = BounceVars (S)
+structure CopySporkSpwnVars = CopySporkSpwnVars (S)
 structure CollectStatics = CollectStatics (S)
 structure DropSpork = DropSpork (S)
 structure ImplementHandlers = ImplementHandlers (S)
@@ -31,6 +32,7 @@ val rssaPasses =
    {name = "rssaShrink2", doit = S.shrink, execute = true} ::
    (* must be before implementHandlers *)
    {name = "bounceVars", doit = BounceVars.transform, execute = true} ::
+   {name = "copySporkSpwnVars", doit = CopySporkSpwnVars.transform, execute = true} ::
    {name = "implementHandlers", doit = ImplementHandlers.transform, execute = true} ::
    {name = "rssaDropSpork", doit = DropSpork.transform, execute = false} ::
    {name = "rssaShrink3", doit = S.shrink, execute = true} ::
