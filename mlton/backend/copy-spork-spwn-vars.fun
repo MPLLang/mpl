@@ -139,6 +139,20 @@ fun transform p =
                     | _ => ()
                   end)
 
+            val _ = Control.diagnostics (fn show =>
+              Function.foreachDef (func, fn (v, _) =>
+                let
+                  open Layout
+                  val {criticalSporks, placement, copy} = varInfo v
+                in
+                  show (Var.layout v);
+                  show (seq ([str "criticalSporks "] @ List.map (!criticalSporks, Label.layout)));
+                  show (seq [str "placement ", str (case !placement of DefinitelyStack => "DefinitelyStack" | _ => "HopefullyTemporary")]);
+                  case !copy of
+                    NONE => ()
+                  | SOME v' => show (seq [str "copy ", Var.layout v'])
+                end))
+
             (* ===============================================================
              * Immediately inside of every Spork cont branch, put a rewrite
              * block for vars that need to be rewritten.
