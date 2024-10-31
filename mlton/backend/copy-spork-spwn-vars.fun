@@ -117,7 +117,11 @@ fun transform p =
              * placement info for every var
              *)
 
-            val _ = Vector.foreach (blocks,
+            (* Alternatively: look for Cont / CReturn reachability ignoring
+             * spwn edges...
+             *)
+
+            (* val _ = Vector.foreach (blocks,
                fn b as Block.T {label, kind, ...} =>
                   let
                     fun markLiveAsDefinitelyStack () =
@@ -137,7 +141,7 @@ fun transform p =
                         else
                           ()
                     | _ => ()
-                  end)
+                  end) *)
 
             val _ = Control.diagnostics (fn show =>
               Function.foreachDef (func, fn (v, _) =>
@@ -154,50 +158,91 @@ fun transform p =
                 end))
 
             (* ===============================================================
-             * Immediately inside of every Spork cont branch, put a rewrite
-             * block for vars that need to be rewritten.
+             * Make a new version of variables that should be copied
              *)
 
-            val newBlocks = ref []
-
-            fun insertRewriteBlockBefore (Block.T {args, kind=tgtKind, label=tgtLabel, ...}) =
+            val _ = Function.foreachDef (func, (fn (v, _) =>
+              if not (shouldCopyVar v) then () else
               let
-                val live = beginNoFormals tgtLabel
-                val varsToCopy = Vector.keepAll (live, shouldCopyVar)
-                val statements = Vector.map (varsToCopy, fn v =>
-                  let
-                    val ty = varTy v
-                  in
-                    Statement.Bind
-                      { dst = (v, ty)
-                      , pinned = true
-                      , src = Operand.Var {var=v, ty=ty}
-                      }
-                  end)
-                val label = Label.new tgtLabel
-                val jumpArgs = Vector.map (args, fn (v, ty) => Operand.Var {var=v, ty=ty})
-                val transfer = Transfer.Goto {dst=tgtLabel, args=jumpArgs}
-                val block = Block.T {args=args, kind=tgtKind, label=label, statements=statements, transfer=transfer}
-                val _ = List.push (newBlocks, block)
+                val {copy, ...} = varInfo v
+                val v' = Var.new v
               in
-                label
+                copy := SOME v'
+              end))
+
+            fun getVarCopy v =
+              valOf (! (#copy (varInfo v)))
+
+            (* ===============================================================
+             * For every variable v that needs to be copied, create a copy
+             * statement immediately after its definition:
+             *   v = ...
+             *   v' = v
+             * Then, inside of every SporkSpwn block, we "uncopy":
+             *   v = v'
+             * This guarantees that v' (instead of v) is live at the SporkSpwn.
+             * We rely on a Restore pass to fix up the SSA condition.
+             *)
+
+            fun makeCopyStatement (v, ty) =
+              Statement.Bind
+                { dst = (getVarCopy v, ty)
+                , pinned = true
+                , src = Operand.Var {var=v, ty=ty}
+                }
+
+            fun makeUncopyStatement (v, ty) =
+              Statement.Bind
+                { dst = (v, ty)
+                , pinned = true
+                , src = Operand.Var {var = getVarCopy v, ty = ty}
+                }
+
+            val funcArgsToCopy = Vector.keepAll (args, shouldCopyVar o #1)
+            val funcArgCopyStmts = Vector.map (funcArgsToCopy, makeCopyStatement)
+              
+            fun processBlock (b as Block.T {args, kind, label, statements, transfer}) =
+              let
+                val argsToCopy = Vector.keepAll (args, shouldCopyVar o #1)
+                val argCopyStmts = Vector.map (argsToCopy, makeCopyStatement)
+
+                val uncopyStmts =
+                  case kind of
+                    Kind.SporkSpwn _ =>
+                      let
+                        val live = beginNoFormals label
+                        val varsToUncopy = Vector.keepAll (live, shouldCopyVar)
+                      in
+                        Vector.map (varsToUncopy, fn v =>
+                          makeUncopyStatement (v, varTy v))
+                      end
+                  | _ => Vector.new0 ()
+
+
+                val newStmts = ref []
+
+                fun processStatement s =
+                  ( List.push (newStmts, s)
+                  ; Statement.foreachDef (s, fn (v, ty) => 
+                      if shouldCopyVar v then
+                        List.push (newStmts, makeCopyStatement (v, ty))
+                      else ())
+                  )
+
+                val _ = Vector.foreach (statements, processStatement)
+                val statements = Vector.concat
+                  [ if Label.equals (label, start)
+                    then funcArgCopyStmts
+                    else Vector.new0 ()
+                  , argCopyStmts
+                  , uncopyStmts
+                  , Vector.fromListRev (!newStmts)
+                  ]
+              in
+                Block.T {args=args, kind=kind, label=label, statements=statements, transfer=transfer}
               end
 
-            fun processBlock (b as Block.T {args, kind, label, statements, transfer}) =
-              if ! (#isSporkCont (labelInfo label)) then
-                Block.T {args=args, kind=Kind.Jump, label=label, statements=statements, transfer=transfer}
-              else case transfer of
-                Transfer.Spork {cont, spwn, spid} =>
-                  let
-                    val newLabel = insertRewriteBlockBefore (valOf (! (#block (labelInfo cont))))
-                    val transfer = Transfer.Spork {cont=newLabel, spwn=spwn, spid=spid}
-                  in
-                    Block.T {args=args, kind=kind, label=label, statements=statements, transfer=transfer}
-                  end
-              | _ => b
-
-            val _ = Vector.foreach (blocks, fn b => List.push (newBlocks, processBlock b))
-            val newBlocks = Vector.fromListRev (!newBlocks)
+            val newBlocks = Vector.map (blocks, processBlock)
          in
             Function.new
                {args=args, blocks=newBlocks,
