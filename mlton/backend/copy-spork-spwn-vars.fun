@@ -206,18 +206,25 @@ fun transform p =
                 val argsToCopy = Vector.keepAll (args, shouldCopyVar o #1)
                 val argCopyStmts = Vector.map (argsToCopy, makeCopyStatement)
 
-                val uncopyStmts =
-                  case kind of
-                    Kind.SporkSpwn _ =>
-                      let
-                        val live = beginNoFormals label
-                        val varsToUncopy = Vector.keepAll (live, shouldCopyVar)
-                      in
-                        Vector.map (varsToUncopy, fn v =>
-                          makeUncopyStatement (v, varTy v))
-                      end
-                  | _ => Vector.new0 ()
+                fun makeUncopies () =
+                  let
+                    val live = beginNoFormals label
+                    val varsToUncopy = Vector.keepAll (live, shouldCopyVar)
+                  in
+                    Vector.map (varsToUncopy, fn v =>
+                      makeUncopyStatement (v, varTy v))
+                  end
 
+                val slowBlock =
+                  case kind of
+                    Kind.SporkSpwn _ => true
+                  | Kind.SpoinSync _ => true
+                  | Kind.Cont _ => true
+                  | Kind.CReturn {func} => CFunction.mayGC func
+                  | _ => false
+
+                val uncopyStmts =
+                  if slowBlock then makeUncopies () else Vector.new0 ()
 
                 val newStmts = ref []
 
