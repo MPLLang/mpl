@@ -1088,7 +1088,7 @@ struct
       let
         val (inject, project) = Universal.embed ()
 
-        fun __inline_always__ body' (): 'a =
+        fun __inline_always__ body' (): 'a Result.t =
             ((if noTokens () then () else tryPromoteNow {youngestOptimization = true});
              Result.result body)
 
