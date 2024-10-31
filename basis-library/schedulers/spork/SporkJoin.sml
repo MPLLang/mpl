@@ -55,13 +55,12 @@ struct
   fun __inline_always__ pareduce (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun iter (b: 'a) (i: word, j: word): 'a =
               if i >= j then b else
-                let val i' = i + 0w1
-                    fun __inline_never__ spwn b' =
-                        if i' >= j then b' else
-                          let val mid = midpoint (i', j) in
+                let fun __inline_never__ spwn b' =
+                        if i + 0w1 >= j then b' else
+                          let val mid = midpoint (i + 0w1, j) in
                             spork {
                               tokenPolicy = TokenPolicyFair,
-                              body = fn () => iter b' (i', mid),
+                              body = fn () => iter b' (i + 0w1, mid),
                               spwn = fn () => iter z (mid, j),
                               seq  = fn b' => iter b' (mid, j),
                               sync = merge,
@@ -73,7 +72,7 @@ struct
                     tokenPolicy = TokenPolicyGive,
                     body = fn () => __inline_always__ step (w2i i, b),
                     spwn = fn () => spwn z,
-                    seq = fn b' => iter b' (i', j),
+                    seq = fn b' => iter b' (i + 0w1, j),
                     sync = merge,
                     unstolen = SOME spwn
                   }
