@@ -23,12 +23,12 @@ local
   ../shh/CumulativePerProcTimer.sml
   ../shh/SimpleRandom.sml
   ../shh/queue/DequeABP.sml
-  ../spork-no-inl/Result.sml
+  Result.sml
   
   ann
      "exnDecElab app"
   in
-    ../spork-no-inl/Universal.sml
+    Universal.sml
   end
 
   ann
@@ -37,7 +37,7 @@ local
   in
     Scheduler.sml
   end
-  ../spork-no-inl/SporkJoin.sml
+  SporkJoin.sml
 in
   structure ForkJoin
 end

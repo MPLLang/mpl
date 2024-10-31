@@ -94,7 +94,7 @@ struct
   val nextPromotionTokenPolicy =
     _import "GC_HH_getNextPromotionTokenPolicy" runtime private: gcstate -> Word32.word;
   val nextPromotionTokenPolicy =
-    (fn () => case nextPromotionTokenPolicy (gcstate ()) of
+    (fn  () => case nextPromotionTokenPolicy (gcstate ()) of
                   0w0 => TokenPolicyFair
                 | 0w1 => TokenPolicyKeep
                 | 0w2 => TokenPolicyGive
@@ -133,12 +133,12 @@ struct
         * (exn -> 'c)		(* exn seq  *)
         * (exn * 'd -> 'c)	(* exn sync *)
         -> 'c;
-  fun primSporkFair (body, spwn, seq, sync, exnseq, exnsync) =
-      primSporkFair' (body, (), spwn, (), seq, sync, exnseq, exnsync)
-  fun primSporkKeep (body, spwn, seq, sync, exnseq, exnsync) =
-      primSporkKeep' (body, (), spwn, (), seq, sync, exnseq, exnsync)
-  fun primSporkGive (body, spwn, seq, sync, exnseq, exnsync) =
-      primSporkGive' (body, (), spwn, (), seq, sync, exnseq, exnsync)
+  fun  primSporkFair (body, spwn, seq, sync, exnseq, exnsync) =
+       primSporkFair' (body, (), spwn, (), seq, sync, exnseq, exnsync)
+  fun  primSporkKeep (body, spwn, seq, sync, exnseq, exnsync) =
+       primSporkKeep' (body, (), spwn, (), seq, sync, exnseq, exnsync)
+  fun  primSporkGive (body, spwn, seq, sync, exnseq, exnsync) =
+       primSporkGive' (body, (), spwn, (), seq, sync, exnseq, exnsync)
   
   val primForkThreadAndSetData = _prim "spork_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
   val primForkThreadAndSetData_youngest = _prim "spork_forkThreadAndSetData_youngest": Thread.t * 'a -> Thread.p;
@@ -146,7 +146,7 @@ struct
   val findNextPromotableFrame =
     _import "GC_HH_findNextPromotableFrame" runtime private: gcstate * bool * Thread.t -> bool;
   val findNextPromotableFrame =
-      (fn ({youngestOptimization}, p) =>
+      (fn  ({youngestOptimization}, p) =>
           findNextPromotableFrame (gcstate (), youngestOptimization, p))
       : {youngestOptimization: bool} * Thread.t -> bool;
 
@@ -1056,9 +1056,9 @@ struct
      * spork definition
      *)
 
-    fun noTokens () = currentSpareHeartbeatTokens () < spawnCost
+    fun  noTokens () =  currentSpareHeartbeatTokens () < spawnCost
 
-    fun tryPromoteNow yo =
+    fun  tryPromoteNow yo =
       ( Thread.atomicBegin ()
       ; if
           not (noTokens ()) andalso
@@ -1079,7 +1079,7 @@ struct
          * (exn * Universal.t joinpoint -> 'c)
          -> 'c
 
-    fun sporkBase (primSpork: ('a Result.t, 'c) sporkT,
+    fun  sporkBase (primSpork: ('a, 'c) sporkT,
                                      body: unit -> 'a,
                                      spwn: unit -> 'b,
                                      seq: 'a -> 'c,
@@ -1088,9 +1088,9 @@ struct
       let
         val (inject, project) = Universal.embed ()
 
-        fun body' (): 'a Result.t =
+        fun  body' (): 'a =
             ((if noTokens () then () else tryPromoteNow {youngestOptimization = true});
-             Result.result body)
+              body ())
 
         fun spwn' ((), J jp): unit =
           let
@@ -1142,16 +1142,16 @@ struct
               )
           end
 
-        fun seq' (bodyr: 'a Result.t): 'c =
-            seq (Result.extractResult bodyr)
+        fun  seq' (bodyr: 'a): 'c =
+             seq bodyr
 
-        fun sync' (bodyr: 'a Result.t, jp: Universal.t joinpoint): 'c =
+        fun  sync' (bodyr: 'a, jp: Universal.t joinpoint): 'c =
           let
             val _ = dbgmsg'' (fn _ => "hello from sync continuation")
             val _ = Thread.atomicBegin ()
             val _ = #assertAtomic (sched_package ()) "sync continuation" 1
             val spwnrOpt = #syncEndAtomic (sched_package ()) jp
-            val bodyr' = Result.extractResult bodyr
+            val bodyr' = bodyr
           in
             case spwnrOpt of
               (* spwn was unstolen *)
@@ -1165,9 +1165,9 @@ struct
                              raise SchedulerError)
           end
 
-        fun exnseq' (e: exn): 'c = raise e
+        fun  exnseq' (e: exn): 'c = raise e
 
-        fun exnsync' (e: exn, jp: Universal.t joinpoint): 'c =
+        fun  exnsync' (e: exn, jp: Universal.t joinpoint): 'c =
             let val _ = dbgmsg'' (fn _ => "hello from exn sync continuation")
                 val _ = Thread.atomicBegin ()
                 val _ = #assertAtomic (sched_package ()) "exn sync continuation" 1
@@ -1176,10 +1176,10 @@ struct
               raise e
             end
       in
-        primSpork (body', spwn', seq', sync', exnseq', exnsync')
+         primSpork (body', spwn', seq', sync', exnseq', exnsync')
       end
 
-    fun spork
+    fun  spork
                           {tokenPolicy: TokenPolicy,
                            body: unit -> 'a,
                            spwn: unit -> 'b,
