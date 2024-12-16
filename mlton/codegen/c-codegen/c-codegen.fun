@@ -1184,6 +1184,28 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                 ; if amTimeProfiling
                      then flushStackTop ()
                      else ())
+            (* PromoStackTop += size *)
+            fun adjPromoStackTop (size: Bytes.t) =
+              outputStatement (Statement.PrimApp
+                               {args = Vector.new2
+                                       (Operand.gcField Runtime.GCField.PromoStackTop,
+                                       Operand.word
+                                       (WordX.fromBytes
+                                         (size,
+                                         WordSize.cptrdiff ()))), (* SAM_NOTE: What is this argument? *)
+                               dst = SOME (Operand.gcField Runtime.GCField.PromoStackTop),
+                               prim = Prim.CPointer_add})
+            (* PromoStackBot += size *)
+            fun adjPromoStackBot (size: Bytes.t) =
+              outputStatement (Statement.PrimApp
+                               {args = Vector.new2
+                                       (Operand.gcField Runtime.GCField.PromoStackBot,
+                                       Operand.word
+                                       (WordX.fromBytes
+                                         (size,
+                                         WordSize.cptrdiff ()))), (* SAM_NOTE: What is this argument? *)
+                               dst = SOME (Operand.gcField Runtime.GCField.PromoStackBot),
+                               prim = Prim.CPointer_add})
             fun pop (fi: FrameInfo.t) =
                adjStackTop (Bytes.~ (FrameInfo.size fi))
             fun push (return: Label.t, size: Bytes.t) =
@@ -1194,6 +1216,23 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                          volatile = amTimeProfiling},
                                   src = Operand.Label return})
                 ; adjStackTop size)
+            (* Hacking this together *)
+            fun promoStackPush () =
+               let
+                  val putStackTop =
+                     "\t*(CPointer*)("
+                     ^ operandToString (Operand.gcField Runtime.GCField.PromoStackTop)
+                     ^ ") = "
+                     ^ operandToString Operand.StackTop
+                     ^ ";\n"
+               in
+                  print putStackTop;
+                  adjPromoStackTop (Bits.toBytes (Control.Target.Size.cpointer ()))
+               end
+            fun promoStackPop () =
+               adjPromoStackTop (Bytes.~ (Bits.toBytes (Control.Target.Size.cpointer ())))
+            fun promoStackChopBot () =
+               adjPromoStackBot (Bytes.~ (Bits.toBytes (Control.Target.Size.cpointer ())))
             fun copyArgs (args: Operand.t vector): string list * (unit -> unit) =
                let
                   fun usesStack z =
@@ -1438,6 +1477,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                    | Goto dst => gotoLabel (dst, {tab = true})
                    | PCall {label, cont, parl, parr, size, ...} =>
                         (push (cont, size)
+                         ; promoStackPush ()
                          ; jump label)
                    | Raise {raisesTo} =>
                         (outputStatement (Statement.PrimApp
@@ -1680,7 +1720,13 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                       | Kind.Func _ => ()
                       | Kind.Handler {frameInfo, ...} => pop frameInfo
                       | Kind.Jump => ()
-                      | Kind.PCallReturn {frameInfo, ...} => pop frameInfo
+                      | Kind.PCallReturn {frameInfo, ...} =>
+                           (pop frameInfo
+                            ; promoStackPop ()
+                            ; case FrameInfo.kind frameInfo of
+                                FrameInfo.Kind.PCALL_PARL_FRAME => promoStackChopBot ()
+                              | FrameInfo.Kind.PCALL_PARR_FRAME => promoStackChopBot ()
+                              | _ => ())
                   val _ =
                      if !Control.codegenFuseOpAndChk
                         then outputStatementsFuseOpAndChk statements

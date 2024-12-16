@@ -49,6 +49,8 @@ void setGCStateCurrentThreadAndStack (GC_state s) {
   s->stackBottom = getStackBottom (s, stack);
   s->stackTop = getStackTop (s, stack);
   s->stackLimit = getStackLimit (s, stack);
+  s->promoStackTop = stack->promoStackTop;
+  s->promoStackBot = stack->promoStackBot;
 }
 
 struct FixedSizeAllocator* getHHAllocator(GC_state s) {

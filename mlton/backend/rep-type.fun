@@ -732,6 +732,8 @@ fun ofGCField (f: GCField.t): t =
        | StackBottom => cpointer ()
        | StackLimit => cpointer ()
        | StackTop => cpointer ()
+       | PromoStackTop => cpointer ()
+       | PromoStackBot => cpointer ()
    end
 
 fun castIsOk {from, to, tyconTy = _} =

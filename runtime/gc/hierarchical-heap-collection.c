@@ -94,10 +94,18 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, GC_header header,
                                              size_t *copySize,
                                              size_t *metaDataSize);
 
-pointer copyObject(pointer p,
-                   size_t objectSize,
-                   size_t copySize,
-                   HM_HierarchicalHeap tgtHeap);
+objptr copyNonStackObject(
+  pointer p,  // pointer to beginning of metadata
+  size_t metadataSize,
+  size_t objectSizeIncludingMetadata,
+  size_t copySize,
+  HM_HierarchicalHeap tgtHeap);
+
+objptr copyStackObject(
+  GC_state s,
+  pointer p,  // pointer to beginning of metadata
+  size_t objectSizeIncludingMetadata,
+  HM_HierarchicalHeap tgtHeap);
 
 void delLastObj(objptr op, size_t objectSize, HM_HierarchicalHeap tgtHeap);
 
@@ -1067,12 +1075,15 @@ objptr relocateObject(
   size_t copyBytes;
 
   /* compute object size and bytes to be copied */
-  computeObjectCopyParameters(s,
-                              header,
-                              p,
-                              &objectBytes,
-                              &copyBytes,
-                              &metaDataBytes);
+  GC_objectTypeTag tag =
+    computeObjectCopyParameters(
+      s,
+      header,
+      p,
+      &objectBytes,
+      &copyBytes,
+      &metaDataBytes
+    );
 
   if (!HM_getChunkOf(p)->mightContainMultipleObjects)
   {
@@ -1093,17 +1104,32 @@ objptr relocateObject(
   }
 
   /* Otherwise try copying the object */
-  pointer copyPointer = copyObject(p - metaDataBytes,
-                                   objectBytes,
-                                   copyBytes,
-                                   tgtHeap);
+  objptr newPointer;
+  if (tag == STACK_TAG) {
+    newPointer =
+      copyStackObject(
+        s,
+        p - metaDataBytes,
+        objectBytes,
+        tgtHeap
+      );
+  } else {
+    newPointer =
+      copyNonStackObject(
+        p - metaDataBytes,
+        metaDataBytes,
+        objectBytes,
+        copyBytes,
+        tgtHeap
+      );
+  }
 
   /* Store the forwarding pointer in the old object metadata. */
-  objptr newPointer = pointerToObjptr(copyPointer + metaDataBytes, NULL);
   if (!args->concurrent)
   {
     assert(!isPinned(op));
-    assert (__sync_bool_compare_and_swap(getFwdPtrp(p), header, newPointer));
+    // assert (__sync_bool_compare_and_swap(getFwdPtrp(p), header, newPointer));
+    assert(*(getFwdPtrp(p)) == header);
     *(getFwdPtrp(p)) = newPointer;
   }
   else
@@ -1824,28 +1850,24 @@ void forwardHHObjptr(
       *opp);
 }
 
-pointer copyObject(pointer p,
-                   size_t objectSize,
-                   size_t copySize,
-                   HM_HierarchicalHeap tgtHeap)
+
+HM_chunk ensureSpaceInTargetHeap(
+  size_t objectSize,
+  HM_HierarchicalHeap tgtHeap,
+  decheck_tid_t decheckState)
 {
-
-  // check if you can add to existing chunk --> mightContain + size
-  // If not, allocate new chunk and copy.
-
   assert(HM_HH_isLevelHead(tgtHeap));
-  assert(copySize <= objectSize);
 
   HM_chunkList tgtChunkList = HM_HH_getChunkList(tgtHeap);
   assert(NULL != tgtChunkList);
 
   /* get the chunk to allocate in */
-  bool mustExtend = false;
+  bool mustExtend = FALSE;
 
   HM_chunk chunk = HM_getChunkListLastChunk(tgtChunkList);
   if (chunk == NULL || !chunk->mightContainMultipleObjects)
   {
-    mustExtend = true;
+    mustExtend = TRUE;
   }
   else
   {
@@ -1870,25 +1892,66 @@ pointer copyObject(pointer p,
     {
       DIE("Ran out of space for Hierarchical Heap!");
     }
-    chunk->decheckState = HM_getChunkOf(p)->decheckState;
+    chunk->decheckState = decheckState;
     chunk->levelHead = HM_HH_getUFNode(tgtHeap);
   }
 
+  return chunk;
+}
+
+
+objptr copyNonStackObject(
+  pointer p,  // pointer to beginning of metadata
+  size_t metaDataSize,
+  size_t objectSizeIncludingMetadata,
+  size_t copySize,
+  HM_HierarchicalHeap tgtHeap)
+{
+  assert(copySize <= objectSizeIncludingMetadata);
+  HM_chunk chunk =
+    ensureSpaceInTargetHeap(
+      objectSizeIncludingMetadata,
+      tgtHeap,
+      HM_getChunkOf(p)->decheckState
+    );
+  pointer frontier = HM_getChunkFrontier(chunk);
+  GC_memcpy(p, frontier, copySize);
+  pointer newFrontier = frontier + objectSizeIncludingMetadata;
+  HM_updateChunkFrontierInList(HM_HH_getChunkList(tgtHeap), chunk, newFrontier);
+  return pointerToObjptr(frontier + metaDataSize, NULL);
+}
+
+objptr copyStackObject(
+  GC_state s,
+  pointer p,  // pointer to beginning of metadata
+  size_t objectSizeIncludingMetadata,
+  HM_HierarchicalHeap tgtHeap)
+{
+  HM_chunk chunk =
+    ensureSpaceInTargetHeap(
+      objectSizeIncludingMetadata,
+      tgtHeap,
+      HM_getChunkOf(p)->decheckState
+    );
   pointer frontier = HM_getChunkFrontier(chunk);
 
-  GC_memcpy(p, frontier, copySize);
-  pointer newFrontier = frontier + objectSize;
-  HM_updateChunkFrontierInList(tgtChunkList, chunk, newFrontier);
-  // if (newFrontier >= (pointer)chunk + HM_BLOCK_SIZE) {
-  //   /* size is arbitrary; just need a new chunk */
-  //   chunk = HM_allocateChunk(tgtChunkList, GC_HEAP_LIMIT_SLOP);
-  //   if (NULL == chunk) {
-  //     DIE("Ran out of space for Hierarchical Heap!");
-  //   }
-  //   chunk->levelHead = tgtHeap;
-  // }
+  GC_memcpy(p, frontier, GC_STACK_METADATA_SIZE);
+  GC_stack from = (GC_stack)(p + GC_STACK_METADATA_SIZE);
+  GC_stack to = (GC_stack)(frontier + GC_STACK_METADATA_SIZE);
+  to->used = from->used;
+  to->reserved = from->reserved;
+  to->promoStackReserved = from->promoStackReserved;
+  copyStack(s, from, to);
 
-  return frontier;
+  assert(
+    objectSizeIncludingMetadata ==
+    GC_STACK_METADATA_SIZE + sizeof(struct GC_stack)
+    + from->reserved + from->promoStackReserved
+  );
+
+  pointer newFrontier = frontier + objectSizeIncludingMetadata;
+  HM_updateChunkFrontierInList(HM_HH_getChunkList(tgtHeap), chunk, newFrontier);
+  return pointerToObjptr((pointer)to, NULL);
 }
 
 void delLastObj(objptr op, size_t objectSize, HM_HierarchicalHeap tgtHeap)
@@ -1966,8 +2029,9 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s,
         stack->reserved = reservedNew;
       }
 #endif
-    *objectSize = sizeof(struct GC_stack) + stack->reserved;
-    *copySize = sizeof(struct GC_stack) + stack->used;
+    *objectSize = sizeof(struct GC_stack) + stack->reserved + stack->promoStackReserved;
+    // *copySize = sizeof(struct GC_stack) + stack->used;
+    *copySize = *objectSize;
   }
 
   *objectSize += *metaDataSize;

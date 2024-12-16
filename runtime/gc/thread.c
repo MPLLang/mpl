@@ -386,13 +386,19 @@ bool GC_HH_canForkThread(GC_state s, pointer threadp) {
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
   // pointer pframe = findPromotableFrame(s, fromStack);
-  pointer pframe = findYoungestPromotableFrame(s, fromStack);
+  // pointer pframe = findYoungestPromotableFrame(s, fromStack);
+  pointer pframe = getPromoStackOldestPromotableFrame(s, fromStack);
   leave(s);
   return NULL != pframe;
 }
 
 
-objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, pointer dp) {
+objptr GC_HH_forkThread(
+  GC_state s,
+  ARG_USED_FOR_ASSERT bool youngestOptimization,
+  pointer threadp,
+  pointer dp)
+{
   enter(s);
 
   /* ========================================================================
@@ -432,21 +438,34 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
 
-  pointer pframe =
+  pointer pframe = getPromoStackOldestPromotableFrame(s, fromStack);
+
+#if ASSERT
+  // walk the stack and check that the frame we got from the promo stack is
+  // correct
+  pointer checkframe =
     (youngestOptimization ?
       findYoungestPromotableFrame(s, fromStack) :
       findPromotableFrame(s, fromStack));
+  assert(checkframe == pframe);
 
-  /* Note that the promotion policy is _always_ oldest-first, regardless of the
-   * `youngestOptimization` flag. The following assertion checks that we haven't
-   * violated this. It's valid to use `youngestOptimization=TRUE` as only in the
-   * case where we know that the youngest and oldest frames happen to coincide.
-   * The scheduler figures this out: if we have a spare heartbeat token at the
-   * moment that we execute a pcall, then we know that no other ancestor frames
-   * in the stack are promotable (otherwise the spare token would have been
-   * spent to promote them).
+  // if there is no frame to promote, check that the promo stack is indeed empty
+  assert(pframe != NULL || fromStack->promoStackTop == fromStack->promoStackBot);
+
+  /* If the youngest optimization is active, check that the promo stack has
+   * exactly one element. With the new promo stack, the youngest optimization
+   * isn't necessary anymore... regardless, this is a nice sanity check.
+   *
+   * Note that the promotion policy is _always_ oldest-first, regardless of the
+   * `youngestOptimization` flag. It's valid to use `youngestOptimization=TRUE`
+   * only in the case where we know that the youngest and oldest frames happen
+   * to coincide. The scheduler figures this out: if we have a spare heartbeat
+   * token at the moment that we execute a pcall, then we know that no other
+   * ancestor frames in the stack are promotable (otherwise the spare token
+   * would have been spent to promote them).
    */
-  assert(findPromotableFrame(s, fromStack) == pframe);
+  assert(!youngestOptimization || fromStack->promoStackTop == fromStack->promoStackBot + sizeof(pointer));
+#endif
 
   if (NULL == pframe) {
     DIE("forkThread failed!");
@@ -483,6 +502,11 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
   *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) = parl_ret;
   *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) = parr_ret;
 
+  fromStack->promoStackBot += sizeof(pointer);
+
+  toStack->promoStackBot += sizeof(pointer);
+  toStack->promoStackTop += sizeof(pointer);
+
   /* ========================================================================
    * (Sanity check) Confirming that the data slots are in the right place
    * ========================================================================
@@ -511,6 +535,15 @@ objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer threadp, 
   return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
 }
 
+void setPromoStackOfCurrentThread(GC_state s, pointer newBot, pointer newTop) {
+  GC_stack stack = getStackCurrent(s);
+  assert(getStackLimitPlusSlop(s, stack) <= newBot);
+  assert(newBot <= newTop);
+  assert(newTop <= getStackLimitPlusSlop(s, stack) + stack->promoStackReserved);
+
+  stack->promoStackBot = newBot;
+  stack->promoStackTop = newTop;
+}
 
 #endif /* MLTON_GC_INTERNAL_BASIS */
 
