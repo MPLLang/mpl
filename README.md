@@ -1,7 +1,7 @@
 # MaPLe (MPL)
 
 MaPLe (MPL) is a functional language for provably efficient and safe multicore
-parallelism, developed at Carnegie Mellon University.
+parallelism.
 
 Features:
   * Support for the full Standard ML programming language, extended with
@@ -277,10 +277,8 @@ unsupported, including (but not limited to):
 
 ### Requirements
 
-MPL has primarily been tested on Linux with x86-64. Preliminary support for
-Mac has been implemented but not yet thoroughly tested. If you are installing
-on Mac, you'll need to install manually from source (not through `mpl-switch`).
-Instructions are below.
+MPL has primarily been tested on x86-64 Linux. Preliminary support for
+ARM-based Macs has been implemented but not yet thoroughly tested.
 
 The following software is required.
  * [GCC](http://gcc.gnu.org)
@@ -293,7 +291,7 @@ The following software is required.
    - Supported but not recommended: [SML/NJ](http://www.smlnj.org) (`sml`, `ml-lex`, `ml-yacc`).
  * (If using [`mpl-switch`](https://github.com/mpllang/mpl-switch)): Python 3, and `git`.
 
-### Installation with `mpl-switch` (Linux only)
+### Installation with `mpl-switch` (Mac and Linux)
 
 The [`mpl-switch`](https://github.com/mpllang/mpl-switch) utility makes it
 easy to install multiple versions of MPL on the same system and switch
@@ -338,6 +336,7 @@ You can manually build `mpl` by cloning this repo and then performing the follow
 with [Homebrew](https://brew.sh/) as follows. You'll also need all the other
 dependencies as well, listed above (e.g., `mlton`).
 ```
+$ brew install mlton
 $ brew install make
 $ brew install gmp
 ```
