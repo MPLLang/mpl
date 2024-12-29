@@ -96,7 +96,7 @@ void printObjectsInRange(GC_state s,
       p += alignWithExtra (s, dataBytes, GC_SEQUENCE_METADATA_SIZE);
     }
     else if (STACK_TAG == oi.tag) {
-      p += sizeof (struct GC_stack) + ((GC_stack)p)->reserved;
+      p += sizeof (struct GC_stack) + ((GC_stack)p)->reserved + ((GC_stack)p)->promoStackReserved;
     }
     else {
       fprintf(stderr, "cannot handle tag %u", oi.tag);
@@ -253,7 +253,7 @@ pointer foreachObjptrInObject (GC_state s, pointer p,
     assert(top == bottom);
 
  STACK_DONE:
-    p += sizeof (struct GC_stack) + stack->reserved;
+    p += sizeof (struct GC_stack) + stack->reserved + ((GC_stack)p)->promoStackReserved;;
   } else {
     assert (0 and "unknown object tag type");
   }

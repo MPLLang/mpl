@@ -17,7 +17,13 @@ size_t sizeofInitialBytesLive (GC_state s) {
 
   total = 0;
   total += s->staticHeaps.dynamic.size;
-  total += sizeofStackWithMetaData (s, sizeofStackInitialReserved (s)) + sizeofThread (s);
+  total +=
+    sizeofThread(s) +
+    sizeofStackWithMetaData(
+      s,
+      sizeofStackInitialReserved(s),
+      sizeofStackInitialPromoStackReserved(s)
+    );
   return total;
 }
 

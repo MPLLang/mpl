@@ -910,8 +910,9 @@ objptr copyStackOfThread(GC_state s, GC_thread thread) {
   GC_stack stackFrom = (GC_stack)objptrToPointer(thread->stack, NULL);
 
   size_t reserved = stackFrom->reserved;
+  size_t promoReserved = stackFrom->promoStackReserved;
   assert(isStackReservedAligned(s, reserved));
-  size_t stackSize = sizeofStackWithMetaData(s, reserved);
+  size_t stackSize = sizeofStackWithMetaData(s, reserved, promoReserved);
 
   HM_chunk newChunk = HM_allocateChunkWithPurpose(
     HM_HH_getChunkList(hh),
@@ -937,6 +938,7 @@ objptr copyStackOfThread(GC_state s, GC_thread thread) {
   *((GC_header*)frontier) = GC_STACK_HEADER;
   GC_stack stack = (GC_stack)(frontier + GC_HEADER_SIZE);
   stack->reserved = reserved;
+  stack->promoStackReserved = promoReserved;
   stack->used = 0;
   HM_updateChunkFrontierInList(
     HM_HH_getChunkList(hh),

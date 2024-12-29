@@ -18,6 +18,7 @@ void enter (GC_state s) {
   GC_MayTerminateThread(s);
   /* used needs to be set because the mutator has changed s->stackTop. */
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed (s);
+  setPromoStackOfCurrentThread(s, s->promoStackBot, s->promoStackTop);
   getThreadCurrent(s)->exnStack = s->exnStack;
   getThreadCurrent(s)->spareHeartbeatTokens = s->spareHeartbeatTokens;
   HM_HH_updateValues(getThreadCurrent(s), s->frontier);
@@ -36,11 +37,13 @@ void enter (GC_state s) {
 }
 
 void leave (GC_state s) {
+  s->spareHeartbeatTokens = getThreadCurrent(s)->spareHeartbeatTokens;
+  s->promoStackBot = getStackCurrent(s)->promoStackBot;
+
   /* The mutator frontier invariant may not hold
    * for functions that don't ensureBytesFree.
    */
   assert(invariantForMutator(s, FALSE, TRUE));
-  s->spareHeartbeatTokens = getThreadCurrent(s)->spareHeartbeatTokens;
   endAtomic (s);
   // Trace0(EVENT_RUNTIME_LEAVE);
 }

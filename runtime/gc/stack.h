@@ -15,9 +15,13 @@
  * header ::
  * markTop (native-pointer) ::
  * markIndex (word32) ::
+ * promoStackTop (native-pointer) ::
+ * promoStackBot (native-pointer) ::
  * reserved ::
+ * promoStackReserved ::
  * used ::
  * ... reserved bytes ...
+ * ... promoStackReserved bytes ...
  *
  * The markTop and markIndex are used by the mark-compact GC.  The
  * reserved size gives the number of bytes for the stack (before the
@@ -36,16 +40,34 @@ typedef struct GC_stack {
    */
   pointer markTop;
   uint32_t markIndex;
+  /* Promotion Stack: Each slot is a pointer to a promotable frame of this
+   * stack. Youngest at the top, oldest at the bottom. The compiler inserts
+   * code to manage the promotion stack.
+   * At every PCall:
+   *   *(pointer*)promoStackTop = StackTop  // pointing to the current (now promotable) frame
+   *   promoStackTop += sizeof(pointer)
+   * At every seq (unpromoted) continuation:
+   *   promoStackTop -= sizeof(pointer)
+   * At every sync (promoted) continuation:
+   *   promoStackTop -= sizeof(pointer)
+   *   promoStackBot = promoStackTop
+   * At promotion:
+   *   promoStackBot += sizeof(pointer)
+   */
+  pointer promoStackTop;
+  pointer promoStackBot;
   /* reserved is the number of bytes reserved for stack,
    * i.e. its maximum size.
    */
   size_t reserved;
+  size_t promoStackReserved;
   /* used is the number of bytes used by the stack.
    * Stacks with used == reserved are continuations.
    */
   size_t used;
   /* The next address is the bottom of the stack, and the following
-   * reserved bytes hold space for the stack.
+   * reserved bytes hold space for the stack. After that, the following
+   * promoStackReserved bytes hold space for the promotion stack.
    */
 } *GC_stack;
 
@@ -73,16 +95,24 @@ static inline GC_frameIndex getStackTopFrameIndex (GC_state s, GC_stack stack);
 static inline GC_frameInfo getStackTopFrameInfo (GC_state s, GC_stack stack);
 static inline uint16_t getStackTopFrameSize (GC_state s, GC_stack stack);
 
+static inline size_t getPromoStackSizeInBytes(GC_state s, GC_stack stack);
+static inline size_t getPromoStackBotOffsetInBytes(GC_state s, GC_stack stack);
+
 static inline size_t alignStackReserved (GC_state s, size_t reserved);
-static inline size_t sizeofStackWithMetaData (GC_state s, size_t reserved);
+static inline size_t sizeofStackWithMetaData (GC_state s, size_t reserved, size_t promoStackReserved);
+static inline size_t desiredPromoStackReserved (GC_state s, size_t reserved);
 static inline size_t sizeofStackInitialReserved (GC_state s);
+static inline size_t sizeofStackInitialPromoStackReserved (GC_state s);
 static inline size_t sizeofStackMinimumReserved (GC_state s, GC_stack stack);
 static inline size_t sizeofStackGrowReserved (GC_state s, GC_stack stack);
 static inline size_t sizeofStackShrinkReserved (GC_state s, GC_stack stack, bool current);
 
 // pointer to frame that is promotable, or NULL if no such frame
+#if ASSERT
 pointer findPromotableFrame (GC_state s, GC_stack stack);
 pointer findYoungestPromotableFrame (GC_state s, GC_stack stack);
+#endif
+pointer getPromoStackOldestPromotableFrame (GC_state s, GC_stack stack);
 
 void copyStackFrameToNewStack (GC_state s, pointer frame, GC_stack from, GC_stack to);
 

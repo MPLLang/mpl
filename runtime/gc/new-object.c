@@ -66,11 +66,18 @@ GC_stack newStack(GC_state s, size_t reserved) {
   assert (isStackReservedAligned (s, reserved));
   if (reserved > s->cumulativeStatistics->maxStackSize)
     s->cumulativeStatistics->maxStackSize = reserved;
-  stack = (GC_stack)(newObject(s, GC_STACK_HEADER,
-                               sizeofStackWithMetaData(s, reserved)));
 
-  stack->reserved = reserved;
+  size_t promoReserved = desiredPromoStackReserved(s, reserved);
+
+  stack = (GC_stack)(newObject(s, GC_STACK_HEADER,
+                               sizeofStackWithMetaData(s, reserved, promoReserved)));
+
   stack->used = 0;
+  stack->reserved = reserved;
+  stack->promoStackReserved = promoReserved;
+  stack->promoStackBot = getStackBottom(s, stack) + reserved;
+  stack->promoStackTop = stack->promoStackBot;
+
   if (DEBUG_STACKS)
     fprintf (stderr, FMTPTR " = newStack (%"PRIuMAX")\n",
              (uintptr_t)stack,
@@ -87,11 +94,14 @@ GC_thread newThread(GC_state s, size_t reserved) {
   assert(isStackReservedAligned(s, reserved));
   assert(threadAndHeapOkay(s));
 
-  HM_ensureHierarchicalHeapAssurances(s,
-                                      FALSE,
-                                      sizeofStackWithMetaData(s, reserved) +
-                                      sizeofThread(s),
-                                      FALSE);
+  HM_ensureHierarchicalHeapAssurances(
+    s,
+    FALSE,
+    sizeofStackWithMetaData(s, reserved, desiredPromoStackReserved(s, reserved))
+      + sizeofThread(s),
+    FALSE
+  );
+
   assert((pointer)HM_getChunkOf(s->frontier) == blockOf(s->frontier));
 
   stack = newStack(s, reserved);
@@ -134,7 +144,8 @@ GC_thread newThreadWithHeap(
   size_t reserved,
   uint32_t depth)
 {
-  size_t stackSize = sizeofStackWithMetaData(s, reserved);
+  size_t promoStackReserved = desiredPromoStackReserved(s, reserved);
+  size_t stackSize = sizeofStackWithMetaData(s, reserved, promoStackReserved);
   size_t threadSize = sizeofThread(s);
   size_t totalSize = stackSize + threadSize;
 
@@ -183,6 +194,9 @@ GC_thread newThreadWithHeap(
 
   stack->reserved = reserved;
   stack->used = 0;
+  stack->promoStackReserved = promoStackReserved;
+  stack->promoStackBot = getStackBottom(s, stack) + reserved;
+  stack->promoStackTop = stack->promoStackBot;
 
   thread->spareHeartbeatTokens = 0;
   thread->currentProcNum = -1;

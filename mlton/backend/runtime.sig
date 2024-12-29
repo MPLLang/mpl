@@ -29,6 +29,8 @@ signature RUNTIME =
              | StackBottom
              | StackLimit (* Must have StackTop <= StackLimit *)
              | StackTop (* Points at the next available byte on the stack. *)
+             | PromoStackTop (* Points at the next available slot on the promotion stack *)
+             | PromoStackBot (* Points at the oldest entry of the promotion stack *)
 
             val layout: t -> Layout.t
             val offset: t -> Bytes.t (* Field offset in struct GC_state. *)

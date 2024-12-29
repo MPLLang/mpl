@@ -1,4 +1,5 @@
-/* Copyright (C) 2016-2017,2020 Matthew Fluet.
+/* Copyright (C) 2024 Sam Westrick.
+ * Copyright (C) 2016-2017,2020 Matthew Fluet.
  * Copyright (C) 2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -62,6 +63,8 @@ int main (__attribute__ ((unused)) int argc,
   MkGCFieldOffset (frontier);
   MkGCFieldOffset (limit);
   MkGCFieldOffset (limitPlusSlop);
+  MkGCFieldOffset (promoStackTop);
+  MkGCFieldOffset (promoStackBot);
   MkGCFieldOffset (signalsInfo.signalIsPending);
   MkGCFieldOffset (spareHeartbeatTokens);
   MkGCFieldOffset (sourceMaps.curSourceSeqIndex);

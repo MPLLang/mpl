@@ -27,6 +27,9 @@ bool invariantForMutatorStack (GC_state s) {
   GC_stack stack = getStackCurrent(s);
   return (getStackTop (s, stack)
           <= getStackLimit (s, stack) + getStackTopFrameSize (s, stack))
+      && (getStackLimitPlusSlop(s, stack) <= stack->promoStackBot)
+      && (stack->promoStackBot <= stack->promoStackTop)
+      && (stack->promoStackTop <= getStackLimitPlusSlop(s, stack) + stack->promoStackReserved)
       && (FALSE == HM_getChunkOf((pointer)stack)->mightContainMultipleObjects);
 }
 

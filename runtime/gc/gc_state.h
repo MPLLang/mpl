@@ -1,4 +1,5 @@
-/* Copyright (C) 2012,2014,2019-2022 Matthew Fluet.
+/* Copyright (C) 2024 Sam Westrick.
+ * Copyright (C) 2012,2014,2019-2022 Matthew Fluet.
  * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -23,6 +24,8 @@ struct GC_state {
   volatile pointer stackTop; /* Top of stack in current thread. */
   pointer stackLimit; /* stackBottom + stackSize - maxFrameSize */
   ptrdiff_t exnStack;
+  pointer promoStackTop;
+  pointer promoStackBot;
   /* Alphabetized fields follow. */
   size_t alignment; /* */
   volatile bool amInGC;

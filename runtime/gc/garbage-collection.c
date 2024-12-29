@@ -13,21 +13,22 @@
 // extern int64_t CheckActivationStack(void);
 
 void growStackCurrent(GC_state s) {
-  size_t reserved;
+  size_t newReserved;
   size_t stackSize;
   GC_stack stack;
 
-  reserved = sizeofStackGrowReserved(s, getStackCurrent(s));
-  assert(isStackReservedAligned (s, reserved));
-  stackSize = sizeofStackWithMetaData(s, reserved);
+  newReserved = sizeofStackGrowReserved(s, getStackCurrent(s));
+  size_t newPromoStackReserved = desiredPromoStackReserved(s, newReserved);
+  assert(isStackReservedAligned(s, newReserved));
+  stackSize = sizeofStackWithMetaData(s, newReserved, newPromoStackReserved);
   if (DEBUG_STACKS or s->controls->messages)
     fprintf (stderr,
              "[GC: Growing stack of size %s bytes to size %s bytes, using %s bytes.]\n",
              uintmaxToCommaString(getStackCurrent(s)->reserved),
-             uintmaxToCommaString(reserved),
+             uintmaxToCommaString(newReserved),
              uintmaxToCommaString(getStackCurrent(s)->used));
-  if (reserved > s->cumulativeStatistics->maxStackSize)
-    s->cumulativeStatistics->maxStackSize = reserved;
+  if (newReserved > s->cumulativeStatistics->maxStackSize)
+    s->cumulativeStatistics->maxStackSize = newReserved;
 
   HM_chunk chunk = HM_getChunkOf((pointer)getStackCurrent(s));
   HM_HierarchicalHeap hh = HM_getLevelHeadPathCompress(chunk);
@@ -37,12 +38,30 @@ void growStackCurrent(GC_state s) {
   }
 
   assert(HM_getChunkFrontier(chunk) == HM_getChunkStart(chunk) +
-    sizeofStackWithMetaData(s, getStackCurrent(s)->reserved));
+    sizeofStackWithMetaData(
+      s,
+      getStackCurrent(s)->reserved,
+      getStackCurrent(s)->promoStackReserved));
 
-  /* the easy case: plenty of space in the stack's chunk to just grow the
+  /* the fast case: plenty of space in the stack's chunk to just grow the
    * stack in place. */
   if (stackSize <= (size_t)(HM_getChunkLimit(chunk) - HM_getChunkStart(chunk))) {
-    getStackCurrent(s)->reserved = reserved;
+    GC_stack this = getStackCurrent(s);
+    assert(newReserved >= this->reserved);
+
+    size_t promoStackUsed = this->promoStackTop - this->promoStackBot;
+    pointer newPromoStackBot = this->promoStackBot + (newReserved - this->reserved);
+    pointer newPromoStackTop = newPromoStackBot + promoStackUsed;
+    GC_memmove(
+      this->promoStackBot,
+      newPromoStackBot,
+      promoStackUsed);
+
+    this->reserved = newReserved;
+    this->promoStackBot = newPromoStackBot;
+    this->promoStackTop = newPromoStackTop;
+    this->promoStackReserved = newPromoStackReserved;
+
     HM_updateChunkFrontierInList(
       HM_HH_getChunkList(hh),
       chunk,
@@ -73,7 +92,8 @@ void growStackCurrent(GC_state s) {
   assert(GC_STACK_METADATA_SIZE == GC_HEADER_SIZE);
   *((GC_header*)frontier) = GC_STACK_HEADER;
   stack = (GC_stack)(frontier + GC_HEADER_SIZE);
-  stack->reserved = reserved;
+  stack->reserved = newReserved;
+  stack->promoStackReserved = newPromoStackReserved;
   stack->used = 0;
   HM_updateChunkFrontierInList(
     HM_HH_getChunkList(newhh),

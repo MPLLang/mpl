@@ -1,4 +1,5 @@
-(* Copyright (C) 2009,2016-2017,2019-2022 Matthew Fluet.
+(* Copyright (C) 2024 Sam Westrick.
+ * Copyright (C) 2009,2016-2017,2019-2022 Matthew Fluet.
  * Copyright (C) 2002-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  *
@@ -20,6 +21,8 @@ structure GCField =
        | Frontier
        | Limit
        | LimitPlusSlop
+       | PromoStackTop
+       | PromoStackBot
        | SignalIsPending
        | SpareHeartbeatTokens
        | StackBottom
@@ -40,6 +43,8 @@ structure GCField =
              | Frontier => make "frontier"
              | Limit => make "limit"
              | LimitPlusSlop => make "limitPlusSlop"
+             | PromoStackTop => make "promoStackTop"
+             | PromoStackBot => make "promoStackBot"
              | SignalIsPending => make "signalsInfo.signalIsPending"
              | SpareHeartbeatTokens => make "spareHeartbeatTokens"
              | StackBottom => make "stackBottom"
@@ -54,6 +59,8 @@ structure GCField =
           | Frontier => "Frontier"
           | Limit => "Limit"
           | LimitPlusSlop => "LimitPlusSlop"
+          | PromoStackTop => "PromoStackTop"
+          | PromoStackBot => "PromoStackBot"
           | SignalIsPending => "SignalIsPending"
           | SpareHeartbeatTokens => "SpareHeartbeatTokens"
           | StackBottom => "StackBottom"
