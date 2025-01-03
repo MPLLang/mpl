@@ -23,7 +23,12 @@ local
   ../shh/CumulativePerProcTimer.sml
   ../shh/FORK_JOIN.sig
   ../shh/SimpleRandom.sml
-  ../shh/queue/DequeABP.sml
+  ann
+    "allowFFI true"
+    "allowPrim true"
+  in
+    ../shh/queue/DequeABP.sml
+  end
   (*Stack.sml*)
   ../shh/Result.sml
   ann

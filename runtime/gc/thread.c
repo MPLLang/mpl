@@ -304,6 +304,7 @@ void GC_HH_joinIntoParent(
     GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
     if (terminateCheckCounter == 0) sched_yield();
   }
+  __atomic_thread_fence(__ATOMIC_SEQ_CST);
 
 #if ASSERT
   assert(threadop != BOGUS_OBJPTR);

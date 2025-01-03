@@ -23,7 +23,8 @@ void switchToThread(GC_state s, objptr op) {
     assert(otherProcNum != s->procNumber);
     otherProcNum = atomicLoadS32(&(thread->currentProcNum));
   }
-  thread->currentProcNum = s->procNumber;
+  __atomic_thread_fence(__ATOMIC_SEQ_CST);
+  atomicStoreS32(&(thread->currentProcNum), s->procNumber);
 
   if (DEBUG_THREADS) {
     // GC_thread thread;
@@ -78,6 +79,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
 
   s->currentThread = BOGUS_OBJPTR;
   /* SAM_NOTE: This write synchronizes with the spinloop in switchToThread (above) */
+  __atomic_thread_fence(__ATOMIC_SEQ_CST);
   atomicStoreS32(&(oldCurrentThread->currentProcNum), -1);
 
   // printf("[%d] switchToThread\n  from %p\n    to %p\n",
