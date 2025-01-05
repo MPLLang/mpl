@@ -8,7 +8,6 @@ sig
   val capacity : int
 
   val new : unit -> 'a t
-  val pollHasWork : 'a t -> bool
   val clear : 'a t -> unit
 
   (* register this deque with the specified worker id *)
@@ -24,9 +23,7 @@ sig
 
   (* returns NONE if deque is empty *)
   val popBot : 'a t -> 'a option
-
-  (* returns an item and the depth of that item *)
-  val tryPopTop : 'a t -> ('a * int) option
+  val tryPopTop : 'a t -> 'a option
 
   val size : 'a t -> int
   val numResets : 'a t -> int
@@ -89,10 +86,18 @@ struct
       end
   end
 
+
+  type gcstate = MLton.Pointer.t
+  val gcstate = _prim "GC_state": unit -> gcstate;
+  val ABP_deque_push_bot = _import "ABP_deque_push_bot" runtime private: gcstate * TagIdx.t ref * Word32.word ref * 'a option array * 'a option -> bool;
+  val ABP_deque_try_pop_bot = _import "ABP_deque_try_pop_bot" runtime private: gcstate * TagIdx.t ref * Word32.word ref * 'a option array * 'a option -> 'a option;
+  val ABP_deque_try_pop_top = _import "ABP_deque_try_pop_top" runtime private: gcstate * TagIdx.t ref * Word32.word ref * 'a option array * 'a option -> 'a option;
+  val ABP_deque_set_depth = _import "ABP_deque_set_depth" runtime private: gcstate * TagIdx.t ref * Word32.word ref * 'a option array * Word32.word -> unit;
+
+
   type 'a t = {data : 'a option array,
                top : TagIdx.t ref,
-               bot : Word32.word ref,
-               depth : int ref}
+               bot : Word32.word ref}
 
   exception Full
 
@@ -105,8 +110,7 @@ struct
   fun new () =
     {data = Array.array (capacity, NONE),
      top = ref (TagIdx.pack {tag=0w0, idx=0}),
-     bot = ref (0w0 : Word32.word),
-     depth = ref 0}
+     bot = ref (0w0 : Word32.word)}
 
   fun register ({top, bot, data, ...} : 'a t) p =
     ( MLton.HM.registerQueue (Word32.fromInt p, data)
@@ -114,158 +118,21 @@ struct
     ; MLton.HM.registerQueueBot (Word32.fromInt p, bot)
     )
 
-  fun setDepth (q as {depth, top, bot, data} : 'a t) d =
-    let
-      fun forceSetTop oldTop =
-        let
-          val newTop =
-            TagIdx.pack {idx = d, tag = 0w1 + #tag (TagIdx.unpack oldTop)}
-          val oldTop' = cas top (oldTop, newTop)
-        in
-          if oldTop = oldTop' then
-            ()
-          else
-            (* The GC must have interfered, so just do it again. GC shouldn't
-             * be able to interfere a second time... *)
-            forceSetTop oldTop'
-        end
-
-      val oldTop = !top
-      val oldBot = Word32.toInt (!bot)
-      val {idx, ...} = TagIdx.unpack oldTop
-    in
-      if idx < oldBot then
-        die (fn _ => "scheduler bug: setDepth must be on empty deque " ^
-                     "(top=" ^ Int.toString idx ^ " bot=" ^ Int.toString oldBot ^ ")")
-      else
-        ( depth := d
-        ; if d < idx then
-            (bot := Word32.fromInt d; forceSetTop oldTop)
-          else
-            (forceSetTop oldTop; bot := Word32.fromInt d)
-        )
-    end
+  fun setDepth (q as {top, bot, data}) d =
+    ABP_deque_set_depth (gcstate (), top, bot, data, Word32.fromInt d)
 
   fun clear ({data, ...} : 'a t) =
     for (0, Array.length data) (fn i => arrayUpdate (data, i, NONE))
 
-  fun pollHasWork ({top, bot, ...} : 'a t) =
-    let
-      val b = Word32.toInt (!bot)
-      val {idx, ...} = TagIdx.unpack (!top)
-    in
-      idx < b
-    end
+  fun pushBot (q as {data, top, bot}) x =
+    if ABP_deque_push_bot (gcstate (), top, bot, data, SOME x) then ()
+    else exceededCapacityError ()
 
-  fun pushBot (q as {data, top, bot, depth}) x =
-    let
-      val oldBot = Word32.toInt (!bot)
-    in
-      if oldBot >= capacity then exceededCapacityError () else
-      (* Normally, an ABP deque would do this:
-       *   1. update array
-       *   2. increment bot
-       *   3. issue a memory fence
-       * However we don't have memory fence primitives in Parallel ML yet.
-       * So, let's hack it and do a compare-and-swap. Note that the CAS is
-       * guaranteed to succeed, because multiple pushBot operations are never
-       * executed concurrently. *)
-      ( arrayUpdate (data, oldBot, SOME x)
-      ; cas32 bot (oldBot, oldBot+1)
-      ; ()
-      )
-    end
+  fun tryPopTop (q as {data, top, bot}) =
+    ABP_deque_try_pop_top (gcstate (), top, bot, data, NONE)
 
-  fun tryPopTop (q as {data, top, bot, depth}) =
-    let
-      val oldTop = !top
-      val {tag, idx} = TagIdx.unpack oldTop
-      val oldBot = Word32.toInt (!bot)
-    in
-      if oldBot <= idx then
-        NONE
-      else
-        let
-          val x = MLton.HM.arraySubNoBarrier (data, idx)
-          val newTop = TagIdx.pack {tag=tag, idx=idx+1}
-        in
-          if oldTop = cas top (oldTop, newTop) then
-            SOME (Option.valOf x, idx)
-            handle Option =>
-              ( print ("[" ^ Int.toString (myWorkerId()) ^ "] Queue.tryPopTop error at idx " ^ Int.toString idx ^ "\n")
-              ; raise Option
-              )
-          else
-            NONE
-        end
-    end
-
-  fun popBot (q as {data, top, bot, depth}) =
-    let
-      val oldBot = Word32.toInt (!bot)
-      val d = !depth
-    in
-      if oldBot <= d then
-        NONE
-      else
-        let
-          val newBot = oldBot-1
-          (* once again, we need a fence here, but the best we can do is a
-           * compare-and-swap. *)
-          (* val _ = bot := newBot *)
-          val _ = cas32 bot (oldBot, newBot)
-          val x = MLton.HM.arraySubNoBarrier (data, newBot)
-          val oldTop = !top
-          val {tag, idx} = TagIdx.unpack oldTop
-        in
-          if newBot > idx then
-            (arrayUpdate (data, newBot, NONE); x)
-          else if newBot < idx then
-            (* We are racing with a concurrent steal to take this single
-             * element x, but we already lost the race. So we only need to set
-             * the bottom to match the idx, i.e. set the deque to a proper
-             * empty state. *)
-            (* TODO: can we relax the cas to a normal write?
-             * Note that this cas is guaranteed to succeed... *)
-            (cas32 bot (newBot, idx); NONE)
-          else
-            (* We are racing with a concurrent steal to take this single
-             * element x, but we haven't lost the race yet. *)
-            let
-              val newTop = TagIdx.pack {tag=tag+0w1, idx=idx}
-              val oldTop' = cas top (oldTop, newTop)
-            in
-              if oldTop' = oldTop then
-                (* success; we get to keep x *)
-                (arrayUpdate (data, newBot, NONE); x)
-              else
-                (* two possibilities: either the steal succeeded (in which case
-                 * the idx will have moved) or the GC will have interfered (in
-                 * which case the tag will have advanced). *)
-                let
-                  val {idx=idx', ...} = TagIdx.unpack oldTop'
-                in
-                  if idx' <> idx then
-                    (* The steal succeeded, so we don't get to keep this
-                     * element. It's possible that the GC interfered also,
-                     * but that doesn't change the fact that we don't get to
-                     * keep this element! *)
-                    (* TODO: can we relax the cas to a normal write?
-                     * Note that this cas is guaranteed to succeed... *)
-                    (cas32 bot (newBot, idx'); NONE)
-                  else
-                    (* the GC must have interfered, so try again. It _should_ be
-                     * the case that the GC can't interfere on the second try,
-                     * because we haven't done any significant allocation
-                     * in-between tries. *)
-                    (* SAM_NOTE: with new local scope handling in the GC, this
-                     * case should be impossible. *)
-                    die (fn _ => "scheduler bug: unexpected GC interference")
-                    (* popBot q *)
-                end
-            end
-        end
-    end
+  fun popBot (q as {data, top, bot}) =
+    ABP_deque_try_pop_bot (gcstate (), top, bot, data, NONE)
 
   fun size ({top, bot, ...} : 'a t) =
     let

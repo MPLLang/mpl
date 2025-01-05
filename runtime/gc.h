@@ -92,6 +92,7 @@ typedef GC_state GCState_t;
 #include "gc/entanglement-suspects.h"
 #include "gc/local-scope.h"
 #include "gc/local-heap.h"
+#include "gc/abp-deque.h"
 #include "gc/assign.h"
 #include "gc/concurrent-list.h"
 #include "gc/remembered-set.h"

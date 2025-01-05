@@ -410,10 +410,7 @@ struct
     let
       val {queue, ...} = vectorSub (workerLocalData, p)
     in
-      if not (Queue.pollHasWork queue) then
-        NONE
-      else
-        Queue.tryPopTop queue
+      Queue.tryPopTop queue
     end
 
   fun communicate () = ()
@@ -434,6 +431,7 @@ struct
       Queue.pushBot queue x
     end
 
+(*
   fun clear () =
     let
       val myId = myWorkerId ()
@@ -441,6 +439,7 @@ struct
     in
       Queue.clear queue
     end
+*)
 
   fun pop () =
     let
@@ -1143,7 +1142,7 @@ struct
             in
               case trySteal friend of
                 NONE => loop (tries+1)
-              | SOME (task, depth) => (task, depth)
+              | SOME task => task
             end
 
           val result = loop 0
@@ -1192,7 +1191,7 @@ struct
 
       fun acquireWork () : unit =
         let
-          val (task, depth) = stealLoop ()
+          val task = stealLoop ()
           val _ = incrementNumSteals ()
         in
           case task of
