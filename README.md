@@ -6,6 +6,7 @@ parallelism.
 Features:
   * Support for the full Standard ML programming language, extended with
     task-parallel and data-parallel primitives.
+  * Native performance on both x86 and Arm architectures.
   * Whole-program compilation based on [MLton](http://www.mlton.org),
     with aggressive optimizations to achieve performance competitive
     with languages such as C/C++.
@@ -73,6 +74,8 @@ Ram Raghunathan, Stefan K. Muller, Umut A. Acar, and Guy Blelloch.
 ICFP 2016.
 
 ## Try It Out
+
+Instructions for installing MPL natively (on Linux or Mac) are further below.
 
 If you want to quickly try out using MPL, you can download the Docker image and
 run one of the [examples](examples/).
@@ -277,8 +280,8 @@ unsupported, including (but not limited to):
 
 ### Requirements
 
-MPL has primarily been tested on x86-64 Linux. Preliminary support for
-ARM-based Macs has been implemented but not yet thoroughly tested.
+MPL can be installed natively on Linux (x86-64) or Mac (x86-64 or Arm),
+including Apple Silicon chips (M1, M2, M3, etc.)
 
 The following software is required.
  * [GCC](http://gcc.gnu.org)
@@ -295,10 +298,17 @@ The following software is required.
 
 The [`mpl-switch`](https://github.com/mpllang/mpl-switch) utility makes it
 easy to install multiple versions of MPL on the same system and switch
-between them. After setting up `mpl-switch`, you can install MPL as follows:
-```
-$ mpl-switch install v0.5
-$ mpl-switch select v0.5
+between them:
+```bash
+$ git clone https://github.com/mpllang/mpl-switch
+# ... add ./mpl-switch/ to your PATH ...
+
+$ mpl-switch init
+$ mpl-switch install v0.5.2
+$ mpl-switch select v0.5.2
+
+# MPL is now installed at ~/.mpl/bin/mpl
+# final step: add ~/.mpl/bin/ to your PATH
 ```
 
 You can use any commit hash or tag name from the MPL repo to pick a
@@ -336,9 +346,7 @@ You can manually build `mpl` by cloning this repo and then performing the follow
 with [Homebrew](https://brew.sh/) as follows. You'll also need all the other
 dependencies as well, listed above (e.g., `mlton`).
 ```
-$ brew install mlton
-$ brew install make
-$ brew install gmp
+$ brew install mlton make gmp
 ```
 
 **Build the executable**. Make sure you are using GNU make, which should be
