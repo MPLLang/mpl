@@ -15,6 +15,6 @@ COPY . /root/mpl
 WORKDIR /root/mpl
 
 # Build from source, install, and make examples
-RUN make && make install && cd examples && make
+RUN make clean && make && make install && cd examples && make
 
 ENV PATH=/root/mpl/build/bin:$PATH
