@@ -6,7 +6,7 @@ NAME="mlton-run-docker"
 docker image rm $NAME
 
 # build container, and assign it tag $NAME
-docker build -t $NAME .
+docker build -t $NAME -f Dockerfile.$(uname -m) .
 
 # run container with the tag $NAME.
 docker run --rm -it $NAME
