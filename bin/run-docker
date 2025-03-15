@@ -1,12 +1,13 @@
 #!/bin/bash
 
-NAME="mlton-run-docker"
+NAME="mpl-run-docker"
 
 # Remove any containers which already have $NAME.
 docker image rm $NAME
 
 # build container, and assign it tag $NAME
-docker build -t $NAME .
+PLATFORM=`uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/`
+docker build -t $NAME -f Dockerfile.$PLATFORM .
 
 # run container with the tag $NAME.
 docker run --rm -it $NAME

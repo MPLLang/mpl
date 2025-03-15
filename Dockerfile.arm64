@@ -1,8 +1,10 @@
-FROM ubuntu:20.04
+# Debian Sid has ARM64 mlton packages
+FROM debian:sid-20250113
 
 # Install the dependencies. We'll use the ubuntu provided mlton to bootstrap our local build.
 RUN apt-get update -qq \
- && apt-get install -qq git build-essential libgmp-dev mlton mlton-tools vim \
+ && apt-get install -qq git \
+ && apt-get install -qq build-essential libgmp-dev mlton mlton-tools vim \
  && git clone https://github.com/mlton/mlton.git /root/mlton \
  && cd /root/mlton \
  && git checkout on-20241230-release \
@@ -15,6 +17,6 @@ COPY . /root/mpl
 WORKDIR /root/mpl
 
 # Build from source, install, and make examples
-RUN make && make install && cd examples && make
+RUN make clean && make && make install && cd examples && make
 
 ENV PATH=/root/mpl/build/bin:$PATH
