@@ -385,6 +385,14 @@ fun transform p =
                   val transfer = Transfer.Goto {dst=tgtLabel, args=jumpArgs}
                   val block = Block.T {args=args, kind=destKind, label=label, statements=statements, transfer=transfer}
                   val _ = List.push (newBlocks, block)
+
+                  val _ = Control.diagnostics (fn show =>
+                    let
+                      open Layout
+                    in
+                      show (seq [str "Pushing new rewrite block ", Label.layout label]);
+                      show (Block.layout block)
+                    end)
                in
                   label
                end
@@ -433,7 +441,7 @@ fun transform p =
                                    kind = kind,
                                    label = label,
                                    statements = statements,
-                                   transfer = transfer}
+                                   transfer = newTransfer}
                end
             val _ = Vector.foreach (blocks, fn b => List.push (newBlocks, handleBlock b))
             val newBlocks = Vector.fromListRev (!newBlocks)
