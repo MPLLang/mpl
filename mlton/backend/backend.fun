@@ -55,6 +55,7 @@ structure AllocateVariables = AllocateVariables (structure Machine = Machine
                                                  structure Rssa = Rssa)
 structure Chunkify = Chunkify (Rssa)
 structure ParallelMove = ParallelMove ()
+structure SporkNesting = SporkNesting (Rssa)
 
 structure VarOperand =
    struct
@@ -206,7 +207,7 @@ fun toMachine (rssa: Rssa.Program.t) =
               let
                  val index = nextFrameOffset ()
                  val offsets =
-                                    QuickSort.sortVector
+                    QuickSort.sortVector
                     (Vector.fromList (ByteSet.toList offsets),
                      Bytes.<=)
                  val fo =
@@ -215,16 +216,44 @@ fun toMachine (rssa: Rssa.Program.t) =
               in
                  fo
               end))
-         val pcallInfos: M.PCallInfo.t list ref = ref []
-         val nextPCallInfo = Counter.generator 0
-         fun getPCallInfo {parl, parr} =
-            let
-               val index = nextPCallInfo ()
-               val pra = M.PCallInfo.new {index = index, parl = parl, parr = parr}
-               val _ = List.push (pcallInfos, pra)
-            in
-               pra
-            end
+         val sporkInfos: M.SporkInfo.t list ref = ref []
+         local
+            val next = Counter.generator 0
+            val table =
+               let
+                  fun equals ((offset1, tokenPolicies1, spwns1),
+                              (offset2, tokenPolicies2, spwns2)) =
+                     Bytes.equals (offset1, offset2)
+                     andalso
+                     Vector.equals (tokenPolicies1, tokenPolicies2, op=)
+                     andalso
+                     Vector.equals (spwns1, spwns2, Label.equals)
+                  fun hash (offset, tokenPolicies, spwns) =
+                     Hash.combine (Bytes.hash offset,
+                                   Hash.combine(Hash.vectorMap (tokenPolicies, fn p => p),
+                                                Hash.vectorMap (spwns, Label.hash)))
+               in
+                  HashTable.new {equals = equals,
+                                 hash = hash}
+               end
+         in
+            fun getSporkInfo {offset, tokenPolicies, spwns} =
+               let
+                  fun new () =
+                     let
+                        val index = next ()
+                        val spi = M.SporkInfo.new {index = index,
+                                                   offset = offset,
+                                                   tokenPolicies = tokenPolicies,
+                                                   spwns = spwns}
+                        val _ = List.push (sporkInfos, spi)
+                     in
+                        spi
+                     end
+               in
+                  HashTable.lookupOrInsert (table, (offset, tokenPolicies, spwns), new)
+               end
+         end
       in
          fun allFrameInfo chunks =
             let
@@ -270,19 +299,17 @@ fun toMachine (rssa: Rssa.Program.t) =
                      else frameInfos
             in
                (frameInfos, frameOffsets,
-                Vector.fromListRev (!pcallInfos))
+                Vector.fromListRev (!sporkInfos))
             end
          fun getFrameInfo {entry: bool,
                            kind: M.FrameInfo.Kind.t,
                            offsets: Bytes.t list,
-                           pcallInfo: {parl: Label.t, parr: Label.t} option,
+                           sporkInfo: {offset: Bytes.t, tokenPolicies: Word32.word vector, spwns: Label.t vector} option,
                            size: Bytes.t,
                            sourceSeqIndex: int option}: M.FrameInfo.t =
             let
                val frameOffsets = getFrameOffsets (ByteSet.fromList offsets)
-               val pcallInfo =
-                  Option.map (pcallInfo, fn {parl, parr} =>
-                              getPCallInfo {parl = parl, parr = parr})
+               val sporkInfo = Option.map (sporkInfo, getSporkInfo)
                fun new () =
                   let
                      val index = nextFrameInfo ()
@@ -291,7 +318,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                         {frameOffsets = frameOffsets,
                          index = index,
                          kind = kind,
-                         pcallInfo = pcallInfo,
+                         sporkInfo = sporkInfo,
                          size = size,
                          sourceSeqIndex = sourceSeqIndex}
                      val _ = List.push (frameInfos, frameInfo)
@@ -794,7 +821,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                     "backend thought control shouldn't reach here"))),
           func = Type.BuiltInCFunction.bug (),
           return = NONE}
-      val {get = labelInfo: Label.t -> {args: (Var.t * Type.t) vector},
+      val {get = labelInfo: Label.t -> {args: (Var.t * Type.t) vector,
+                                        inSpwn: bool},
            set = setLabelInfo, ...} =
          Property.getSetOnce
          (Label.plist, Property.initRaise ("labelInfo", Label.layout))
@@ -889,11 +917,22 @@ fun toMachine (rssa: Rssa.Program.t) =
             fun newVarInfos xts = Vector.foreach (xts, newVarInfo)
             (* Set the constant operands, labelInfo, and varInfo. *)
             val _ = newVarInfos args
+            val inSpwn = ref false
             val _ =
                Rssa.Function.dfs
-               (f, fn R.Block.T {args, label, statements, ...} =>
+               (f, fn R.Block.T {args, kind, label, statements, ...} =>
                 let
-                   val _ = setLabelInfo (label, {args = args})
+                   val (inSpwn, resetInSpwn) =
+                      case kind of
+                         R.Kind.SporkSpwn _ =>
+                            let
+                               val oldInSpwn = !inSpwn
+                               val _ = inSpwn := true
+                            in
+                               (true, fn () => inSpwn := oldInSpwn)
+                            end
+                       | _ => (!inSpwn, fn () => ())
+                   val _ = setLabelInfo (label, {args = args, inSpwn = inSpwn})
                    val _ = newVarInfos args
                    val _ =
                       Vector.foreach
@@ -935,8 +974,10 @@ fun toMachine (rssa: Rssa.Program.t) =
                            | _ => normal ()
                        end)
                 in
-                   fn () => ()
+                   resetInSpwn
                 end)
+            val sporkNesting as {maxSporkNestLength, spidInfo, sporkDataTy, sporkNest} =
+               SporkNesting.nesting f
             (* Allocate stack slots. *)
             local
                val varInfo =
@@ -951,16 +992,49 @@ fun toMachine (rssa: Rssa.Program.t) =
                       ty = ty}
                   end
             in
-               val {handlersInfo, labelInfo = labelRegInfo, ...} =
+               val {handlersInfo, labelInfo = labelRegInfo, sporkInfo, ...} =
                   let
                      val paramOffsets = fn args =>
                         paramOffsets (args, fn (_, ty) => ty, fn so => so)
                   in
                      AllocateVariables.allocate {function = f,
                                                  paramOffsets = paramOffsets,
+                                                 sporkNesting = sporkNesting,
                                                  varInfo = varInfo}
                   end
             end
+            val sporkDataOffset = #sporkDataOffset sporkInfo
+            fun sporkDataStackOffset index =
+               let
+                  val sporkDataTy = valOf sporkDataTy
+                  val offset = Bytes.+ (sporkDataOffset,
+                                        Bytes.* (Type.bytes sporkDataTy,
+                                                 IntInf.fromInt index))
+               in
+                  StackOffset.T {offset = offset,
+                                 ty = sporkDataTy,
+                                 volatile = false}
+               end
+            fun sporkDataOperand index =
+               M.Operand.StackOffset (sporkDataStackOffset index)
+            fun bogusSporkDataOperand () =
+               let
+                  val sporkDataTy = valOf sporkDataTy
+               in
+                  M.Operand.Cast (M.Operand.word (Type.bogusWord sporkDataTy), sporkDataTy)
+               end
+
+            val sporkFrameSize =
+               Vector.fold
+               (blocks, Bytes.zero, fn (R.Block.T {label, kind, ...}, sporkFrameSize) =>
+                let
+                   val {size, ...} = labelRegInfo label
+                in
+                   if Vector.length (sporkNest label) > 0
+                      orelse (case kind of R.Kind.SporkSpwn _ => true | _ => false)
+                      then Bytes.max (sporkFrameSize, size)
+                      else sporkFrameSize
+                end)
             (* Set the frameInfo for blocks in this function. *)
             val _ =
                Vector.foreach
@@ -982,43 +1056,36 @@ fun toMachine (rssa: Rssa.Program.t) =
                                     | _ => ac)
                             else
                                []
-                         val (entry, kind, offsets, pcallInfo, size) =
+                         val sporkNest = sporkNest label
+                         val sporkNestNonEmpty = not (Vector.isEmpty sporkNest)
+                         val (entry, kind, size) =
                             case kind of
                                R.Kind.Cont _ =>
-                                  (true, M.FrameInfo.Kind.CONT_FRAME, offsets, NONE, size)
+                                  (true, M.FrameInfo.Kind.CONT_FRAME,
+                                   if sporkNestNonEmpty then sporkFrameSize else size)
                              | R.Kind.CReturn {func} =>
                                   (CFunction.maySwitchThreadsTo func,
                                    M.FrameInfo.Kind.CRETURN_FRAME,
-                                   offsets, NONE, size)
+                                   if sporkNestNonEmpty then sporkFrameSize else size)
                              | R.Kind.Handler =>
-                                  (true, M.FrameInfo.Kind.HANDLER_FRAME, offsets, NONE, size)
-                             | R.Kind.Jump => Error.bug "Backend.genFunc.setFrameInfo: Jump"
-                             | R.Kind.PCallReturn {cont, parl, parr} =>
-                                  let
-                                     val (kind, pcallInfo) =
-                                        if Label.equals (label, cont)
-                                           then (M.FrameInfo.Kind.PCALL_CONT_FRAME,
-                                                 SOME {parl = parl, parr = parr})
-                                        else if Label.equals (label, parl)
-                                           then (M.FrameInfo.Kind.PCALL_PARL_FRAME, NONE)
-                                        else if Label.equals (label, parr)
-                                           then (M.FrameInfo.Kind.PCALL_PARR_FRAME, NONE)
-                                        else Error.bug "Backend.genFunc.setFrameInfo: PCallReturn"
-                                     (* The size is that of the cont *)
-                                     val size = #size (labelRegInfo cont)
-                                     (* The PCall DataPtr slot is also live. *)
-                                     val offsets =
-                                        if Label.equals (label, parl) orelse Label.equals (label, parr)
-                                           then offsets @ [Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))]
-                                           else offsets
-                                  in
-                                     (true, kind, offsets, pcallInfo, size)
-                                  end
+                                  (true, M.FrameInfo.Kind.HANDLER_FRAME, size)
+                             | R.Kind.Jump =>
+                                  Error.bug "Backend.genFunc.setFrameInfo: Jump"
+                             | R.Kind.SporkSpwn {spid} =>
+                                  (true, M.FrameInfo.Kind.SPORK_SPWN_FRAME, sporkFrameSize)
+                             | R.Kind.SpoinSync _ =>
+                                  Error.bug "Backend.genFunc.setFrameInfo: SpoinSync"
+                         val sporkInfo =
+                            if sporkNestNonEmpty
+                               then SOME {offset = sporkDataOffset,
+                                          tokenPolicies = Vector.map (sporkNest, #tokenPolicy o spidInfo),
+                                          spwns = Vector.map (sporkNest, #spwn o spidInfo)}
+                               else NONE
                          val frameInfo =
                             getFrameInfo {entry = entry,
                                           kind = kind,
                                           offsets = offsets,
-                                          pcallInfo = pcallInfo,
+                                          sporkInfo = sporkInfo,
                                           size = size,
                                           sourceSeqIndex = getFrameSourceSeqIndex label}
                       in
@@ -1047,16 +1114,16 @@ fun toMachine (rssa: Rssa.Program.t) =
                                | SOME return =>
                                     let
                                        val fio = frameInfo return
-                                       val {size, ...} = labelRegInfo return
+                                       val size = Option.map (fio, M.FrameInfo.size)
                                     in
-                                        SOME {return = return,
-                                              size = Option.map (fio, fn _ => size)}
+                                       SOME {return = return,
+                                             size = size}
                                     end
                         in
-                        simple (M.Transfer.CCall
-                                {args = translateOperands args,
-                                 func = func,
-                                 return = return})
+                           simple (M.Transfer.CCall
+                                   {args = translateOperands args,
+                                    func = func,
+                                    return = return})
                         end
                    | R.Transfer.Call {func, args, return} =>
                         let
@@ -1067,14 +1134,16 @@ fun toMachine (rssa: Rssa.Program.t) =
                                | Tail => (Vector.new0 (), Bytes.zero, NONE)
                                | NonTail {cont, handler} =>
                                     let
-                                       val {liveNoFormals, size, ...} =
+                                       val {liveNoFormals, ...} =
                                           labelRegInfo cont
+                                       val frameInfo = valOf (frameInfo cont)
                                        datatype z = datatype R.Handler.t
                                        val handler =
                                           case handler of
                                              Caller => NONE
                                            | Dead => NONE
                                            | Handle h => SOME h
+                                       val size = M.FrameInfo.size frameInfo
                                     in
                                        (liveNoFormals,
                                         size,
@@ -1112,30 +1181,36 @@ fun toMachine (rssa: Rssa.Program.t) =
                            (parallelMove {dsts = dsts', srcs = srcs'},
                             M.Transfer.Goto dst)
                         end
-                   | R.Transfer.PCall {func, args, cont, parl, parr} =>
+                   | R.Transfer.Spork {spid, cont, spwn} =>
+                        simple (M.Transfer.Spork
+                                {spid = spid,
+                                 data = sporkDataStackOffset (#index (spidInfo spid)),
+                                 cont = cont,
+                                 spwn = spwn})
+                   | R.Transfer.Spoin {spid, seq, sync} =>
                         let
-                           val {liveNoFormals = contLive, size = frameSize, ...} =
-                              labelRegInfo cont
-                           val dsts =
-                              paramStackOffsets
-                              (args, R.Operand.ty, frameSize)
-                           val setupArgs =
-                              parallelMove
-                              {dsts = Vector.map (dsts, M.Operand.StackOffset),
-                               srcs = translateOperands args}
-                           val live =
-                              Vector.concat [operandsLive contLive,
-                                             Vector.map (dsts, Live.StackOffset)]
-                           val transfer =
-                              M.Transfer.PCall
-                              {label = funcToLabel func,
-                               live = live,
-                               cont = cont,
-                               parl = parl,
-                               parr = parr,
-                               size = frameSize}
+                           val sporkDataOperand = sporkDataOperand (#index (spidInfo spid))
+                           val sporkDataTy = M.Operand.ty sporkDataOperand
+                           val sporkDataBits = Type.width sporkDataTy
+                           val sporkDataSize = WordSize.fromBits sporkDataBits
+                           val sporkDataWordTy = Type.word sporkDataSize
+                           val tmpOperand =
+                              M.Operand.Temporary (Temporary.new (sporkDataWordTy, NONE))
                         in
-                           (setupArgs, transfer)
+                           (Vector.new1
+                            (M.Statement.PrimApp
+                             {args = (Vector.new2
+                                      (M.Operand.Cast (sporkDataOperand, sporkDataWordTy),
+                                       M.Operand.word (WordX.fromIntInf (3, sporkDataSize)))),
+                              dst = SOME tmpOperand,
+                              prim = Prim.Word_andb sporkDataSize}),
+                            M.Transfer.Switch
+                            (M.Switch.T
+                             {cases = Vector.new1 (WordX.zero sporkDataSize, sync),
+                              default = SOME seq,
+                              expect = NONE,
+                              size = sporkDataSize,
+                              test = tmpOperand}))
                         end
                    | R.Transfer.Raise srcs =>
                         let
@@ -1196,7 +1271,7 @@ fun toMachine (rssa: Rssa.Program.t) =
             fun genBlock (R.Block.T {args, kind, label, statements, transfer,
                                      ...}) : unit =
                let
-                  val {live, liveNoFormals, size, ...} = labelRegInfo label
+                  val {live, liveNoFormals, ...} = labelRegInfo label
                   val statements =
                      Vector.concatV
                      (Vector.map (statements, fn s =>
@@ -1204,7 +1279,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                   val (preTransfer, transfer) = genTransfer transfer
                   fun doContHandler mkMachineKind =
                      let
-                        val srcs = paramStackOffsets (args, #2, size)
+                        val frameInfo = valOf (frameInfo label)
+                        val srcs = paramStackOffsets (args, #2, M.FrameInfo.size frameInfo)
                         val (dsts', srcs') =
                            Vector.unzip
                            (Vector.keepAllMap2
@@ -1214,35 +1290,22 @@ fun toMachine (rssa: Rssa.Program.t) =
                               | SOME dst => SOME (dst, M.Operand.StackOffset src)))
                      in
                         (mkMachineKind {args = Vector.map (srcs, Live.StackOffset),
-                                        frameInfo = valOf (frameInfo label)},
+                                        frameInfo = frameInfo},
                          liveNoFormals,
                          parallelMove {dsts = dsts', srcs = srcs'})
                      end
-                  fun doPCallHandler size =
+                  fun doSporkSpoin (spid, machineKind) =
                      let
-                        val (args, pcallDataArg) = Vector.splitLast args
-                        val srcs = paramStackOffsets (args, #2, size)
-                        val pcallDataOffset =
-                           Bytes.- (size, Bytes.+ (Runtime.labelSize (), Runtime.objptrSize ()))
-                        val pcallDataSrc =
-                           StackOffset.T {offset = pcallDataOffset,
-                                          ty = #2 pcallDataArg,
-                                          volatile = false}
-
-                        val (dsts', srcs') =
-                           Vector.unzip
-                           (Vector.keepAllMap2
-                            (Vector.concat [args, Vector.new1 pcallDataArg],
-                             Vector.concat [srcs, Vector.new1 pcallDataSrc],
-                             fn ((dst, _), src) =>
-                             case varOperandOpt dst of
-                                NONE => NONE
-                              | SOME dst => SOME (dst, M.Operand.StackOffset src)))
+                        val sporkDataArg = Vector.first args
+                        val sporkDataOperand = sporkDataOperand (#index (spidInfo spid))
                      in
-                        (M.Kind.PCallReturn {args = Vector.map (srcs, Live.StackOffset),
-                                             frameInfo = valOf (frameInfo label)},
-                         Vector.concat [liveNoFormals, Vector.new1 (M.Operand.StackOffset pcallDataSrc)],
-                         parallelMove {dsts = dsts', srcs = srcs'})
+                        (machineKind,
+                         liveNoFormals,
+                         Vector.new2
+                         (M.Statement.Move {dst = varOperand (#1 sporkDataArg),
+                                            src = sporkDataOperand},
+                          M.Statement.Move {dst = sporkDataOperand,
+                                            src = bogusSporkDataOperand ()}))
                      end
                   val (kind, live, pre) =
                      case kind of
@@ -1265,12 +1328,19 @@ fun toMachine (rssa: Rssa.Program.t) =
                            end
                       | R.Kind.Handler => doContHandler M.Kind.Handler
                       | R.Kind.Jump => (M.Kind.Jump, live, Vector.new0 ())
-                      | R.Kind.PCallReturn {cont, parl, parr} =>
-                           if Label.equals (label, cont)
-                              then doContHandler M.Kind.PCallReturn
-                              else doPCallHandler (#size (labelRegInfo cont))
+                      | R.Kind.SporkSpwn {spid} =>
+                           doSporkSpoin
+                           (spid,
+                            M.Kind.SporkSpwn {spid = spid,
+                                              frameInfo = valOf (frameInfo label)})
+                      | R.Kind.SpoinSync {spid} =>
+                           doSporkSpoin (spid, M.Kind.Jump)
                   val statements =
                      Vector.concat [pre, statements, preTransfer]
+                  val (returnLives, raiseLives) =
+                     if #inSpwn (labelInfo label)
+                        then (NONE, NONE)
+                        else (returnLives, raiseLives)
                in
                   Chunk.newBlock (labelChunk label,
                                   {kind = kind,
@@ -1289,17 +1359,23 @@ fun toMachine (rssa: Rssa.Program.t) =
                      getFrameInfo {entry = true,
                                    kind = M.FrameInfo.Kind.FUNC_FRAME,
                                    offsets = [],
-                                   pcallInfo = NONE,
+                                   sporkInfo = NONE,
                                    size = Bytes.zero,
                                    sourceSeqIndex = NONE}
                   val srcs =
                      paramStackOffsets (args, #2, Bytes.zero)
                   val srcs =
                      Vector.map (srcs, M.Operand.StackOffset)
-                  val statements =
+                  val moveArgs =
                      parallelMove
                      {dsts = Vector.map (args, varOperand o #1),
                       srcs = srcs}
+                  val initSporkDataSlots =
+                     Vector.tabulate
+                     (maxSporkNestLength, fn index =>
+                      M.Statement.Move
+                      {dst = sporkDataOperand index,
+                       src = bogusSporkDataOperand ()})
                in
                   Chunk.newBlock
                   (funcChunk name,
@@ -1308,7 +1384,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                     live = operandsLive srcs,
                     raises = raiseLives,
                     returns = returnLives,
-                    statements = statements,
+                    statements = Vector.concat [moveArgs, initSporkDataSlots],
                     transfer = M.Transfer.Goto start})
                end
             val _ =
@@ -1377,7 +1453,7 @@ fun toMachine (rssa: Rssa.Program.t) =
        *)
       val _ = List.foreach (chunks, fn M.Chunk.T {blocks, ...} =>
                             Vector.foreach (blocks, Label.clear o M.Block.label))
-      val (frameInfos, frameOffsets, pcallInfos) = allFrameInfo chunks
+      val (frameInfos, frameOffsets, sporkInfos) = allFrameInfo chunks
       val maxFrameSize: Bytes.t =
          List.fold
          (chunks, Bytes.zero, fn (M.Chunk.T {blocks, ...}, max) =>
@@ -1423,7 +1499,7 @@ fun toMachine (rssa: Rssa.Program.t) =
           main = main,
           maxFrameSize = maxFrameSize,
           objectTypes = objectTypes,
-          pcallInfos = pcallInfos,
+          sporkInfos = sporkInfos,
           sourceMaps = sourceMaps,
           staticHeaps = finishStaticHeaps ()}
    in

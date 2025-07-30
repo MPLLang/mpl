@@ -178,7 +178,8 @@ datatype exp =
            result: VarExp.t}
 and primExp =
     App of {func: VarExp.t,
-            arg: VarExp.t}
+            arg: VarExp.t,
+            inline: InlineAttr.t}
   | Case of {test: VarExp.t,
              cases: (Pat.t, exp) Cases.t,
              default: exp option}
@@ -217,7 +218,7 @@ and dec =
 and lambda = Lam of {arg: Var.t,
                      argType: Type.t,
                      body: exp,
-                     mayInline: bool,
+                     inline: InlineAttr.t,
                      plist: PropertyList.t}
 
 local
@@ -267,7 +268,13 @@ in
                      str "end"]
    and layoutPrimExp e =
       case e of
-         App {arg, func} => seq [VarExp.layout func, str " ", VarExp.layout arg]
+         App {arg, func, inline} =>
+            seq [str "app ",
+                 case inline of
+                    InlineAttr.Always => str "__inline_always__ "
+                  | InlineAttr.Auto => empty
+                  | InlineAttr.Never => str "__inline_never__ ",
+                 VarExp.layout func, str " ", VarExp.layout arg]
        | Case {test, cases, default} =>
             let
                fun doit (v, layoutP) =
@@ -328,9 +335,12 @@ in
                  VarExp.layout x])
             xs
        | Var x => VarExp.layout x
-   and layoutLambda (Lam {arg, argType, body, mayInline, ...}) =
+   and layoutLambda (Lam {arg, argType, body, inline, ...}) =
       mayAlign [maybeConstrain (seq [str "fn ",
-                                     str (if not mayInline then "noinline " else "")],
+                                     case inline of
+                                        InlineAttr.Always => str "__inline_always__ "
+                                      | InlineAttr.Auto => empty
+                                      | InlineAttr.Never => str "__inline_never__ "],
                                 arg, argType, str " =>"),
                 indent (layoutExp body, 2)]
 
@@ -392,7 +402,15 @@ in
         pure {decs = [], result = result})))
    and parsePrimExp () =
       mlSpaces *> any
-      [Case <$>
+      [App <$>
+       (kw "app" *>
+        (kw "__inline_always__" *> pure InlineAttr.Always <|>
+         kw "__inline_never__" *> pure InlineAttr.Never <|>
+         pure InlineAttr.Auto) >>= (fn inline =>
+        VarExp.parse >>= (fn func =>
+        VarExp.parse >>= (fn arg =>
+        pure {func = func, arg = arg, inline = inline})))),
+       Case <$>
        let
           fun parseCase (parseP, mk) =
              VarExp.parse >>= (fn test =>
@@ -449,23 +467,21 @@ in
         VarExp.parse >>= (fn tuple =>
         pure {offset = offset, tuple = tuple}))),
        Tuple <$> parseArgs,
-       App <$>
-       (VarExp.parse >>= (fn func =>
-        VarExp.parse >>= (fn arg =>
-        pure {func = func, arg = arg}))),
        Var <$> VarExp.parse]
    and parseLambda () =
       Lam <$>
       (kw "fn" *>
-       optional (kw "noinline") >>= (fn noInline =>
+       (kw "__inline_always__" *> pure InlineAttr.Always <|>
+        kw "__inline_never__" *> pure InlineAttr.Never <|>
+        pure InlineAttr.Auto) >>= (fn inline =>
        Var.parse >>= (fn arg =>
        sym ":" *>
        Type.parse >>= (fn argType =>
        sym "=>" *>
        delay parseExp >>= (fn body =>
-       pure {mayInline = Option.isNone noInline,
-             arg = arg, argType = argType,
+       pure {arg = arg, argType = argType,
              body = body,
+             inline = inline,
              plist = PropertyList.new ()})))))
 end
 
@@ -609,8 +625,8 @@ structure Exp =
                     | ConApp {arg, ...} => (case arg of
                                                NONE => ()
                                              | SOME x => handleVarExp x)
-                    | App {func, arg} => (handleVarExp func
-                                          ; handleVarExp arg)
+                    | App {func, arg, ...} => (handleVarExp func
+                                               ; handleVarExp arg)
                     | Raise {exn, ...} => handleVarExp exn
                     | Handle {try, catch, handler, ...} =>
                          (loopExp try
@@ -727,10 +743,10 @@ structure Exp =
                 | PolyVal {exp, ty, tyvars, var} =>
                      SOME (PolyVal {exp = dropProfileExp exp, ty = ty,
                                     tyvars = tyvars, var = var})
-            and dropProfileLambda (Lam {arg, argType, body, mayInline, plist}) =
+            and dropProfileLambda (Lam {arg, argType, body, inline, plist}) =
                Lam {arg = arg, argType = argType,
                     body = dropProfileExp body,
-                    mayInline = mayInline,
+                    inline = inline,
                     plist = plist}
          in
             dropProfileExp e
@@ -789,18 +805,18 @@ structure Lambda =
       in
          val arg = make #arg
          val body = make #body
-         val mayInline = make #mayInline
+         val inline = make #inline
       end
 
-      fun make {arg, argType, body, mayInline} =
+      fun make {arg, argType, body, inline} =
          Lam {arg = arg,
               argType = argType,
               body = body,
-              mayInline = mayInline,
+              inline = inline,
               plist = PropertyList.new ()}
 
-      fun dest (Lam {arg, argType, body, mayInline, ...}) =
-         {arg = arg, argType = argType, body = body, mayInline = mayInline}
+      fun dest (Lam {arg, argType, body, inline, ...}) =
+         {arg = arg, argType = argType, body = body, inline = inline}
 
       fun plist (Lam {plist, ...}) = plist
 
@@ -919,9 +935,9 @@ structure DirectExp =
          converts (Vector.new2 (e1, e2),
                    fn xs => make (Vector.first xs, Vector.sub (xs, 1)))
 
-      fun app {func, arg, ty} =
+      fun app {func, arg, inline, ty} =
          convert2 (func, arg, fn ((func, _), (arg, _)) =>
-                   (App {func = func, arg = arg}, ty))
+                   (App {func = func, arg = arg, inline = inline}, ty))
 
       fun casee {test, cases, default, ty} =
          convert (test, fn (test, _) =>
@@ -1028,11 +1044,11 @@ structure DirectExp =
                Exp.prefix (send (body, k),
                            Dec.MonoVal {var = var, ty = ty, exp = exp}))
 
-      fun lambda {arg, argType, body, bodyType, mayInline} =
+      fun lambda {arg, argType, body, bodyType, inline} =
          simple (Lambda (Lambda.make {arg = arg,
                                       argType = argType,
                                       body = toExp body,
-                                      mayInline = mayInline}),
+                                      inline = inline}),
                  Type.arrow (argType, bodyType))
 
       fun fromLambda (l, ty) =

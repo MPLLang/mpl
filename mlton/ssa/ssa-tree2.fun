@@ -321,6 +321,7 @@ structure Type =
                        typeOps = {deArray = deSequence1,
                                   deArrow = fn _ => raise BadPrimApp,
                                   deRef = deRef1,
+                                  deTuple = fn _ => raise BadPrimApp,
                                   deVector = fn _ => raise BadPrimApp,
                                   deWeak = deWeak}})
                in
@@ -331,6 +332,7 @@ structure Type =
                     targs = targs,
                     typeOps = {array = array1,
                                arrow = fn _ => raise BadPrimApp,
+                               tuple = fn xs => tuple (Prod.make (Vector.map (xs, fn a => {elt = a, isMutable = false}))),
                                bool = bool,
                                cpointer = cpointer,
                                equals = equals,
@@ -562,7 +564,7 @@ structure Exp =
              | Var x => v x
          end
 
-      fun replaceVar (e, fx) =
+      fun replaceVarSpid (e, fx, fs) =
          let
             fun fxs xs = Vector.map (xs, fx)
          in
@@ -570,7 +572,9 @@ structure Exp =
                Const _ => e
              | Inject {sum, variant} => Inject {sum = sum, variant = fx variant}
              | Object {con, args} => Object {con = con, args = fxs args}
-             | PrimApp {prim, args} => PrimApp {args = fxs args, prim = prim}
+             | PrimApp {prim, args} =>
+                  PrimApp {args = fxs args,
+                           prim = Prim.replaceSpid (prim, fs)}
              | Select {base, offset, readBarrier} =>
                   Select {base = Base.map (base, fx),
                           offset = offset,
@@ -579,6 +583,8 @@ structure Exp =
                   Sequence {args = Vector.map (args, fxs)}
              | Var x => Var (fx x)
          end
+
+      fun replaceVar (e, fx) = replaceVarSpid (e, fx, fn s => s)
 
       fun layout' (e, layoutVar) =
          let
@@ -845,10 +851,10 @@ structure Statement =
           | Profile _ => ()
           | Update {base, value, ...} => (Base.foreach (base, f); f value)
 
-      fun replaceDefsUses (s: t, {def: Var.t -> Var.t, use: Var.t -> Var.t}): t =
+      fun replaceDefsUsesSpids (s: t, {def: Var.t -> Var.t, use: Var.t -> Var.t, spid: Spid.t -> Spid.t}): t =
          case s of
             Bind {exp, ty, var} =>
-               Bind {exp = Exp.replaceVar (exp, use),
+               Bind {exp = Exp.replaceVarSpid (exp, use, spid),
                      ty = ty,
                      var = Option.map (var, def)}
           | Profile _ => s
@@ -857,6 +863,9 @@ structure Statement =
                        offset = offset,
                        value = use value,
                        writeBarrier = writeBarrier}
+
+      fun replaceDefsUses (s, {def, use}) =
+         replaceDefsUsesSpids (s, {def = def, use = use, spid = fn s => s})
 
       fun replaceUses (s, f) = replaceDefsUses (s, {def = fn x => x, use = f})
    end
@@ -869,24 +878,22 @@ structure Transfer =
          Bug (* MLton thought control couldn't reach here. *)
        | Call of {args: Var.t vector,
                   func: Func.t,
+                  inline: InlineAttr.t,
                   return: Return.t}
        | Case of {test: Var.t,
                   cases: (Con.t, Label.t) Cases.t,
                   default: Label.t option} (* Must be nullary. *)
        | Goto of {dst: Label.t,
                   args: Var.t vector}
-       | PCall of {args: Var.t vector,
-                   func: Func.t,
-                   cont: Label.t,
-                   parl: Label.t,
-                   parr: Label.t}
+       | Spork of {spid: Spid.t, cont: Label.t, spwn: Label.t}
+       | Spoin of {spid: Spid.t, seq: Label.t, sync: Label.t}
        | Raise of Var.t vector
        | Return of Var.t vector
        | Runtime of {prim: Type.t Prim.t,
                      args: Var.t vector,
                      return: Label.t}
 
-      fun foreachFuncLabelVar (t, func: Func.t -> unit, label: Label.t -> unit, var) =
+      fun foreachFuncLabelVarSpid (t, func: Func.t -> unit, label: Label.t -> unit, var, spid) =
          let
             fun vars xs = Vector.foreach (xs, var)
          in
@@ -901,10 +908,14 @@ structure Transfer =
                    ; Cases.foreach (cases, label)
                    ; Option.app (default, label))
              | Goto {dst, args, ...} => (vars args; label dst)
-             | PCall {func = f, args, cont, parl, parr} =>
-                  (func f
-                   ; label cont; label parl; label parr
-                   ; vars args)
+             | Spork {spid = s, cont, spwn} =>
+                  (spid s
+                   ; label cont
+                   ; label spwn)
+             | Spoin {spid = s, seq, sync} =>
+                  (spid s
+                   ; label seq
+                   ; label sync)
              | Raise xs => vars xs
              | Return xs => vars xs
              | Runtime {args, return, ...} =>
@@ -913,25 +924,26 @@ structure Transfer =
          end
 
       fun foreachFunc (t, func) =
-         foreachFuncLabelVar (t, func, fn _ => (), fn _ => ())
+         foreachFuncLabelVarSpid (t, func, fn _ => (), fn _ => (), fn _ => ())
       (* quell unused warning *)
       val _ = foreachFunc
 
       fun foreachLabelVar (t, label, var) =
-         foreachFuncLabelVar (t, fn _ => (), label, var)
+         foreachFuncLabelVarSpid (t, fn _ => (), label, var, fn _ => ())
 
       fun foreachLabel (t, j) = foreachLabelVar (t, j, fn _ => ())
       fun foreachVar (t, v) = foreachLabelVar (t, fn _ => (), v)
 
-      fun replaceLabelVar (t, fl, fx) =
+      fun replaceLabelVarSpid (t, fl, fx, fs) =
          let
             fun fxs xs = Vector.map (xs, fx)
          in
             case t of
                Bug => Bug
-             | Call {func, args, return} =>
+             | Call {func, args, inline, return} =>
                   Call {func = func,
                         args = fxs args,
+                        inline = inline,
                         return = Return.map (return, fl)}
              | Case {test, cases, default} =>
                   Case {test = fx test,
@@ -940,12 +952,10 @@ structure Transfer =
              | Goto {dst, args} =>
                   Goto {dst = fl dst,
                         args = fxs args}
-             | PCall {func, args, cont, parl, parr} =>
-                  PCall {func = func,
-                         args = fxs args,
-                         cont = fl cont,
-                         parl = fl parl,
-                         parr = fl parr}
+             | Spork {spid, cont, spwn} =>
+                  Spork {spid = fs spid, cont = fl cont, spwn = fl spwn}
+             | Spoin {spid, seq, sync} =>
+                  Spoin {spid = fs spid, seq = fl seq, sync = fl sync}
              | Raise xs => Raise (fxs xs)
              | Return xs => Return (fxs xs)
              | Runtime {prim, args, return} =>
@@ -953,6 +963,8 @@ structure Transfer =
                            args = fxs args,
                            return = fl return}
          end
+
+      fun replaceLabelVar (t, fl, fx) = replaceLabelVarSpid (t, fl, fx, fn s => s)
 
       fun replaceLabel (t, f) = replaceLabelVar (t, f, fn x => x)
       (* quell unused warning *)
@@ -989,31 +1001,39 @@ structure Transfer =
          in
             case t of
                Bug => str "bug"
-             | Call {func, args, return} =>
+             | Call {func, args, inline, return} =>
                   let
+                     val pre =
+                        seq [str "call ",
+                             case inline of
+                                InlineAttr.Always => str "__inline_always__ "
+                              | InlineAttr.Auto => empty
+                              | InlineAttr.Never => str "__inline_never__ "]
                      val call = seq [Func.layout func, str " ", layoutArgs args]
                   in
                      case return of
-                        Return.Dead => seq [str "call dead ", call]
+                        Return.Dead => seq [pre, str "dead ", call]
                       | Return.NonTail {cont, handler} =>
-                           seq [str "call ", Label.layout cont, str " ",
+                           seq [pre, Label.layout cont, str " ",
                                 paren call,
                                 str " handle _ => ",
                                 case handler of
                                    Handler.Caller => str "raise"
                                  | Handler.Dead => str "dead"
                                  | Handler.Handle l => Label.layout l]
-                      | Return.Tail => seq [str "call tail ", call]
+                      | Return.Tail => seq [pre, str "tail ", call]
                   end
              | Case arg => layoutCase arg
              | Goto {dst, args} =>
                   seq [str "goto ", Label.layout dst, str " ", layoutArgs args]
-             | PCall {func, args, cont, parl, parr} =>
-                  seq [str "pcall ", Func.layout func,
-                       str " ", layoutArgs args, str " ",
-                       record [("cont", Label.layout cont),
-                               ("parl", Label.layout parl),
-                               ("parr", Label.layout parr)]]
+             | Spork {spid, cont, spwn} =>
+                  seq [str "spork ", record [("spid", Spid.layout spid),
+                                             ("cont", Label.layout cont),
+                                             ("spwn", Label.layout spwn)]]
+             | Spoin {spid, seq = bseq, sync = bsync} =>
+                  seq [str "spoin ", record [("spid", Spid.layout spid),
+                                             ("seq", Label.layout bseq),
+                                             ("sync", Label.layout bsync)]]
              | Raise xs => seq [str "raise ", layoutArgs xs]
              | Return xs => seq [str "return ", layoutArgs xs]
              | Runtime {prim, args, return} =>
@@ -1043,21 +1063,27 @@ structure Transfer =
             val parseCall =
                Func.parse >>= (fn func =>
                parseArgs >>= (fn args =>
-               pure (fn return => pure {func = func, args = args, return = return})))
+               pure (fn (inline, return) => pure {func = func,
+                                                  args = args,
+                                                  inline = inline,
+                                                  return = return})))
          in
             mlSpaces *> any
             [Bug <$ kw "bug",
              Call <$>
              (kw "call" *>
+              (kw "__inline_always__" *> pure InlineAttr.Always <|>
+               kw "__inline_never__" *> pure InlineAttr.Never <|>
+               pure InlineAttr.Auto) >>= (fn inline =>
               mlSpaces *>
-              any [kw "dead" *> parseCall >>= (fn mkCall => mkCall Return.Dead),
-                   kw "tail" *> parseCall >>= (fn mkCall => mkCall Return.Tail),
+              any [kw "dead" *> parseCall >>= (fn mkCall => mkCall (inline, Return.Dead)),
+                   kw "tail" *> parseCall >>= (fn mkCall => mkCall (inline, Return.Tail)),
                    Label.parse >>= (fn cont =>
                    paren parseCall >>= (fn mkCall =>
                    kw "handle" *> kw "_" *> sym "=>" *>
-                   any [kw "raise" *> mkCall (Return.NonTail {cont = cont, handler = Handler.Caller}),
-                        kw "dead" *> mkCall (Return.NonTail {cont = cont, handler = Handler.Dead}),
-                        Label.parse >>= (fn h => mkCall (Return.NonTail {cont = cont, handler = Handler.Handle h}))]))]),
+                   any [kw "raise" *> mkCall (inline, Return.NonTail {cont = cont, handler = Handler.Caller}),
+                        kw "dead" *> mkCall (inline, Return.NonTail {cont = cont, handler = Handler.Dead}),
+                        Label.parse >>= (fn h => mkCall (inline, Return.NonTail {cont = cont, handler = Handler.Handle h}))]))])),
              Case <$>
              any ((kw "case" *> parseCase (Con.parse, Cases.Con)) ::
                   (List.map (WordSize.all, fn ws =>
@@ -1068,18 +1094,18 @@ structure Transfer =
               Label.parse >>= (fn dst =>
               parseArgs >>= (fn args =>
               pure {dst = dst, args = args}))),
-             PCall <$>
-             (kw "pcall" *>
-              Func.parse >>= (fn func =>
-              parseArgs >>= (fn args =>
-              cbrack (ffield ("cont", Label.parse) >>= (fn cont =>
-                      nfield ("parl", Label.parse) >>= (fn parl =>
-                      nfield ("parr", Label.parse) >>= (fn parr =>
-                      pure {func = func,
-                            args = args,
-                            cont = cont,
-                            parl = parl,
-                            parr = parr}))))))),
+             Spork <$>
+             (kw "spork" *>
+              cbrack (ffield ("spid", Spid.parse) >>= (fn spid =>
+                      nfield ("cont", Label.parse) >>= (fn cont =>
+                      nfield ("spwn", Label.parse) >>= (fn spwn =>
+                      pure {spid = spid, cont = cont, spwn = spwn}))))),
+             Spoin <$>
+             (kw "spoin" *>
+              cbrack (ffield ("spid", Spid.parse) >>= (fn spid =>
+                      nfield ("seq", Label.parse) >>= (fn seq =>
+                      nfield ("sync", Label.parse) >>= (fn sync =>
+                      pure {spid = spid, seq = seq, sync = sync}))))),
              Raise <$> (kw "raise" *> parseArgs),
              Return <$> (kw "return" *> parseArgs),
              Runtime <$>
@@ -1091,15 +1117,21 @@ structure Transfer =
               pure {prim = prim, args = args, return = return})))]
          end
 
+      fun clear t =
+         case t of
+            Spork {spid, ...} => Spid.clear spid
+          | _ => ()
+
       fun varsEquals (xs, xs') = Vector.equals (xs, xs', Var.equals)
 
       fun equals (e: t, e': t): bool =
          case (e, e') of
             (Bug, Bug) => true
-          | (Call {func, args, return},
-             Call {func = func', args = args', return = return'}) =>
+          | (Call {func, args, inline, return},
+             Call {func = func', args = args', inline = inline', return = return'}) =>
                Func.equals (func, func') andalso
                varsEquals (args, args') andalso
+               InlineAttr.equals (inline, inline') andalso
                Return.equals (return, return')
           | (Case {test, cases, default},
              Case {test = test', cases = cases', default = default'}) =>
@@ -1109,13 +1141,10 @@ structure Transfer =
           | (Goto {dst, args}, Goto {dst = dst', args = args'}) =>
                Label.equals (dst, dst') andalso
                varsEquals (args, args')
-          | (PCall {func, args, cont, parl, parr},
-             PCall {func = func', args = args', cont = cont', parl = parl', parr = parr'}) =>
-               Func.equals (func, func') andalso
-               varsEquals (args, args') andalso
-               Label.equals (cont, cont') andalso
-               Label.equals (parl, parl') andalso
-               Label.equals (parr, parr')
+          | (Spork {spid, cont, spwn}, Spork {spid = spid', cont = cont', spwn = spwn'}) =>
+            Spid.equals (spid, spid') andalso Label.equals (cont, cont') andalso Label.equals (spwn, spwn')
+          | (Spoin {spid, seq, sync}, Spoin {spid = spid', seq = seq', sync = sync'}) =>
+            Spid.equals (spid, spid') andalso Label.equals (seq, seq') andalso Label.equals (sync, sync')
           | (Raise xs, Raise xs') => varsEquals (xs, xs')
           | (Return xs, Return xs') => varsEquals (xs, xs')
           | (Runtime {prim, args, return},
@@ -1132,16 +1161,22 @@ structure Transfer =
          val bug = newHash ()
          val raisee = newHash ()
          val return = newHash ()
+         val spork = newHash ()
+         val spoin = newHash ()
          fun hashVars (xs: Var.t vector, w: Word.t): Word.t =
             Hash.combine (w, Hash.vectorMap (xs, Var.hash))
          fun hash2 (w1: Word.t, w2: Word.t) = Hash.combine (w1, w2)
+         fun hash3 (w1: Word.t, w2: Word.t, w3: Word.t) =
+            Hash.combine (hash2 (w1, w2), w3)
          fun hash4 (w1: Word.t, w2: Word.t, w3: Word.t, w4: Word.t) =
-            Hash.combine (Hash.combine (w1, w2), Hash.combine (w3, w4))
+            Hash.combine (hash3 (w1, w2, w3), w4)
       in
          val hash: t -> Word.t =
             fn Bug => bug
-             | Call {func, args, return} =>
-                  hashVars (args, hash2 (Func.hash func, Return.hash return))
+             | Call {func, args, inline, return} =>
+                  hashVars (args, hash3 (Func.hash func,
+                                         InlineAttr.hash inline,
+                                         Return.hash return))
              | Case {test, cases, default} =>
                   hash2 (Var.hash test,
                          Cases.fold
@@ -1154,12 +1189,10 @@ structure Transfer =
                           hash2 (Label.hash l, w)))
              | Goto {dst, args} =>
                   hashVars (args, Label.hash dst)
-             | PCall {func, args, cont, parl, parr} =>
-                  hashVars (args,
-                            hash4 (Func.hash func,
-                                   Label.hash cont,
-                                   Label.hash parl,
-                                   Label.hash parr))
+             | Spork {spid, cont, spwn} =>
+                  hash4 (Spid.hash spid, Label.hash cont, Label.hash spwn, spork)
+             | Spoin {spid, seq, sync} =>
+                  hash4 (Spid.hash spid, Label.hash seq, Label.hash sync, spoin)
              | Raise xs => hashVars (xs, raisee)
              | Return xs => hashVars (xs, return)
              | Runtime {args, return, ...} => hashVars (args, Label.hash return)
@@ -1238,10 +1271,11 @@ structure Block =
                    transfer = transfer})))))
          end
 
-      fun clear (T {label, args, statements, ...}) =
+      fun clear (T {label, args, statements, transfer, ...}) =
          (Label.clear label
           ; Vector.foreach (args, Var.clear o #1)
-          ; Vector.foreach (statements, Statement.clear))
+          ; Vector.foreach (statements, Statement.clear)
+          ; Transfer.clear transfer)
    end
 
 structure Datatype =
@@ -1290,7 +1324,7 @@ structure Function =
 
       type dest = {args: (Var.t * Type.t) vector,
                    blocks: Block.t vector,
-                   mayInline: bool,
+                   inline: InlineAttr.t,
                    name: Func.t,
                    raises: Type.t vector option,
                    returns: Type.t vector option,
@@ -1510,10 +1544,12 @@ structure Function =
                                   ()
                                end
                           | Goto {dst, ...} => edge (dst, "", Solid)
-                          | PCall {cont, parl, parr, ...} =>
-                               (edge (cont, "Cont", Dotted)
-                                ; edge (parl, "ParL", Dotted)
-                                ; edge (parr, "ParR", Dotted))
+                          | Spork {spid, cont, spwn} =>
+                               (edge (cont, "Cont", Dotted);
+                                edge (spwn, "Spwn", Dotted))
+                          | Spoin {spid, seq, sync} =>
+                               (edge (seq, "Seq", Dotted);
+                                edge (sync, "Sync", Dotted))
                           | Raise _ => ()
                           | Return _ => ()
                           | Runtime {return, ...} => edge (return, "", Dotted)
@@ -1637,7 +1673,7 @@ structure Function =
 
       fun layoutHeader (f: t): Layout.t =
          let
-            val {args, name, mayInline, raises, returns, start, ...} = dest f
+            val {args, name, inline, raises, returns, start, ...} = dest f
             open Layout
             val (sep, rty) =
                if !Control.showTypes
@@ -1655,7 +1691,10 @@ structure Function =
                   else (str " =", empty)
          in
             mayAlign [mayAlign [seq [str "fun ",
-                                     if mayInline then empty else str "noinline ",
+                                     case inline of
+                                        InlineAttr.Always => str "__inline_always__ "
+                                      | InlineAttr.Auto => empty
+                                      | InlineAttr.Never => str "__inline_never__ ",
                                      Func.layout name,
                                      str " ",
                                      layoutFormals args,
@@ -1669,7 +1708,9 @@ structure Function =
             open Parse
          in
             kw "fun" *>
-            optional (kw "noinline") >>= (fn noInline =>
+            (kw "__inline_always__" *> pure InlineAttr.Always <|>
+             kw "__inline_never__" *> pure InlineAttr.Never <|>
+             pure InlineAttr.Auto) >>= (fn inline =>
             Func.parse >>= (fn name =>
             parseFormals >>= (fn args =>
             sym ":" *>
@@ -1679,7 +1720,7 @@ structure Function =
             sym "=" *>
             Label.parse >>= (fn start =>
             paren (pure ()) *>
-            pure (Option.isNone noInline, name, args, returns, raises, start))))))
+            pure (inline, name, args, returns, raises, start))))))
          end
 
       fun layout' (f: t, layoutVar) =
@@ -1698,9 +1739,9 @@ structure Function =
             open Parse
          in
             new <$>
-            (parseHeader >>= (fn (mayInline, name, args, returns, raises, start) =>
+            (parseHeader >>= (fn (inline, name, args, returns, raises, start) =>
              many Block.parse >>= (fn blocks =>
-             pure {mayInline = mayInline,
+             pure {inline = inline,
                    name = name,
                    args = args,
                    returns = returns,
@@ -1772,19 +1813,25 @@ structure Function =
                   make (Var.new, Var.plist)
                val (bindLabel, lookupLabel, destroyLabel) =
                   make (Label.new, Label.plist)
+               val (bindSpid, lookupSpid, destroySpid) =
+                  make (Spid.new, Spid.plist)
             end
-            val {args, blocks, mayInline, name, raises, returns, start, ...} =
+            val {args, blocks, inline, name, raises, returns, start, ...} =
                dest f
             val args = Vector.map (args, fn (x, ty) => (bindVar x, ty))
+            val bindSpid = ignore o bindSpid
             val bindLabel = ignore o bindLabel
             val bindVar = ignore o bindVar
             val _ =
                Vector.foreach
-               (blocks, fn Block.T {label, args, statements, ...} =>
+               (blocks, fn Block.T {label, args, statements, transfer, ...} =>
                 (bindLabel label
                  ; Vector.foreach (args, fn (x, _) => bindVar x)
                  ; Vector.foreach (statements, fn s =>
-                                   Statement.foreachDef (s, bindVar o #1))))
+                                   Statement.foreachDef (s, bindVar o #1))
+                 ; (case transfer of
+                       Transfer.Spork {spid, ...} => bindSpid spid
+                     | _ => ())))
             val blocks =
                Vector.map
                (blocks, fn Block.T {label, args, statements, transfer} =>
@@ -1793,18 +1840,19 @@ structure Function =
                                             (lookupVar x, ty)),
                          statements = (Vector.map
                                        (statements, fn s =>
-                                        Statement.replaceDefsUses
+                                        Statement.replaceDefsUsesSpids
                                         (s, {def = lookupVar,
-                                             use = lookupVar}))),
-                         transfer = Transfer.replaceLabelVar
-                                    (transfer, lookupLabel, lookupVar)})
+                                             use = lookupVar,
+                                             spid = lookupSpid}))),
+                         transfer = Transfer.replaceLabelVarSpid
+                                    (transfer, lookupLabel, lookupVar, lookupSpid)})
             val start = lookupLabel start
             val _ = destroyVar ()
             val _ = destroyLabel ()
          in
             new {args = args,
                  blocks = blocks,
-                 mayInline = mayInline,
+                 inline = inline,
                  name = name,
                  raises = raises,
                  returns = returns,
@@ -1820,7 +1868,7 @@ structure Function =
          else
          let
             val _ = Control.diagnostic (fn () => layout f)
-            val {args, blocks, mayInline, name, raises, returns, start} = dest f
+            val {args, blocks, inline, name, raises, returns, start} = dest f
             val extraBlocks = ref []
             val {get = labelBlock, set = setLabelBlock, rem} =
                Property.getSetOnce
@@ -1887,7 +1935,7 @@ structure Function =
                        transfer)
                    val (statements, transfer) =
                       case transfer of
-                         Call {args, func, return} =>
+                         Call {args, func, inline, return} =>
                             let
                                datatype z = datatype Return.t
                             in
@@ -1908,6 +1956,7 @@ structure Function =
                                                (statements,
                                                 Call {args = args,
                                                       func = func,
+                                                      inline = inline,
                                                       return = return})
                                             end
                                        | Handler.Handle _ =>
@@ -1928,7 +1977,7 @@ structure Function =
             val f =
                new {args = args,
                     blocks = blocks,
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,
@@ -2024,20 +2073,6 @@ structure Program =
                                              if is
                                                 then []
                                              else [EdgeOption.Style Dotted])))
-                                end
-                           | PCall {func, ...} =>
-                                let
-                                   val to = funcNode func
-                                   val {nontail, ...} = get to
-                                   val r = nontail
-                                in
-                                   if !r
-                                      then ()
-                                   else (r := true
-                                         ; (setEdgeOptions
-                                            (Graph.addEdge
-                                             (graph, {from = from, to = to}),
-                                             [])))
                                 end
                            | _ => ())
                       val _ = destroy ()

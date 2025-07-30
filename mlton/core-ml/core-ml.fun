@@ -186,7 +186,7 @@ datatype dec =
 and exp = Exp of {node: expNode,
                   ty: Type.t}
 and expNode =
-   App of exp * exp
+   App of {func: exp, arg: exp, inline: InlineAttr.t}
   | Case of {ctxt: unit -> Layout.t,
              kind: string * string,
              nest: string list,
@@ -220,7 +220,7 @@ and expNode =
 and lambda = Lam of {arg: Var.t,
                      argType: Type.t,
                      body: exp,
-                     mayInline: bool}
+                     inline: InlineAttr.t}
 
 local
    open Layout
@@ -266,7 +266,14 @@ in
                                           layoutExp exp]]))]
    and layoutExp (Exp {node, ...}) =
       case node of
-         App (e1, e2) => paren (seq [layoutExp e1, str " ", layoutExp e2])
+         App {func, arg, inline} =>
+            paren (seq [case inline of
+                           InlineAttr.Always => str "__inline_always__ "
+                         | InlineAttr.Auto => empty
+                         | InlineAttr.Never => str "__inline_never__ ",
+                        layoutExp func,
+                        str " ",
+                        layoutExp arg])
        | Case {rules, test, ...} =>
             Pretty.casee {default = NONE,
                           rules = Vector.map (rules, fn {exp, pat, ...} =>
@@ -322,8 +329,12 @@ in
                                 align [seq [maybeConstrain (Var.layout var, Type.arrow (argType, bodyType)), str " = "],
                                        indent (layoutLambda lambda, 3)])),
                         3)]
-   and layoutLambda (Lam {arg, argType, body, ...}) =
+   and layoutLambda (Lam {arg, argType, body, inline}) =
       paren (align [seq [str "fn ", 
+                         case inline of
+                            InlineAttr.Always => str "__inline_always__ "
+                          | InlineAttr.Auto => empty
+                          | InlineAttr.Never => str "__inline_never__ ",
                          maybeConstrain (Var.layout arg, argType),
                          str " =>"],
                     layoutExp body])
@@ -350,7 +361,7 @@ structure Lambda =
                         argType = Type.unit,
                         body = Exp {node = Seq (Vector.new0 ()),
                                     ty = Type.unit},
-                        mayInline = true}
+                        inline = InlineAttr.Auto}
    end
 
 structure Exp =
@@ -381,9 +392,9 @@ structure Exp =
 
       fun isExpansive (e: t): bool =
          case node e of
-            App (e1, e2) =>
-               (case node e1 of
-                   Con (c, _) => Con.equals (c, Con.reff) orelse isExpansive e2
+            App {func, arg, ...} =>
+               (case node func of
+                   Con (c, _) => Con.equals (c, Con.reff) orelse isExpansive arg
                  | _ => true)
           | Case _ => true
           | Con _ => false
@@ -450,7 +461,10 @@ structure Exp =
          let
             val loop = Var.newNoname ()
             val loopTy = Type.arrow (Type.unit, Type.unit)
-            val call = make (App (var (loop, loopTy), unit), Type.unit)
+            val call = make (App {func = var (loop, loopTy),
+                                  arg = unit,
+                                  inline = InlineAttr.Auto},
+                             Type.unit)
             val lambda =
                Lambda.make
                {arg = Var.newNoname (),
@@ -459,7 +473,7 @@ structure Exp =
                             make (Seq (Vector.new2 (expr, call)),
                                   Type.unit),
                             unit),
-                mayInline = true}
+                inline = InlineAttr.Auto}
          in
             make
             (Let (Vector.new1 (Fun {decs = Vector.new1 {lambda = lambda,
@@ -473,7 +487,7 @@ structure Exp =
          let
             fun loop (e: t): unit =
                case node e of
-                  App (e1, e2) => (loop e1; loop e2)
+                  App {func, arg, ...} => (loop func; loop arg)
                 | Case {rules, test, ...} =>
                      (loop test
                       ; Vector.foreach (rules, loop o #exp))
@@ -517,7 +531,10 @@ structure Dec =
                   fun mk node = Exp.make (node, Exp.ty e)
                in
                   case Exp.node e of
-                     App (e1, e2) => mk (App (loopExp e1, loopExp e2))
+                     App {func, arg, inline} =>
+                        mk (App {func = loopExp func,
+                                 arg = loopExp arg,
+                                 inline = inline})
                    | Case {ctxt, kind, nest, matchDiags, noMatch, region, rules, test} =>
                         mk (Case {ctxt = ctxt,
                                   kind = kind,
@@ -573,8 +590,8 @@ structure Dec =
                                              nest = nest,
                                              pat = pat,
                                              regionPat = regionPat})}
-            and loopLambda (Lam {arg, argType, body, mayInline}) =
-               Lam {arg = arg, argType = argType, body = loopExp body, mayInline = mayInline}
+            and loopLambda (Lam {arg, argType, body, inline}) =
+               Lam {arg = arg, argType = argType, body = loopExp body, inline = inline}
          in
             loopDec d
          end

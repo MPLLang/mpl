@@ -1,0 +1,48 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+  $(SML_LIB)/basis/mpl.mlb
+  $(SML_LIB)/basis/unsafe.mlb
+
+  local
+    $(SML_LIB)/basis/build/sources.mlb
+  in
+    signature ARRAY_EXTRA
+    signature ARRAY_SLICE_EXTRA
+    structure ArrayExtra = Array
+    structure ArraySliceExtra = ArraySlice
+    structure Primitive
+  end
+
+  local
+    $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
+  in
+    structure SMLNJRandom = Random
+  end
+
+  ../shh/CumulativePerProcTimer.sml
+  ../shh/SimpleRandom.sml
+  ann
+    "allowFFI true"
+    "allowPrim true"
+  in
+    ../shh/queue/DequeABP.sml
+  end
+  ../spork-no-inl/Result.sml
+  
+  ann
+     "exnDecElab app"
+  in
+    ../spork-no-inl/Universal.sml
+  end
+
+  ann
+    "allowFFI true"
+    "allowPrim true"
+  in
+    Scheduler.sml
+  end
+  ../spork-no-inl/SporkJoin.sml
+in
+  structure ForkJoin
+end

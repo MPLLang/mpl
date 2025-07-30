@@ -47,6 +47,9 @@ Bool GC_HH_checkFinishedCCReadyToJoin(__attribute__((unused)) GC_state s) {
 }
 #endif
 
+const GC_tokenPolicy TOKEN_POLICY_FAIR = 0; // split evenly
+const GC_tokenPolicy TOKEN_POLICY_KEEP = 1; // keep all
+const GC_tokenPolicy TOKEN_POLICY_GIVE = 2; // give all
 
 Word32 GC_HH_getDepth(pointer threadp) {
   GC_state s = pthread_getspecific(gcstate_key);
@@ -381,6 +384,60 @@ Bool GC_tryConsumeSpareHeartbeats(GC_state s, uint32_t count) {
   return FALSE;
 }
 
+bool GC_HH_findNextPromotableFrame(
+  GC_state s, 
+  ARG_USED_FOR_ASSERT bool youngest,
+  pointer threadp)
+{
+  /* Note that the promotion policy is _always_ oldest-first, regardless of the
+   * `youngestOptimization` flag. The following assertion checks that we haven't
+   * violated this. It's valid to use `youngestOptimization=TRUE` as only in the
+   * case where we know that the youngest and oldest frames happen to coincide.
+   * The scheduler figures this out: if we have a spare heartbeat token at the
+   * moment that we execute a pcall, then we know that no other ancestor frames
+   * in the stack are promotable (otherwise the spare token would have been
+   * spent to promote them).
+   */
+  enter(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
+  pointer pframe = getPromoStackOldestPromotableFrame(s, fromStack);
+  assert(pframe == findPromotableFrame(s, fromStack));
+  assert(!youngest || pframe == findYoungestPromotableFrame(s, fromStack));
+  leave(s);
+  return NULL != pframe;
+}
+
+uintptr_t GC_HH_getFrameInfoSporkIdx(GC_frameInfo fi, pointer pframe) {
+  for (uintptr_t spork_idx = 0 ; spork_idx < fi->sporkInfo->nest ; spork_idx++) {
+    objptr p = *((objptr*) (pframe - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * spork_idx));
+    if (!isObjptr(p)) {
+      return spork_idx;
+    }
+  }
+  return -1;
+}
+
+GC_tokenPolicy GC_HH_getNextPromotionTokenPolicy(GC_state s, pointer threadp) {
+  enter(s);
+  GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
+  GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
+  pointer pframe = getPromoStackOldestPromotableFrame(s, fromStack);
+  if (pframe == NULL) {
+    DIE("GC_HH_getNextPromotionTokenPolicy failed!");
+    leave(s);
+    return -1;
+  }
+  GC_frameInfo fi = getFrameInfoFromFrameTopPointer(s, pframe);
+#if ASSERT
+  assert(fi->sporkInfo != NULL);
+#endif
+  uintptr_t spork_idx = GC_HH_getFrameInfoSporkIdx(fi, pframe);
+  GC_tokenPolicy token_policy = fi->sporkInfo->tokenPolicies[spork_idx];
+  leave(s);
+  return token_policy;
+}
+
 
 bool GC_HH_canForkThread(GC_state s, pointer threadp) {
   enter(s);
@@ -389,6 +446,7 @@ bool GC_HH_canForkThread(GC_state s, pointer threadp) {
   // pointer pframe = findPromotableFrame(s, fromStack);
   // pointer pframe = findYoungestPromotableFrame(s, fromStack);
   pointer pframe = getPromoStackOldestPromotableFrame(s, fromStack);
+  assert(pframe == findPromotableFrame(s, fromStack));
   leave(s);
   return NULL != pframe;
 }
@@ -444,11 +502,9 @@ objptr GC_HH_forkThread(
 #if ASSERT
   // walk the stack and check that the frame we got from the promo stack is
   // correct
-  pointer checkframe =
-    (youngestOptimization ?
-      findYoungestPromotableFrame(s, fromStack) :
-      findPromotableFrame(s, fromStack));
+  pointer checkframe = findPromotableFrame(s, fromStack);
   assert(checkframe == pframe);
+  assert (!youngestOptimization || (findYoungestPromotableFrame(s, fromStack) == checkframe));
 
   // if there is no frame to promote, check that the promo stack is indeed empty
   assert(pframe != NULL || fromStack->promoStackTop == fromStack->promoStackBot);
@@ -464,8 +520,13 @@ objptr GC_HH_forkThread(
    * token at the moment that we execute a pcall, then we know that no other
    * ancestor frames in the stack are promotable (otherwise the spare token
    * would have been spent to promote them).
+   *
+   * Under spork/spoin promotions, it is possible to have exactly one
+   * non-promotable frame at the bottom of the promo stack; we can check
+   * this here.
    */
-  assert(!youngestOptimization || fromStack->promoStackTop == fromStack->promoStackBot + sizeof(pointer));
+  assert(!youngestOptimization || fromStack->promoStackTop == fromStack->promoStackBot + sizeof(pointer)
+                               || fromStack->promoStackTop == fromStack->promoStackBot + 2*sizeof(pointer));
 #endif
 
   if (NULL == pframe) {
@@ -474,67 +535,46 @@ objptr GC_HH_forkThread(
     return BOGUS_OBJPTR;
   }
 
-  /* ========================================================================
-   * (3) Populate the data slot and then copy the frame. Note that the
-   * populated data slot gets copied to the new stack.
+  /* ======================================================================== 
+   * (3) Look up the spork info, populate the data slot, and then copy the
+   * frame. Note that the populated data slot gets copied to the new stack.
    * ========================================================================
    */
 
-  *((objptr*)(pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE)) = dop;
+  GC_frameInfo fi = getFrameInfoFromFrameTopPointer(s, pframe);
+  assert(fi->sporkInfo != NULL);
+  uintptr_t spork_idx = GC_HH_getFrameInfoSporkIdx(fi, pframe);
+
+  *((objptr*)(pframe - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * spork_idx)) = dop;
 
   GC_stack toStack = (GC_stack)objptrToPointer(copied->stack, NULL);
   copyStackFrameToNewStack(s, pframe, fromStack, toStack);
   pointer newFrame = getStackTop(s, toStack);
 
   /* ========================================================================
-   * (4) Look up the PCall info and swing the returns of the two frames
+   * (4) Transition the new frame to the spwn branch
    * ========================================================================
    */
 
-  GC_returnAddress cont_ret = *((GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE));
-  GC_frameInfo fi = getFrameInfoFromReturnAddress(s, cont_ret);
-#if ASSERT
-  assert(fi->kind == PCALL_CONT_FRAME);
-  assert(fi->pcallInfo != NULL);
-#endif
-  GC_returnAddress parl_ret = fi->pcallInfo->parl;
-  GC_returnAddress parr_ret = fi->pcallInfo->parr;
-
-  *(GC_returnAddress*)(pframe - GC_RETURNADDRESS_SIZE) = parl_ret;
-  *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) = parr_ret;
-
-  fromStack->promoStackBot += sizeof(pointer);
-
-  toStack->promoStackBot += sizeof(pointer);
-  toStack->promoStackTop += sizeof(pointer);
+  GC_returnAddress spwn_ret = fi->sporkInfo->spwns[spork_idx];
+  *(GC_returnAddress*)(newFrame - GC_RETURNADDRESS_SIZE) = spwn_ret;
+  // Invalidate other spork data slots of new frame.
+  for (uintptr_t i = 0 ; i < spork_idx ; i++) {
+    *((objptr*) (newFrame - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * i)) = BOGUS_OBJPTR;
+  }
 
   /* ========================================================================
-   * (Sanity check) Confirming that the data slots are in the right place
+   * (5) Pop non-promotable frames from the original thread's promotion
+   * stack. This will pop the just-now-promoted frame, but also any
+   * unnecessarily previously pushed non-promotable frame
    * ========================================================================
    */
-
-#if ASSERT
-  GC_frameInfo fil = getFrameInfoFromReturnAddress(s, parl_ret);
-  GC_frameOffsets foffl = fil->offsets;
-  assert(
-    ((pframe - fil->size) + foffl[foffl[0]])
-    ==
-    pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE
-  );
-  GC_frameInfo fir = getFrameInfoFromReturnAddress(s, parr_ret);
-  GC_frameOffsets foffr = fir->offsets;
-  assert(
-    ((pframe - fir->size) + foffr[foffr[0]])
-    ==
-    pframe - GC_RETURNADDRESS_SIZE - OBJPTR_SIZE
-  );
-  assert(fi->size == fil->size);
-  assert(fi->size == fir->size);
-#endif
+  updatePromoStackOldestPromotableFrame(s, fromStack);
 
   leave(s);
   return pointerToObjptr((pointer)copied - offsetofThread(s), NULL);
 }
+
 
 void setPromoStackOfCurrentThread(GC_state s, pointer newBot, pointer newTop) {
   GC_stack stack = getStackCurrent(s);

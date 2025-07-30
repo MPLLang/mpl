@@ -226,7 +226,7 @@ fun ('down, 'up)
                   let
                      val (down, finish) = bindFunVal (down, tyvars, Dec.region d)
                      val (fbs, u) =
-                        loops (fbs, fn clauses =>
+                        loops (fbs, fn (clauses, inline) =>
                                let
                                   val (clauses, u) =
                                      loops
@@ -245,7 +245,7 @@ fun ('down, 'up)
                                           combineUp (u, combineUp (u', u'')))
                                       end)
                                  in
-                                    (clauses, u)
+                                    ((clauses, inline), u)
                                  end)
                      val (tyvars, u) = finish u
                   in
@@ -273,12 +273,13 @@ fun ('down, 'up)
                   let
                      val (down, finish) = bindFunVal (down, tyvars, Dec.region d)
                      val (rvbs, u) =
-                        loops (rvbs, fn {match, pat} =>
+                        loops (rvbs, fn {inline, match, pat} =>
                                let
                                   val (match, u) = loopMatch (match, down)
                                   val u' = visitPat (pat, down)
                                in
-                                  ({match = match,
+                                  ({inline = inline,
+                                    match = match,
                                     pat = pat},
                                    combineUp (u, u'))
                                end)
@@ -324,9 +325,12 @@ fun ('down, 'up)
                in
                   case Exp.node e of
                      Andalso (e1, e2) => do2 (loop e1, loop e2, Andalso)
-                   | App {func, arg, wasInfix} =>
+                   | App {func, arg, inline, wasInfix} =>
                         do2 (loop func, loop arg, fn (func, arg) =>
-                             App {func = func, arg = arg, wasInfix = wasInfix})
+                             App {func = func,
+                                  arg = arg,
+                                  inline = inline,
+                                  wasInfix = wasInfix})
                    | Case (e, m) => do2 (loop e, loopMatch m, Case)
                    | Const _ => empty ()
                    | Constraint (e, t) =>
@@ -337,8 +341,10 @@ fun ('down, 'up)
                            (doit (Constraint (e, t)),
                             combineUp (u, u'))
                         end
-                   | FlatApp es => doVec (es, FlatApp)
-                   | Fn m => do1 (loopMatch m, Fn)
+                   | FlatApp (es, inline) => doVec (es, fn es =>
+                                                    FlatApp (es, inline))
+                   | Fn (m, inline) => do1 (loopMatch m, fn m =>
+                                            Fn (m, inline))
                    | Handle (e, m) => do2 (loop e, loopMatch m, Handle)
                    | If (e1, e2, e3) => do3 (loop e1, loop e2, loop e3, If)
                    | Let (dec, e) => do2 (loopDec (dec, d), loop e, Let)

@@ -3,6 +3,8 @@ sig
 type ('a,'b) token
 type svalue
 val SHOW_BASIS: (File.t) *  'a * 'a -> (svalue,'a) token
+val INLINE_NEVER:  'a * 'a -> (svalue,'a) token
+val INLINE_ALWAYS:  'a * 'a -> (svalue,'a) token
 val PRIM:  'a * 'a -> (svalue,'a) token
 val SYMBOL:  'a * 'a -> (svalue,'a) token
 val IMPORT:  'a * 'a -> (svalue,'a) token

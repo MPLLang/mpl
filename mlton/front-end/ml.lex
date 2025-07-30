@@ -297,6 +297,8 @@ real=(~?)(({decnum}{frac}?{exp})|({decnum}{frac}{exp}?));
 <INITIAL>{eol}  => (Source.newline (source, lastPos (yypos, yytext)); continue ());
 
 
+<INITIAL>"__inline_always__" => (tok (Tokens.INLINE_ALWAYS, yytext, source, yypos));
+<INITIAL>"__inline_never__" => (tok (Tokens.INLINE_NEVER, yytext, source, yypos));
 <INITIAL>"_address" => (tok (Tokens.ADDRESS, yytext, source, yypos));
 <INITIAL>"_build_const" => (tok (Tokens.BUILD_CONST, yytext, source, yypos));
 <INITIAL>"_command_line_const" => (tok (Tokens.COMMAND_LINE_CONST, yytext, source, yypos));

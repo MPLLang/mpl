@@ -114,6 +114,8 @@ pointer findYoungestPromotableFrame (GC_state s, GC_stack stack);
 #endif
 pointer getPromoStackOldestPromotableFrame (GC_state s, GC_stack stack);
 
+bool frameIsPromotable(GC_state s, pointer frame);
+
 void copyStackFrameToNewStack (GC_state s, pointer frame, GC_stack from, GC_stack to);
 
 static inline void copyStack (GC_state s, GC_stack from, GC_stack to);

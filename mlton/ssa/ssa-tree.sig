@@ -113,17 +113,15 @@ signature SSA_TREE =
                Bug  (* MLton thought control couldn't reach here. *)
              | Call of {args: Var.t vector,
                         func: Func.t,
+                        inline: InlineAttr.t,
                         return: Return.t}
              | Case of {cases: (Con.t, Label.t) Cases.t,
                         default: Label.t option, (* Must be nullary. *)
                         test: Var.t}
              | Goto of {args: Var.t vector,
                         dst: Label.t}
-             | PCall of {args: Var.t vector,
-                         func: Func.t,
-                         cont: Label.t,
-                         parl: Label.t,
-                         parr: Label.t}
+             | Spork of {spid: Spid.t, cont: Label.t, spwn: Label.t}
+             | Spoin of {spid: Spid.t, seq: Label.t, sync: Label.t}
              (* Raise implicitly raises to the caller.
               * I.E. the local handler stack must be empty.
               *)
@@ -189,7 +187,7 @@ signature SSA_TREE =
                      nodeBlock: unit DirectedGraph.Node.t -> Block.t}
             val dest: t -> {args: (Var.t * Type.t) vector,
                             blocks: Block.t vector,
-                            mayInline: bool,
+                            inline: InlineAttr.t,
                             name: Func.t,
                             raises: Type.t vector option,
                             returns: Type.t vector option,
@@ -207,11 +205,11 @@ signature SSA_TREE =
                                            controlFlowGraph: Layout.t,
                                            dominatorTree: unit -> Layout.t,
                                            loopForest: unit -> Layout.t}
-            val mayInline: t -> bool
+            val inline: t -> InlineAttr.t
             val name: t -> Func.t
             val new: {args: (Var.t * Type.t) vector,
                       blocks: Block.t vector,
-                      mayInline: bool,
+                      inline: InlineAttr.t,
                       name: Func.t,
                       raises: Type.t vector option,
                       returns: Type.t vector option,

@@ -64,7 +64,7 @@ fun breakFunction (f, {codeMotion: bool}) =
       val outDeg = LabelInfo.outDeg o labelInfo
       val outDeg' = LabelInfo.outDeg' o labelInfo
 
-      val {args, blocks, mayInline,
+      val {args, blocks, inline,
            name, raises, returns, start} = Function.dest f
 
       val _ = 
@@ -135,7 +135,7 @@ fun breakFunction (f, {codeMotion: bool}) =
    in
       Function.new {args = args,
                     blocks = Vector.concat [blocks, Vector.fromList (!newBlocks)],
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,
@@ -165,7 +165,7 @@ struct
 
 fun eliminateFunction f =
    let
-      val {args, blocks, mayInline, name, raises, returns, start} =
+      val {args, blocks, inline, name, raises, returns, start} =
          Function.dest f
       val {get = isLive, set = setLive, rem} =
          Property.getSetOnce (Label.plist, Property.initConst false)
@@ -183,7 +183,7 @@ fun eliminateFunction f =
             in
                Function.new {args = args,
                              blocks = blocks,
-                             mayInline = mayInline,
+                             inline = inline,
                              name = name,
                              raises = raises,
                              returns = returns,
@@ -215,7 +215,7 @@ fun orderFunctions (p as Program.T {globals, datatypes, main, ...}) =
          Program.dfs
          (p, fn f =>
           let
-             val {args, mayInline, name, raises, returns, start, ...} =
+             val {args, inline, name, raises, returns, start, ...} =
                 Function.dest f
              val blocks = ref []
              val () =
@@ -225,7 +225,7 @@ fun orderFunctions (p as Program.T {globals, datatypes, main, ...}) =
                   ; fn () => ()))
              val f = Function.new {args = args,
                                    blocks = Vector.fromListRev (!blocks),
-                                   mayInline = mayInline,
+                                   inline = inline,
                                    name = name,
                                    raises = raises,
                                    returns = returns,

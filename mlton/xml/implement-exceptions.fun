@@ -163,6 +163,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                              (extendExtraVar,
                                               Type.reff extendExtraType)),
                                arg = extractExtra tup,
+                               inline = InlineAttr.Auto,
                                ty = extraType}},
                              extend = false,
                              ty = ty})
@@ -307,6 +308,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                                        (defaultVar,
                                                         Type.arrow
                                                         (Type.unit, ty))),
+                                               inline = InlineAttr.Auto,
                                                arg = unit (),
                                                ty = ty}
                                        val unit = Var.newString "unit"
@@ -323,7 +325,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                                          argType = Type.unit,
                                                          body = body,
                                                          bodyType = ty,
-                                                         mayInline = true}}
+                                                         inline = InlineAttr.Auto}}
                                     in
                                        makeExp
                                        (lett
@@ -411,7 +413,8 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                       | Prim.Exn_name =>
                            (primExp o App)
                            {func = VarExp.mono exnNameVar,
-                            arg = Vector.first args}
+                            arg = Vector.first args,
+                            inline = InlineAttr.Auto}
                       | Prim.Exn_setExtendExtra =>
                            assign (extendExtraVar,
                                    extendExtraType)
@@ -429,12 +432,12 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
          end
       and loopLambda l =
          let
-            val {arg, argType, body, mayInline} = Lambda.dest l
+            val {arg, argType, body, inline} = Lambda.dest l
          in
             Lambda.make {arg = arg,
                          argType = argType,
                          body = loop body,
-                         mayInline = mayInline}
+                         inline = inline}
          end
       val body = Dexp.fromExp (loop body, Type.unit)
       val exnValCons = Vector.fromList (!exnValCons)
@@ -469,7 +472,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                              default = NONE,
                              ty = Type.string}),
                     bodyType = Type.string,
-                    mayInline = true}
+                    inline = InlineAttr.Auto}
                 end,
              var = exnNameVar}
       val body =
@@ -483,7 +486,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                           (Dexp.bug "extendExtra unimplemented",
                            Dexp.monoVar (dfltExtraVar, extraType)),
                    bodyType = extraType,
-                   mayInline = true})),
+                   inline = InlineAttr.Auto})),
           var = extendExtraVar}
       val body =
          Dexp.let1
@@ -502,6 +505,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                                          (Dexp.monoVar
                                           (topLevelHandlerVar,
                                            Type.reff topLevelHandlerType))),
+                                 inline = InlineAttr.Auto,
                                  arg = Dexp.monoVar x,
                                  ty = Type.unit}}
          end
@@ -513,7 +517,7 @@ fun transform (Program.T {datatypes, body, ...}): Program.t =
                             argType = Type.exn,
                             body = Dexp.bug "toplevel handler not installed",
                             bodyType = Type.unit,
-                            mayInline = true}),
+                            inline = InlineAttr.Auto}),
           body = body}
       val body =
          Dexp.handlee

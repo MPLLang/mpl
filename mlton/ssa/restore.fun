@@ -214,7 +214,7 @@ fun restoreFunction {globals: Statement.t vector}
     in
       fn (f: Function.t) =>
       let
-        val {args, blocks, mayInline, name, returns, raises, start} =
+        val {args, blocks, inline, name, returns, raises, start} =
            Function.dest f
         (* check for violations *)
         val violations = ref []
@@ -629,7 +629,7 @@ fun restoreFunction {globals: Statement.t vector}
             in
               Function.new {args = args,
                             blocks = Vector.fromList (!blocks),
-                            mayInline = mayInline,
+                            inline = inline,
                             name = name,
                             raises = raises,
                             returns = returns,

@@ -20,12 +20,15 @@ end
 structure Exp =
 struct
    open Exp
-   fun apply {func, arg} = Exp.app (func, arg)
-   fun applyInfix {func, argl, argr} =
+   fun apply {func, arg, inline} = Exp.app (func, arg, inline)
+   fun applyInfix {func, argl, argr, inline} =
       let
          val arg = Exp.tuple (Vector.new2 (argl, argr))
       in
-         Exp.makeRegion (Exp.App {func = func, arg = arg, wasInfix = true},
+         Exp.makeRegion (Exp.App {func = func,
+                                  arg = arg,
+                                  inline = inline,
+                                  wasInfix = true},
                          Exp.region arg)
       end
 end
@@ -196,19 +199,26 @@ val parsePat =
                 Ast.Pat.layout)
    parsePat
 
-fun parseExp (es, E, ctxt) =
-   parse {apply = Exp.apply,
-          applyInfix = Exp.applyInfix,
-          ctxt = ctxt,
-          fixval = fn e => Fixval.makeExp (e, E),
-          items = es,
-          name = "expression",
-          region = Exp.region,
-          toString = Layout.toString o Exp.layout}
+fun parseExp (es, inline, E, ctxt) =
+   let
+      val apply = fn {func, arg} =>
+         Exp.apply {func = func, arg = arg, inline = inline}
+      val applyInfix = fn {func, argl, argr} =>
+         Exp.applyInfix {func = func, argl = argl, argr = argr, inline = inline}
+   in
+      parse {apply = apply,
+             applyInfix = applyInfix,
+             ctxt = ctxt,
+             fixval = fn e => Fixval.makeExp (e, E),
+             items = es,
+             name = "expression",
+             region = Exp.region,
+             toString = Layout.toString o Exp.layout}
+   end
 
 val parseExp =
    Trace.trace ("PrecedenceParse.parseExp",
-                fn (es, _, _) => Vector.layout Exp.layout es,
+                fn (es, _, _, _) => Vector.layout Exp.layout es,
                 Ast.Exp.layout)
    parseExp
 

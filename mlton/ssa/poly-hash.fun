@@ -396,7 +396,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   val _ =
                      newFunction {args = args,
                                   blocks = blocks,
-                                  mayInline = true,
+                                  inline = InlineAttr.Auto,
                                   name = name,
                                   raises = NONE,
                                   returns = returns,
@@ -437,6 +437,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                           args = (Vector.new4
                                   (Hash.wordBytes (dst, dlen, seqIndexWordSize),
                                    dvec, dlen, Dexp.word (WordX.zero seqIndexWordSize))),
+                          inline = InlineAttr.Auto,
                           ty = Hash.stateTy}}
                      val (start, blocks) = Dexp.linearize (body, Handler.Caller)
                      val blocks = Vector.fromList blocks
@@ -444,7 +445,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      val _ =
                         newFunction {args = args,
                                      blocks = blocks,
-                                     mayInline = true,
+                                     inline = InlineAttr.Auto,
                                      name = name,
                                      raises = NONE,
                                      returns = returns,
@@ -490,6 +491,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                       args = Vector.new0 (),
                                       body = Dexp.call {args = args,
                                                         func = loop,
+                                                        inline = InlineAttr.Auto,
                                                         ty = Hash.stateTy}})}
                         end
                      val (start, blocks) = Dexp.linearize (body, Handler.Caller)
@@ -498,7 +500,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      val _ =
                         newFunction {args = args,
                                      blocks = blocks,
-                                     mayInline = true,
+                                     inline = InlineAttr.Auto,
                                      name = loop,
                                      raises = NONE,
                                      returns = returns,
@@ -536,6 +538,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                 | Type.Datatype tycon =>
                      Dexp.call {func = hashTyconFunc tycon,
                                 args = Vector.new2 (dst, dx),
+                                inline = InlineAttr.Auto,
                                 ty = Hash.stateTy}
                 | Type.IntInf =>
                      let
@@ -574,6 +577,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                             body =
                             Dexp.call {func = vectorHashFunc (Type.word bws),
                                        args = Vector.new2 (dst, toVector),
+                                       inline = InlineAttr.Auto,
                                        ty = Hash.stateTy}})}}
                      end
                 | Type.Real rs =>
@@ -614,6 +618,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                 | Type.Vector ty =>
                      Dexp.call {func = vectorHashFunc ty,
                                 args = Vector.new2 (dst, dx),
+                                inline = InlineAttr.Auto,
                                 ty = Hash.stateTy}
                 | Type.Weak _ => stateful ()
                 | Type.Word ws => Hash.wordBytes (dst, dx, ws)
@@ -647,7 +652,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   val _ =
                      newFunction {args = args,
                                   blocks = blocks,
-                                  mayInline = true,
+                                  inline = InlineAttr.Auto,
                                   name = name,
                                   raises = NONE,
                                   returns = returns,
@@ -724,6 +729,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                          (las,
                                           Call {args = Vector.new1 x,
                                                 func = hashFunc ty,
+                                                inline = InlineAttr.Auto,
                                                 return = Return.NonTail
                                                          {cont = l,
                                                           handler = Handler.Caller}})
@@ -746,13 +752,13 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          List.revMap
          (functions, fn f =>
           let
-             val {args, blocks, mayInline, name, raises, returns, start} =
+             val {args, blocks, inline, name, raises, returns, start} =
                 Function.dest f
              val f =
                 if #hasHash (funcInfo name)
                    then Function.new {args = args,
                                       blocks = doit blocks,
-                                      mayInline = mayInline,
+                                      inline = inline,
                                       name = name,
                                       raises = raises,
                                       returns = returns,

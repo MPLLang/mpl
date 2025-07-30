@@ -122,13 +122,21 @@ PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
 PRIVATE void GC_HH_promoteChunks(pointer thread);
 PRIVATE void GC_HH_setMinLocalCollectionDepth(pointer thread, Word32 depth);
 
-// forkThread should only be called if canForkThread returns true
-// (and without resuming the thread in between)
-PRIVATE bool GC_HH_canForkThread(GC_state s, pointer thread);
-
 // If youngest, then pick the youngest promotable frame. This is used in
 // the scheduler for an optimization in a special case.
-PRIVATE objptr GC_HH_forkThread(GC_state s, bool youngest, pointer thread, pointer jp);
+PRIVATE bool GC_HH_findNextPromotableFrame(GC_state s, bool youngest, pointer threadp);
+
+// returns the token split policy for the promotion about to happen
+// this function assumes GC_HH_findNextPromotableFrame has been called already (and atomically)
+PRIVATE GC_tokenPolicy GC_HH_getNextPromotionTokenPolicy(GC_state s, pointer threadp);
+
+// forkThread should only be called if canForkThread returns true
+// (and without resuming the thread in between)
+// this function assumes GC_HH_findNextPromotableFrame has been called already (and atomically)
+PRIVATE bool GC_HH_canForkThread(GC_state s, pointer thread);
+
+// this function assumes GC_HH_findNextPromotableFrame has been called already (and atomically)
+PRIVATE objptr GC_HH_forkThread(GC_state s, bool youngestOptimization, pointer thread, pointer jp);
 
 /* Moves a "new" thread to the appropriate depth, before we switch to it.
  * This essentially puts the thread (and its stack) into the hierarchy.

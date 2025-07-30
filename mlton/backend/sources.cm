@@ -57,10 +57,12 @@ rssa-restore.fun
 
 rssa-transform.sig
 bounce-vars.fun
+copy-spork-spwn-vars.fun
 collect-statics.fun
-drop-pcall.fun
+drop-spork.fun
 implement-handlers.fun
 implement-profiling.fun
+spork-nesting.fun
 insert-checks.fun
 rssa-simplify.sig
 rssa-simplify.fun

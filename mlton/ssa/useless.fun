@@ -967,6 +967,7 @@ fun transform (program: Program.t): Program.t =
                                       typeOps = {deArray = Type.deArray,
                                                  deArrow = fn _ => Error.bug "Useless.doitPrim: deArrow",
                                                  deRef = Type.deRef,
+                                                 deTuple = Type.deTuple,
                                                  deVector = Type.deVector,
                                                  deWeak = Type.deWeak}}))})
                end
@@ -1309,7 +1310,7 @@ fun transform (program: Program.t): Program.t =
          : Block.t list * Transfer.t =
          case t of
             Bug => ([], Bug)
-          | Call {func = f, args, return} =>
+          | Call {func = f, args, inline, return} =>
                let
                   val {args = fargs, returns = freturns, raises = fraises} = func f
                   fun bug () =
@@ -1399,6 +1400,7 @@ fun transform (program: Program.t): Program.t =
                in (blocks,
                    Call {func = f,
                          args = keepUseful (args, fargs),
+                         inline = inline,
                          return = return})
                end
           | Case {test, cases, default} =>
@@ -1442,51 +1444,10 @@ fun transform (program: Program.t): Program.t =
                end
           | Goto {dst, args} =>
                ([], Goto {dst = dst, args = keepUseful (args, label dst)})
-          | PCall {func = f, args, cont, parl, parr} =>
-               let
-                  val {args = fargs, returns = freturns, ...} = func f
-                  fun bug () =
-                     let
-                        val l = Label.newNoname ()
-                     in
-                        (l,
-                         Block.T {label = l,
-                                  args = Vector.new0 (),
-                                  statements = Vector.new0 (),
-                                  transfer = Bug})
-                     end
-                  fun wrap (froms, tos, mkTrans) =
-                     case (froms, tos) of
-                        (NONE, NONE) => (true, bug)
-                      | (NONE, SOME _) => (true, bug)
-                      | (SOME _, NONE) => Error.bug "Useless.doitTransfer: PCall mismatch"
-                      | (SOME froms, SOME tos) =>
-                           (agrees (froms, tos), fn () =>
-                            dropUseless (froms, tos, mkTrans))
-                  fun doit (dst, freturns) =
-                     let
-                        val returns = SOME (label dst)
-                        val mkt = fn args => Goto {dst = dst, args = args}
-                     in
-                        case wrap (freturns, returns, mkt) of
-                           (true, _) => ([], dst)
-                         | (false, mk) => let
-                                             val (l, b) = mk ()
-                                          in
-                                             ([b], l)
-                                          end
-                     end
-                  val (bc, cont) = doit (cont, freturns)
-                  val (bl, parl) = doit (parl, freturns)
-                  val (br, parr) = doit (parr, SOME (Vector.new0 ()))
-               in
-                  (List.concat [bc, bl,br],
-                   PCall {func = f,
-                          args = keepUseful (args, fargs),
-                          cont = cont,
-                          parl = parl,
-                          parr = parr})
-               end
+          | Spork {spid, cont, spwn} =>
+               ([], Spork {spid = spid, cont = cont, spwn = spwn})
+          | Spoin {spid, seq, sync} =>
+               ([], Spoin {spid = spid, seq = seq, sync = sync})
           | Raise xs => ([], Raise (keepUseful (xs, valOf raises)))
           | Return xs => ([], Return (keepUseful (xs, valOf returns)))
           | Runtime {prim, args, return} =>
@@ -1523,7 +1484,7 @@ fun transform (program: Program.t): Program.t =
          doitBlock
       fun doitFunction f =
          let
-            val {args, blocks, mayInline, name, start, ...} = Function.dest f
+            val {args, blocks, inline, name, start, ...} = Function.dest f
             val {returns = returnvs, raises = raisevs, ...} = func name
             val args = keepUsefulArgs args
             val (blocks, blocks') =
@@ -1539,7 +1500,7 @@ fun transform (program: Program.t): Program.t =
          in
             Function.new {args = args,
                           blocks = blocks,
-                          mayInline = mayInline,
+                          inline = inline,
                           name = name,
                           raises = raises,
                           returns = returns,

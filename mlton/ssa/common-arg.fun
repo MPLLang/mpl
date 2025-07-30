@@ -131,10 +131,10 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                     (Cases.foreach (cases, visitLabelArgs)
                      ; Option.app (default, visitLabelArgs))
                | Goto {dst, args} => flowVarsLabelArgs (args, dst)
-               | PCall {cont, parl, parr, ...} =>
-                    (visitLabelArgs cont
-                     ; visitLabelArgs parl
-                     ; visitLabelArgs parr)
+               | Spork {spid, cont, spwn} =>
+                    (visitLabelArgs cont; visitLabelArgs spwn)
+               | Spoin {spid, seq, sync} =>
+                    (visitLabelArgs seq; visitLabelArgs sync)
                | Raise _ => ()
                | Return _ => ()
                | Runtime {return, ...} => visitLabelArgs return)
@@ -188,7 +188,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          List.revMap
          (functions, fn f =>
           let
-             val {args, blocks, mayInline, name, start, raises, returns} =
+             val {args, blocks, inline, name, start, raises, returns} =
                 Function.dest f
              val blocks = 
                 Vector.map
@@ -228,7 +228,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
           in
              shrink (Function.new {args = args,
                                    blocks = blocks,
-                                   mayInline = mayInline,
+                                   inline = inline,
                                    name = name,
                                    start = start,
                                    raises = raises,

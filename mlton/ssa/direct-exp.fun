@@ -19,6 +19,7 @@ datatype t =
    Bug
  | Call of {func: Func.t,
             args: t vector,
+            inline: InlineAttr.t,
             ty: Type.t}
  | Case of {cases: cases,
             default: t option,
@@ -42,13 +43,13 @@ datatype t =
  | Let of {decs: {var: Var.t, exp: t} list,
            body: t}
  | Name of t * (Var.t -> t)
- | PCall of {func: Func.t,
-             args: t vector,
-             carg: Var.t * Type.t,
+ | Spork of {spid: Spid.t,
              cont: t,
-             larg: Var.t * Type.t,
-             parl: t,
-             parr: t,
+             spwn: t,
+             ty: Type.t}
+ | Spoin of {spid: Spid.t,
+             seq: t,
+             sync: t,
              ty: Type.t}
  | PrimApp of {prim: Type.t Prim.t,
                targs: Type.t vector,
@@ -63,6 +64,12 @@ datatype t =
               offset: int,
               ty: Type.t}
  | Seq of t * t
+ | Try of {exp: t,
+           ty: Type.t,
+           valCont: {arg: Var.t * Type.t,
+                     body: t},
+           exnCont: {arg: Var.t * Type.t,
+                     body: t}}
  | Tuple of {exps: t vector,
              ty: Type.t}
  | Var of Var.t * Type.t
@@ -92,10 +99,12 @@ val detupleBind = DetupleBind
 val handlee = Handle
 val lett = Let
 val name = Name
-val pcall = PCall
+val spork = Spork
+val spoin = Spoin
 val profile = Profile
 val raisee = Raise
 val select = Select
+val try = Try
 val word = Const o Const.word
 
 fun tuple (r as {exps, ...}) =
@@ -130,6 +139,8 @@ in
    val falsee = make Con.falsee
 end
 
+val unit = Tuple {exps = Vector.new0 (), ty = Type.unit}
+
 fun eq (e1, e2, ty) =
    primApp {prim = Prim.MLton_eq,
             targs = Vector.new1 ty,
@@ -146,8 +157,12 @@ in
    fun layout e : Layout.t =
       case e of
          Bug => str "bug"
-       | Call {func, args, ty} =>
-            seq [Func.layout func, str " ", layouts args,
+       | Call {func, args, inline, ty} =>
+            seq [case inline of
+                    InlineAttr.Always => str "(*@inline_always*) "
+                  | InlineAttr.Auto => empty
+                  | InlineAttr.Never => str "(*@inline_never*) ",
+                 Func.layout func, str " ", layouts args,
                  str ": ", Type.layout ty]
        | Case {cases, default, test, ...} =>
             align
@@ -196,17 +211,16 @@ in
                              seq [Var.layout var, str " = ", layout exp])),
                      layout body)
        | Name _ => str "Name"
-       | PCall {func, args, carg, cont, larg, parl, parr, ...} =>
-            align [seq [str "pcall ",
-                        Func.layout func, str " ", layouts args,
-                        str " of"],
+       | Spork {spid, cont, spwn, ty} =>
+            align [seq [str "spork ", Spid.layout spid, str ": ", Type.layout ty, str " of"],
                    indent
-                   (align [seq [str "  cont ", Var.layout (#1 carg), str " => ",
-                                layout cont],
-                           seq [str "| parl ", Var.layout (#1 larg), str " => ",
-                                layout parl],
-                           seq [str "| parr () => ",
-                                layout parr]], 2)]
+                     (align [seq [str "  cont => ", layout cont],
+                             seq [str "| spwn => ", layout spwn]], 2)]
+       | Spoin {spid, seq = bseq, sync = bsync, ty} =>
+            align [seq [str "spoin ", Spid.layout spid, str ": ", Type.layout ty, str " of"],
+                   indent
+                     (align [seq [str "  seq => ", layout bseq],
+                             seq [str "| sync => ", layout bsync]], 2)]
        | PrimApp {args, prim, targs, ty} =>
             seq [Prim.layoutFull (prim, Type.layout),
                  Layout.list (Vector.toListMap (targs, Type.layout)),
@@ -225,6 +239,14 @@ in
                  layout tuple]
        | Seq (e1, e2) => seq [layout e1, str "; ", layout e2]
        | Tuple {exps, ...} => layouts exps
+       | Try {exp, valCont, exnCont, ...} =>
+            align [seq [str "try ", layout exp, str " of"],
+                   indent
+                   (align [seq [str "  val ", Var.layout (#1 (#arg valCont)),
+                                str " => ", layout (#body valCont)],
+                           seq [str "| exn ", Var.layout (#1 (#arg exnCont)),
+                                str " => ", layout (#body exnCont)]],
+                    2)]
        | Var (x, t) =>
             seq [Var.layout x, str ": ", Type.layout t]
    and layouts es = Vector.layout layout es
@@ -419,13 +441,14 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
          case e of
             Bug => {statements = [],
                     transfer = Transfer.Bug}
-          | Call {func, args, ty} =>
+          | Call {func, args, inline, ty} =>
                loops
                (args, h, fn xs =>
                 {statements = [],
                  transfer = (Transfer.Call
                              {func = func,
                               args = xs,
+                              inline = inline,
                               return = Return.NonTail {cont = reify (k, ty),
                                                        handler = h}})})
           | Case {cases, default, test, ty} =>
@@ -536,22 +559,25 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
                   each decs
                end
           | Name (e, f) => loopf (e, h, fn (x, _) => loop (f x, h, k))
-          | PCall {func, args, carg, cont, larg, parl, parr, ty} =>
+          | Spork {spid, cont, spwn, ty} =>
                let
-                  val k = Cont.goto (reify (k, ty))
-                  val cont = newLabel (Vector.new1 carg, cont, h, k)
-                  val parl = newLabel (Vector.new1 larg, parl, h, k)
-                  val parr = newLabel0 (parr, h, k)
+                 val k = Cont.goto (reify (k, ty))
+                 val cont = newLabel0 (cont, h, k)
+                 val spwn = newLabel0 (spwn, h, k)
                in
-                  loops
-                  (args, h, fn args =>
-                   {statements = [],
-                    transfer = (Transfer.PCall
-                                {func = func,
-                                 args = args,
-                                 cont = cont,
-                                 parl = parl,
-                                 parr = parr})})
+                 {statements = [],
+                  transfer = Transfer.Spork
+                               {spid = spid, cont = cont, spwn = spwn}}
+               end
+          | Spoin {spid, seq, sync, ty} =>
+               let
+                 val k = Cont.goto (reify (k, ty))
+                 val seq = newLabel0 (seq, h, k)
+                 val sync = newLabel0 (sync, h, k)
+               in
+                 {statements = [],
+                  transfer = Transfer.Spoin
+                               {spid = spid, seq = seq, sync = sync}}
                end
           | PrimApp {prim, targs, args, ty} =>
                loops
@@ -608,6 +634,36 @@ fun linearize' (e: t, h: Handler.t, k: Cont.t): Label.t * Block.t list =
                       Cont.sendExp (k, ty, Exp.Select {tuple = tuple,
                                                        offset = offset}))
           | Seq (e1, e2) => loopf (e1, h, fn _ => loop (e2, h, k))
+          | Try {exp, ty, valCont, exnCont} =>
+               let
+                  val k = Cont.goto (reify (k, ty))
+                  val valContLab = Label.newNoname ()
+                  val _ =
+                     let
+                        val {statements, transfer} = loop (#body valCont, h, k)
+                        val statements = Vector.fromList statements
+                     in
+                        List.push (blocks,
+                                   Block.T {label = valContLab,
+                                            args = Vector.new1 (#arg valCont),
+                                            statements = statements,
+                                            transfer = transfer})
+                     end
+                  val exnContLab = Label.newNoname ()
+                  val _ =
+                     let
+                        val {statements, transfer} = loop (#body exnCont, h, k)
+                        val statements = Vector.fromList statements
+                     in
+                        List.push (blocks,
+                                   Block.T {label = exnContLab,
+                                            args = Vector.new1 (#arg exnCont),
+                                            statements = statements,
+                                            transfer = transfer})
+                     end
+               in
+                  loop (exp, Handler.Handle exnContLab, Cont.goto valContLab)
+               end
           | Tuple {exps, ty} =>
                loops (exps, h, fn xs => Cont.sendExp (k, ty, Exp.Tuple xs))
           | Var (x, ty) => Cont.sendVar (k, ty, x)) arg

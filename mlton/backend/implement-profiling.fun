@@ -649,7 +649,8 @@ fun transform program =
                                     end
                                | Handler => add pushes
                                | Jump => ()
-                               | PCallReturn _ => add pushes
+                               | SporkSpwn _ => add pushes
+                               | SpoinSync _ => ()
                            end
                         fun maybeSplit {args,
                                         bytesAllocated: Bytes.t,

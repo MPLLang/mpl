@@ -250,7 +250,7 @@ fun outputDeclarations
     print: string -> unit,
     program = (Program.T
                {chunks, frameInfos, frameOffsets, globals, maxFrameSize,
-                objectTypes, pcallInfos, sourceMaps, staticHeaps, ...}),
+                objectTypes, sporkInfos, sourceMaps, staticHeaps, ...}),
     rest: unit -> unit
     }: unit =
    let
@@ -691,29 +691,36 @@ fun outputDeclarations
                          FrameOffsets.offsets fo,
                          fn (_, offset) => C.bytes offset))
           ; Vector.foreachi
-            (pcallInfos, fn (i, pra) =>
-             prints ["const struct GC_pcallInfo ",
-                     "pcallInfo",
-                     C.int i,
-                     " = {",
-                     labelIndexAsString (PCallInfo.parl pra, {pretty = true}),
-                     ",",
-                     labelIndexAsString (PCallInfo.parr pra, {pretty = true}),
-                     "};\n"])
+            (sporkInfos, fn (i, spi) =>
+             (declareArray ("const GC_returnAddress", concat ["sporkSpwns", C.int i],
+                            {firstElemLen = false, oneline = true},
+                            SporkInfo.spwns spi,
+                            fn (_, l) => labelIndexAsString (l, {pretty = true}))
+              ; declareArray ("const uint32_t", concat ["sporkTokenPolicies", C.int i],
+                              {firstElemLen = false, oneline = true},
+                              SporkInfo.tokenPolicies spi,
+                              fn (_, p) => Word32.toString p)
+              ; print (concat
+                       ["static const struct GC_sporkInfo sporkInfo",
+                        C.int i, " = ", "{",
+                        C.int (Vector.length (SporkInfo.spwns spi)), ", ",
+                        C.bytes (SporkInfo.offset spi), ", ",
+                        "sporkTokenPolicies", C.int i, ", ",
+                        "sporkSpwns", C.int i, "};\n"])))
           ; declareArray ("const struct GC_frameInfo", "frameInfos",
                           {firstElemLen = false, oneline = false},
                           frameInfos, fn (_, fi) =>
                           concat ["{",
                                   FrameInfo.Kind.toString (FrameInfo.kind fi),
                                   ", frameOffsets", C.int (FrameOffsets.index (FrameInfo.frameOffsets fi)),
-                                  ", ", case FrameInfo.pcallInfo fi of
-                                           NONE => C.null
-                                         | SOME pra => concat ["&pcallInfo",
-                                                               C.int (PCallInfo.index pra)],
                                   ", ", C.bytes (FrameInfo.size fi),
                                   ", ", (case FrameInfo.sourceSeqIndex fi of
                                             NONE => C.int 0
                                           | SOME ssi => C.int ssi),
+                                  ", ", case FrameInfo.sporkInfo fi of
+                                           NONE => C.null
+                                         | SOME spi => concat ["&sporkInfo",
+                                                               C.int (SporkInfo.index spi)],
                                   "}"]))
       fun declareAtMLtons () =
          declareArray ("char *", "atMLtons",
@@ -1216,6 +1223,16 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                          volatile = amTimeProfiling},
                                   src = Operand.Label return})
                 ; adjStackTop size)
+            fun isContLabelInsideSporkSpoinNest label =
+              case #block (labelInfo label) of
+                Block.T {kind = Kind.Cont {frameInfo, ...}, ...} =>
+                  Option.isSome (FrameInfo.sporkInfo frameInfo)
+              | _ => false
+            fun isCReturnLabelInsideSporkSpoinNest label =
+              case #block (labelInfo label) of
+                Block.T {kind = Kind.CReturn {frameInfo = SOME fi, ...}, ...} =>
+                  Option.isSome (FrameInfo.sporkInfo fi)
+              | _ => false
             (* Hacking this together *)
             fun promoStackPush () =
                let
@@ -1229,10 +1246,18 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                   print putStackTop;
                   adjPromoStackTop (Bits.toBytes (Control.Target.Size.cpointer ()))
                end
+            fun promoStackMaybeChopBot () =
+               (* adjPromoStackBot (Bytes.~ (Bits.toBytes (Control.Target.Size.cpointer ()))) *)
+               let
+                 val pst = operandToString (Operand.gcField Runtime.GCField.PromoStackTop)
+                 val psb = operandToString (Operand.gcField Runtime.GCField.PromoStackBot)
+               in
+                print ("\tif (" ^ psb ^ " > " ^ pst ^ ") { " ^ psb ^ " = " ^ pst ^ "; }\n")
+               end
             fun promoStackPop () =
-               adjPromoStackTop (Bytes.~ (Bits.toBytes (Control.Target.Size.cpointer ())))
-            fun promoStackChopBot () =
-               adjPromoStackBot (Bytes.~ (Bits.toBytes (Control.Target.Size.cpointer ())))
+               ( adjPromoStackTop (Bytes.~ (Bits.toBytes (Control.Target.Size.cpointer ())))
+               ; promoStackMaybeChopBot ()
+               )
             fun copyArgs (args: Operand.t vector): string list * (unit -> unit) =
                let
                   fun usesStack z =
@@ -1406,6 +1431,9 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                              CFunction.Target.Direct "Thread_returnToC", ...},
                             return = SOME {return, size = SOME size}, ...} =>
                         (push (return, size);
+                         if isCReturnLabelInsideSporkSpoinNest return
+                         then promoStackPush ()
+                         else ();
                          flushFrontier ();
                          if not amTimeProfiling then flushStackTop () else ();
                          print "\treturn ";
@@ -1425,6 +1453,10 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                     let
                                        val res = copyArgs args
                                        val _ = push (return, size)
+                                       val () =
+                                         if isCReturnLabelInsideSporkSpoinNest return
+                                         then promoStackPush ()
+                                         else ()
                                     in
                                        res
                                     end
@@ -1472,13 +1504,15 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                            ()
                         end
                    | Call {label, return, ...} =>
-                        (Option.app (return, fn {return, size, ...} => push (return, size))
+                        (Option.app (return, fn {return, size, ...} => 
+                            ( push (return, size)
+                            ; if isContLabelInsideSporkSpoinNest return
+                              then promoStackPush ()
+                              else ()
+                            ))
                          ; jump label)
                    | Goto dst => gotoLabel (dst, {tab = true})
-                   | PCall {label, cont, parl, parr, size, ...} =>
-                        (push (cont, size)
-                         ; promoStackPush ()
-                         ; jump label)
+                   | Spork {cont, ...} => gotoLabel (cont, {tab = true})
                    | Raise {raisesTo} =>
                         (outputStatement (Statement.PrimApp
                                           {args = Vector.new2
@@ -1700,9 +1734,24 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                   val _ = prints [Label.toString label, ":\n"]
                   val _ =
                      case kind of
-                        Kind.Cont {frameInfo, ...} => pop frameInfo
+                        Kind.Cont {frameInfo, ...} =>
+                          (* When returning to a frame and popping from the
+                           * call-stack, if this frame was inside a spork/spoin
+                           * nest, then we also have to pop it from the 
+                           * promotion stack, too.
+                           *)
+                          ( pop frameInfo
+                          ; if Option.isSome (FrameInfo.sporkInfo frameInfo)
+                            then promoStackPop ()
+                            else ()
+                          )
                       | Kind.CReturn {dst, frameInfo, ...} =>
-                           (Option.app (frameInfo, pop)
+                           (Option.app (frameInfo, fn fi =>
+                                ( pop fi
+                                ; if Option.isSome (FrameInfo.sporkInfo fi)
+                                  then promoStackPop ()
+                                  else ()
+                                ))
                             ; (Option.app
                                (dst, fn x =>
                                 let
@@ -1720,13 +1769,13 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                       | Kind.Func _ => ()
                       | Kind.Handler {frameInfo, ...} => pop frameInfo
                       | Kind.Jump => ()
-                      | Kind.PCallReturn {frameInfo, ...} =>
-                           (pop frameInfo
-                            ; promoStackPop ()
-                            ; case FrameInfo.kind frameInfo of
-                                FrameInfo.Kind.PCALL_PARL_FRAME => promoStackChopBot ()
-                              | FrameInfo.Kind.PCALL_PARR_FRAME => promoStackChopBot ()
-                              | _ => ())
+                      | Kind.SporkSpwn {frameInfo, ...} =>
+                          (* Don't need to pop the promotion stack here,
+                           * because spwn blocks are only accessible by the
+                           * promoted thread which is initialized with an
+                           * empty promotion stack.
+                           *) 
+                          pop frameInfo
                   val _ =
                      if !Control.codegenFuseOpAndChk
                         then outputStatementsFuseOpAndChk statements
@@ -1752,7 +1801,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                  Option.app (return, visit o #return)
                             | Call _ => ()
                             | Goto dst => visit dst
-                            | PCall _ => ()
+                            | Spork {cont, spwn, ...} => visit cont
                             | Raise _ => ()
                             | Return _ => ()
                             | Switch (Switch.T {cases, default, ...}) =>

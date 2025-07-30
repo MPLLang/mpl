@@ -341,18 +341,6 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                       | Goto {dst, args, ...} =>
                            Eqrel.refine {coarse = varEquiv args,
                                          fine = labelInfo dst}
-                      | PCall {func, args, cont, parl, ...} =>
-                          let
-                             val {arg = arg', return = return'} = funcInfo func
-                             val _ = Eqrel.refine {coarse = varEquiv args,
-                                                   fine = arg'}
-                             fun doit l =
-                                Option.app (return', fn e =>
-                                            Eqrel.unify (e, labelInfo l))
-                          in
-                             doit cont
-                             ; doit parl
-                          end
                       | Return xs =>
                            Eqrel.refine {coarse = varEquiv xs,
                                          fine = valOf return}
@@ -490,7 +478,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          List.revMap
          (functions, fn f =>
           let
-             val {blocks, mayInline, name, raises, start, ...} = Function.dest f
+             val {blocks, inline, name, raises, start, ...} = Function.dest f
              val {args, returns, returnsRed, ...} = funcReds name
              val blocks =
                 Vector.map
@@ -506,11 +494,12 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                     val transfer =
                        case transfer of
                           Bug => Bug
-                        | Call {func, args, return} =>
+                        | Call {func, args, inline, return} =>
                              Call {func = func, 
                                    args = loopVars (keepUseful 
                                                     (#argsRed (funcReds func),
                                                      args)),
+                                   inline = inline,
                                    return = return}
                         | Case {test, cases, default} =>
                              Case {test = loopVar test, 
@@ -521,14 +510,10 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                    args = loopVars (keepUseful 
                                                     (#argsRed (labelReds dst), 
                                                      args))}
-                        | PCall {func, args, cont, parl, parr} =>
-                             PCall {func = func,
-                                    args = loopVars (keepUseful
-                                                     (#argsRed (funcReds func),
-                                                      args)),
-                                    cont = cont,
-                                    parl = parl,
-                                    parr = parr}
+                        | Spork {spid, cont, spwn} =>
+                             Spork {spid = spid, cont = cont, spwn = spwn}
+                        | Spoin {spid, seq, sync} =>
+                             Spoin {spid = spid, seq = seq, sync = sync}
                         | Raise xs => Raise (loopVars xs)
                         | Return xs =>
                              Return (loopVars
@@ -545,7 +530,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                  end)
              val f = Function.new {args = args,
                                    blocks = blocks,
-                                   mayInline = mayInline,
+                                   inline = inline,
                                    name = name,
                                    raises = raises,
                                    returns = returns,

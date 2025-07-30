@@ -49,10 +49,7 @@ pointer findStackNonEmptyFrameTop(GC_state s, pointer bottom, pointer top) {
   assert(bottom <= top);
 
   while (top > bottom) {
-    /* Invariant: top points just past a "return address". */
-    GC_returnAddress returnAddress =
-      *((GC_returnAddress*)(top - GC_RETURNADDRESS_SIZE));
-    GC_frameInfo frameInfo = getFrameInfoFromReturnAddress(s, returnAddress);
+    GC_frameInfo frameInfo = getFrameInfoFromFrameTopPointer(s, top);
     // index zero of this array is size
     GC_frameOffsets frameOffsets = frameInfo->offsets;
 
@@ -241,10 +238,7 @@ void advanceOneField(
     //   i
     // );
 
-    /* Invariant: top points just past a "return address". */
-    GC_returnAddress returnAddress =
-      *((GC_returnAddress*)(top - GC_RETURNADDRESS_SIZE));
-    GC_frameInfo frameInfo = getFrameInfoFromReturnAddress(s, returnAddress);
+    GC_frameInfo frameInfo = getFrameInfoFromFrameTopPointer(s, top);
     // index zero of this array is size
     GC_frameOffsets frameOffsets = frameInfo->offsets;
     pointer frameStart = top - frameInfo->size;

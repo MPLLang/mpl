@@ -86,7 +86,7 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
          List.revMap
          (functions, fn f =>
           let
-             val {args, blocks, mayInline, name, raises, returns, start} =
+             val {args, blocks, inline, name, raises, returns, start} =
                 Function.dest f
              val _ =
                 Vector.foreach
@@ -145,11 +145,10 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
                                        VarInfo.Arg i' => ArgInfo.<= (i', i)
                                      | VarInfo.None => ()
                                      | VarInfo.Tuple => ArgInfo.tuple i))
-                       | PCall {args, cont, parl, parr, ...} =>
-                            (forces args
-                             ; forceArgs cont
-                             ; forceArgs parl
-                             ; forceArgs parr)
+                       | Spork {spid, cont, spwn} =>
+                            (forceArgs cont; forceArgs spwn)
+                       | Spoin {spid, seq, sync} =>
+                            (forceArgs seq; forceArgs sync)
                        | Raise xs => forces xs
                        | Return xs => forces xs
                        | Runtime {args, return, ...} =>
@@ -284,7 +283,7 @@ fun transform (Program.T {globals, datatypes, functions, main}) =
           in
              shrink (Function.new {args = args,
                                    blocks = blocks,
-                                   mayInline = mayInline,
+                                   inline = inline,
                                    name = name,
                                    raises = raises,
                                    returns = returns,

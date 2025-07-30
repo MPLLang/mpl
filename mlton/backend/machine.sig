@@ -185,12 +185,10 @@ signature MACHINE =
                                  handler: Label.t option (* must be kind Handler*),
                                  size: Bytes.t} option}
              | Goto of Label.t (* must be kind Jump *)
-             | PCall of {label: Label.t, (* must be kind Func *)
-                         live: Live.t vector,
-                         cont: Label.t, (* must be kind PCallReturn *)
-                         parl: Label.t, (* must be kind PCallReturn *)
-                         parr: Label.t, (* must be kind PCallReturn *)
-                         size: Bytes.t}
+             | Spork of {spid: Spid.t,
+                         data: StackOffset.t,
+                         cont: Label.t,
+                         spwn: Label.t}
              | Raise of {raisesTo: Label.t list}
              | Return of {returnsTo: Label.t list}
              | Switch of Switch.t
@@ -211,7 +209,7 @@ signature MACHINE =
             val offsets: t -> Bytes.t vector
          end
 
-      structure PCallInfo:
+      structure SporkInfo:
          sig
             type t
 
@@ -219,9 +217,13 @@ signature MACHINE =
             val hash: t -> word
             val index: t -> int
             val layout: t -> Layout.t
-            val new: {index: int, parl: Label.t, parr: Label.t} -> t
-            val parl: t -> Label.t
-            val parr: t -> Label.t
+            val new: {index: int,
+                      offset: Bytes.t,
+                      tokenPolicies: Word32.word vector,
+                      spwns: Label.t vector} -> t
+            val offset: t -> Bytes.t
+            val tokenPolicies: t -> Word32.word vector
+            val spwns: t -> Label.t vector
          end
 
       structure FrameInfo:
@@ -233,9 +235,7 @@ signature MACHINE =
                    | CRETURN_FRAME
                    | FUNC_FRAME
                    | HANDLER_FRAME
-                   | PCALL_CONT_FRAME
-                   | PCALL_PARL_FRAME
-                   | PCALL_PARR_FRAME
+                   | SPORK_SPWN_FRAME
                   val equals: t * t -> bool
                   val hash: t -> word
                   val layout: t -> Layout.t
@@ -253,9 +253,9 @@ signature MACHINE =
                       index: int,
                       kind: Kind.t,
                       size: Bytes.t,
-                      pcallInfo: PCallInfo.t option,
+                      sporkInfo: SporkInfo.t option,
                       sourceSeqIndex: int option} -> t
-            val pcallInfo: t -> PCallInfo.t option
+            val sporkInfo: t -> SporkInfo.t option
             val offsets: t -> Bytes.t vector
             val setIndex: t * int -> unit
             val size: t -> Bytes.t
@@ -274,8 +274,8 @@ signature MACHINE =
              | Handler of {args: Live.t vector,
                            frameInfo: FrameInfo.t}
              | Jump
-             | PCallReturn of {args: Live.t vector,
-                               frameInfo: FrameInfo.t}
+             | SporkSpwn of {spid: Spid.t,
+                             frameInfo: FrameInfo.t}
 
             val isEntry: t -> bool
             val frameInfoOpt: t -> FrameInfo.t option
@@ -324,7 +324,7 @@ signature MACHINE =
                             label: Label.t},
                      maxFrameSize: Bytes.t,
                      objectTypes: Type.ObjectType.t vector,
-                     pcallInfos: PCallInfo.t vector,
+                     sporkInfos: SporkInfo.t vector,
                      sourceMaps: SourceMaps.t option,
                      staticHeaps: StaticHeap.Kind.t -> StaticHeap.Object.t vector}
 

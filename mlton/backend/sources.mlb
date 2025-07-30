@@ -44,8 +44,10 @@ local
 
    rssa-transform.sig
    bounce-vars.fun
+   copy-spork-spwn-vars.fun
    collect-statics.fun
-   drop-pcall.fun
+   drop-spork.fun
+   spork-nesting.fun
    implement-handlers.fun
    implement-profiling.fun
    insert-checks.fun

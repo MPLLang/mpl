@@ -997,6 +997,17 @@ structure Type =
             Unknown _ => true
           | _ => false
 
+      fun deTupleOpt t =
+         case getTy t of
+            Record ts => (case Srecord.detupleOpt ts of
+                             SOME ts => SOME ts
+                           | NONE => NONE)
+          | _ => NONE
+      fun deTuple t =
+         case deTupleOpt t of
+            SOME t => t
+          | NONE => Error.bug "TypeOps.deTuple"
+
       local
          fun make ov () = newTy (Overload ov)
          datatype z = datatype Overload.t

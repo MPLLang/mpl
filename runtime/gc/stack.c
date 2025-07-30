@@ -26,12 +26,6 @@ bool isStackReservedAligned (GC_state s, size_t reserved) {
   return isAligned (GC_STACK_METADATA_SIZE + sizeof (struct GC_stack) + reserved,
                     s->alignment);
 }
-
-bool looksLikePromotableFrame(GC_state s, pointer fp) {
-  GC_returnAddress ret = *((GC_returnAddress*)(fp - GC_RETURNADDRESS_SIZE));
-  GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
-  return fi->kind == PCALL_CONT_FRAME;
-}
 #endif
 
 /* sizeofStackSlop returns the amount of "slop" space needed between
@@ -317,9 +311,7 @@ void copyStackFrameToNewStack (
   assert(getStackBottom(s, from) < frame);
   assert(frame <= getStackTop(s, from));
 
-  GC_returnAddress ret = *((GC_returnAddress*)(frame - GC_RETURNADDRESS_SIZE));
-  GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
-  assert(fi->kind == PCALL_CONT_FRAME);
+  GC_frameInfo fi = getFrameInfoFromFrameTopPointer(s, frame);
   pointer frameBottom = frame - fi->size;
   GC_memcpy(frameBottom, getStackBottom(s, to), fi->size);
   to->used = fi->size;
@@ -329,21 +321,78 @@ void copyStackFrameToNewStack (
   to->promoStackTop = getStackLimitPlusSlop(s, to);
 }
 
+bool frameIsPromotable(GC_state s, pointer cursor) {
+  GC_frameInfo fi = getFrameInfoFromFrameTopPointer(s, cursor);
+  if (fi->sporkInfo) {
+    for (uintptr_t i = 0 ; i < fi->sporkInfo->nest ; i++) {
+      objptr p = *((objptr*) (cursor - fi->size + fi->sporkInfo->offset + OBJPTR_SIZE * i));
+      if (!isObjptr(p)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 
 pointer getPromoStackOldestPromotableFrame(
-  ARG_USED_FOR_ASSERT GC_state s,
+  GC_state s,
   GC_stack stack)
 {
-  if (stack->promoStackBot == stack->promoStackTop) {
+  size_t num_frames = 0;
+  pointer* bot = (pointer*)stack->promoStackBot;
+  while ((pointer)bot < stack->promoStackTop && !frameIsPromotable(s, *bot)) {
+    bot++;
+    num_frames++;
+  }
+
+  /* SAM_NOTE: This should never happen. If it does, it means something has
+   * gone terribly wrong. Leaving this check in to make sure we are aware.
+   */
+  if (num_frames >= 2) {
+    printf("WARNING: getPromoStackOldestPromotableFrame had to look at %zu frames\n", num_frames);
+    assert(FALSE);
+  }
+
+  if ((pointer)bot >= stack->promoStackTop) {
     return NULL;
   }
-  pointer result = *(pointer*)(stack->promoStackBot);
+  pointer result = *bot;
 
   assert(getStackBottom(s, stack) <= result);
   assert(result <= getStackTop(s, stack));
-  assert(looksLikePromotableFrame(s, result));
+  assert(frameIsPromotable(s, result));
 
   return result;
+}
+
+
+
+void updatePromoStackOldestPromotableFrame(
+  GC_state s,
+  GC_stack stack)
+{
+  size_t num_frames = 0;
+  pointer* bot = (pointer*)stack->promoStackBot;
+  while ((pointer)bot < stack->promoStackTop && !frameIsPromotable(s, *bot)) {
+    bot++;
+    num_frames++;
+  }
+
+  /* SAM_NOTE: This should never happen. If it does, it means something has
+   * gone terribly wrong. Leaving this check in to make sure we are aware.
+   */
+  if (num_frames >= 3) {
+    printf("WARNING: updatePromoStackOldestPromotableFrame had to look at %zu frames\n", num_frames);
+    assert(FALSE);
+  }
+
+  if ((pointer)bot >= stack->promoStackTop) {
+    stack->promoStackBot = stack->promoStackTop;
+    return;
+  }
+  stack->promoStackBot = (pointer)bot;
+  return;
 }
 
 
@@ -359,35 +408,18 @@ pointer findPromotableFrame (GC_state s, GC_stack stack) {
         thisStackSize);
 
   size_t numFrames = 0;
-  size_t numCFrames = 0;
-  size_t numLFrames = 0;
-  size_t numRFrames = 0;
 
-  pointer oldestCFrame = NULL;
+  pointer oldestPromotableFrame = NULL;
 
   pointer cursor = top;
   while (cursor > bottom) {
     numFrames++;
     
-    GC_returnAddress ret = *((GC_returnAddress*)(cursor - GC_RETURNADDRESS_SIZE));
-    GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
-
-    switch (fi->kind) {
-      case PCALL_CONT_FRAME: {
-        numCFrames++;
-        oldestCFrame = cursor;
-        break;
-      }
-      case PCALL_PARL_FRAME:
-        numLFrames++;
-        break;
-      case PCALL_PARR_FRAME:
-        numRFrames++;
-        break;
-      default:
-        break;
+    if (frameIsPromotable(s, cursor)) {
+      oldestPromotableFrame = cursor;
     }
 
+    GC_frameInfo fi = getFrameInfoFromFrameTopPointer(s, cursor);
     cursor = cursor - fi->size;
   }
 
@@ -395,32 +427,7 @@ pointer findPromotableFrame (GC_state s, GC_stack stack) {
     max(s->cumulativeStatistics->maxStackFramesWalkedForHeartbeat,
         numFrames);
 
-  // LOG(LM_PARALLEL, LL_FORCE,
-  //   "frames %zu, cont %zu, parl %zu, parr %zu",
-  //   numFrames,
-  //   numCFrames,
-  //   numLFrames,
-  //   numRFrames
-  // );
-
-  if (oldestCFrame == NULL) {
-    return NULL;
-  }
-
-  // GC_returnAddress orig =
-  //   *((GC_returnAddress*)(oldestWaitingCFrame - GC_RETURNADDRESS_SIZE));
-  // GC_returnAddress left =
-  //   *((GC_returnAddress*)(oldestWaitingCFrame - 2*GC_RETURNADDRESS_SIZE));
-  // GC_returnAddress right =
-  //   *((GC_returnAddress*)(oldestWaitingCFrame - 3*GC_RETURNADDRESS_SIZE));
-
-  // LOG(LM_PARALLEL, LL_FORCE,
-  //   "oldest cont frame: orig "FMTRA", left "FMTRA", right "FMTRA,
-  //   orig,
-  //   left,
-  //   right);
-
-  return oldestCFrame;
+  return oldestPromotableFrame;
 }
 #endif // ASSERT
 
@@ -436,30 +443,19 @@ pointer findYoungestPromotableFrame (GC_state s, GC_stack stack) {
     max(s->cumulativeStatistics->maxStackSizeForHeartbeat,
         thisStackSize);
 
-  pointer youngestCFrame = NULL;
+  pointer youngestPromotableFrame = NULL;
 
   size_t numFrames = 0;
 
   pointer cursor = top;
-  while (cursor > bottom && youngestCFrame == NULL) {
+  while (cursor > bottom && youngestPromotableFrame == NULL) {
     numFrames++;
 
-    GC_returnAddress ret = *((GC_returnAddress*)(cursor - GC_RETURNADDRESS_SIZE));
-    GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
+    if (frameIsPromotable(s, cursor)) {
+      youngestPromotableFrame = cursor;
+    }    
 
-    switch (fi->kind) {
-      case PCALL_CONT_FRAME: {
-        youngestCFrame = cursor;
-        break;
-      }
-      case PCALL_PARL_FRAME:
-        break;
-      case PCALL_PARR_FRAME:
-        break;
-      default:
-        break;
-    }
-
+    GC_frameInfo fi = getFrameInfoFromFrameTopPointer(s, cursor);
     cursor = cursor - fi->size;
   }
 
@@ -467,10 +463,6 @@ pointer findYoungestPromotableFrame (GC_state s, GC_stack stack) {
     max(s->cumulativeStatistics->maxStackFramesWalkedForHeartbeat,
         numFrames);
 
-  if (youngestCFrame == NULL) {
-    return NULL;
-  }
-
-  return youngestCFrame;
+  return youngestPromotableFrame;
 }
 #endif // ASSERT
