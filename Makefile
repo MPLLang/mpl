@@ -76,11 +76,6 @@ basis-check:
 	@echo 'Type checking basis.'
 	"$(BIN)/$(MLTON)" -disable-ann deadCode -stop tc '$$(SML_LIB)/basis/libs/all.mlb' >/dev/null
 
-.PHONY: basis-library-check
-basis-library-check:
-	@echo 'Type checking basis-library'
-	"$(BIN)/$(MLTON)" -disable-ann deadCode -stop tc "$(SRC)/basis-library/fork-join.mlb" >/dev/null
-
 .PHONY: basis
 basis:
 	$(MAKE) basis-no-check
