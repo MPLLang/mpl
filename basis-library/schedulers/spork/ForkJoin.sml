@@ -50,13 +50,13 @@ struct
 
   (* ======================================================================= *)
   fun __inline_always__ midpoint (i: word, j: word) =
-        i + (Word64.>> (j - i, 0w1))
+    Word64.~>> (i + j, 0w1)
 
   fun __inline_always__ pareduce (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun iter (b: 'a) (i: word, j: word): 'a =
-              if i >= j then b else
+              if i = j then b else
                 let fun __inline_never__ spwn b' =
-                        if i + 0w1 >= j then b' else
+                        if i + 0w1 = j then b' else
                           let val mid = midpoint (i + 0w1, j) in
                             spork {
                               tokenPolicy = TokenPolicyFair,
@@ -78,7 +78,7 @@ struct
                   }
                 end
       in
-        __inline_always__ iter z (i2w i, i2w j)
+        __inline_always__ iter z (i2w (Int.min (i, j)), i2w j)
       end
 
 
@@ -90,10 +90,10 @@ struct
               fn (b, cont) => if cont then f b else (b, cont)
 
           fun iter (b: 'a) (i: word, j: word): 'a * bool =
-              if i >= j then (b, true) else
+              if i = j then (b, true) else
                 let
                     fun __inline_never__ spwn b' =
-                        if i + 0w1 >= j then (b', true) else
+                        if i + 0w1 = j then (b', true) else
                           let val mid = midpoint (i + 0w1, j) in
                             spork {
                               tokenPolicy = TokenPolicyFair,
@@ -114,7 +114,7 @@ struct
                     unstolen = SOME (continue spwn)
                   }
                 end
-          val (result, cont) = __inline_always__ iter z (i2w i, i2w j)
+          val (result, cont) = __inline_always__ iter z (i2w (Int.min (i, j)), i2w j)
       in
         result
       end
