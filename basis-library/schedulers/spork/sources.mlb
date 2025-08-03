@@ -20,13 +20,13 @@ local
     structure SMLNJRandom = Random
   end
 
-  ../shh/CumulativePerProcTimer.sml
-  ../shh/SimpleRandom.sml
+  CumulativePerProcTimer.sml
+  SimpleRandom.sml
   ann
     "allowFFI true"
     "allowPrim true"
   in
-    ../shh/queue/DequeABP.sml
+    DequeABP.sml
   end
   Result.sml
   
@@ -42,7 +42,7 @@ local
   in
     Scheduler.sml
   end
-  SporkJoin.sml
+  ForkJoin.sml
 in
   structure ForkJoin
 end
