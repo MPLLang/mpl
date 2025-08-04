@@ -11,3 +11,7 @@ type int = Int.int
 functor Int_ChooseInt (A: CHOOSE_INT_ARG) :
    sig val f : Int.int A.t end =
    ChooseInt_Int64 (A)
+
+functor Int_ChooseFromInt (A: CHOOSE_FROM_INT_ARG) :
+   sig val f : 'a A.t end =
+   ChooseFromInt_Int64 (A)

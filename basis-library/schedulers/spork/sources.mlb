@@ -12,6 +12,8 @@ local
     structure ArrayExtra = Array
     structure ArraySliceExtra = ArraySlice
     structure Primitive
+
+    functor Int_ChooseFromInt
   end
 
   local
