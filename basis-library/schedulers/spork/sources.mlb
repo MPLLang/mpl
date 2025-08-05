@@ -16,12 +16,6 @@ local
     functor Int_ChooseFromInt
   end
 
-  local
-    $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
-  in
-    structure SMLNJRandom = Random
-  end
-
   CumulativePerProcTimer.sml
   SimpleRandom.sml
   ann

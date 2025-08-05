@@ -1211,8 +1211,7 @@ struct
       val _ = HH.setMinLocalCollectionDepth (mySchedThread, 2)
 
       val myId = myWorkerId ()
-      val myRand = SMLNJRandom.rand (0, myId)
-      (*val myRand = SimpleRandom.rand myId*)
+      val myRand = SimpleRandom.rand myId
       val {queue=myQueue, schedThread, ...} =
         vectorSub (workerLocalData, myId)
       val _ = schedThread := SOME mySchedThread
@@ -1223,8 +1222,7 @@ struct
       (* ------------------------------------------------------------------- *)
 
       fun randomOtherId () =
-        (*let val other = SimpleRandom.boundedInt (0, P-1) myRand*)
-        let val other = SMLNJRandom.randRange (0, P-2) myRand
+        let val other = SimpleRandom.boundedInt (0, P-1) myRand
         in if other < myId then other else other+1
         end
 
