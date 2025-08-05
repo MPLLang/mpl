@@ -172,7 +172,35 @@ struct
   fun __inline_always__ fromInt i = __inline_always__ WordImpl.fromInt i
 
   fun __inline_always__ midpoint (i: idx, j: idx) =
-    WordImpl.~>> (WordImpl.+ (i, j), 0w1)
+    let
+      (* This way is broken! *)
+      (* val mid = WordImpl.~>> (WordImpl.+ (i, j), 0w1) *)
+
+      val range_size = WordImpl.+ (j, WordImpl.~ i)
+      val mid = WordImpl.+ (i, WordImpl.div (range_size, WordImpl.fromInt 2))
+    in
+      (* If using a different midpoint calculation, consider uncommenting
+       * the following for debugging/testing.
+       *)
+
+      (* if toInt i <= toInt mid andalso toInt mid <= toInt j then
+        ()
+      else
+        ( print
+            ( "ERROR: schedulers/spork/ForkJoin.sml: bug! midpoint failure: "
+            ^ Int.toString (toInt i)
+            ^ " "
+            ^ Int.toString (toInt mid)
+            ^ " "
+            ^ Int.toString (toInt j)
+            ^ "\n"
+            )
+
+        ; OS.Process.exit OS.Process.failure
+        ); *)
+
+      mid
+    end
 
   fun __inline_always__ increment (i: idx) =
     WordImpl.+ (i, fromInt 1)
