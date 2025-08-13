@@ -798,9 +798,9 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
       fun simplifyTransfer (t : Transfer.t): Statement.t vector * Transfer.t =
          case t of
             Bug => (Vector.new0 (), t)
-          | Call {func, args, return} =>
+          | Call {func, args, inline, return} =>
                (Vector.new0 (),
-                Call {func = func, return = return,
+                Call {func = func, inline = inline, return = return,
                       args = simplifyUsefulVars args})
           | Case {test, cases = Cases.Con cases, default} =>
                let
@@ -863,10 +863,12 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
           | Case _ => (Vector.new0 (), t)
           | Goto {dst, args} =>
                (Vector.new0 (), Goto {dst = dst, args = simplifyUsefulVars args})
-          | PCall {func, args, cont, parl, parr} =>
+          | Spork {spid, cont, spwn} =>
                (Vector.new0 (),
-                PCall {func = func, cont = cont, parl = parl, parr = parr,
-                       args = simplifyUsefulVars args})
+                Spork {spid = spid, cont = cont, spwn = spwn})
+          | Spoin {spid, seq, sync} =>
+               (Vector.new0 (),
+                Spoin {spid = spid, seq = seq, sync = sync})
           | Raise xs => (Vector.new0 (), Raise (simplifyUsefulVars xs))
           | Return xs => (Vector.new0 (), Return (simplifyUsefulVars xs))
           | Runtime {prim, args, return} =>
@@ -959,7 +961,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                end
       fun simplifyFunction f =
          let
-            val {args, mayInline, name, raises, returns, start, ...} =
+            val {args, inline, name, raises, returns, start, ...} =
                Function.dest f
          in
             case simplifyUsefulFormals args of
@@ -996,7 +998,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   in
                      SOME (Function.new {args = args,
                                          blocks = Vector.fromList (!blocks),
-                                         mayInline = mayInline,
+                                         inline = inline,
                                          name = name,
                                          raises = raises,
                                          returns = returns,

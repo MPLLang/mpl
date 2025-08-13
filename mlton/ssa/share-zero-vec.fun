@@ -181,7 +181,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          List.revMap
          (functions, fn f =>
           let
-             val {args, blocks, mayInline, name, raises, returns, start} =
+             val {args, blocks, inline, name, raises, returns, start} =
                 Function.dest f
 
              (* analysis: compile a list of array vars cast to vectors *)
@@ -215,7 +215,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                    in
                       shrink (Function.new {args = args,
                                             blocks = blocks,
-                                            mayInline = mayInline,
+                                            inline = inline,
                                             name = name,
                                             raises = raises,
                                             returns = returns,

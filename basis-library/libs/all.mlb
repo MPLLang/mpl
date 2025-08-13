@@ -16,5 +16,6 @@ local
    ../sml-nj.mlb
    ../unsafe.mlb
    ../c-types.mlb
+   ../fork-join.mlb
 in
 end

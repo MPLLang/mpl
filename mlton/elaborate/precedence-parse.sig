@@ -22,6 +22,6 @@ signature PRECEDENCE_PARSE =
          Ast.Pat.t vector * Env.t * (unit -> Layout.t)
          -> {args: Ast.Pat.t vector,
              func: Ast.Var.t}
-      val parseExp: Ast.Exp.t vector * Env.t * (unit -> Layout.t) -> Ast.Exp.t
+      val parseExp: Ast.Exp.t vector * Ast.InlineAttr.t * Env.t * (unit -> Layout.t) -> Ast.Exp.t
       val parsePat: Ast.Pat.t vector * Env.t * (unit -> Layout.t) -> Ast.Pat.t
    end

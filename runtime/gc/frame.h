@@ -31,35 +31,43 @@ typedef uintptr_t GC_returnAddress;
  * recording the size of the array) whose elements record byte offsets
  * from the bottom of the frame at which live heap pointers are
  * located.  The size field indicates the size of the frame, including
- * space for the return address.  The pcallInfo field indicates the
- * alternate return addresses of a PCALL_CONT_FRAME.  The
- * sourceSeqIndex field indicates the sequence of source names
- * corresponding to the frame as an index into sourceSeqs; see
- * sources.h.
+ * space for the return address.  The sporkInfo field points to a struct
+ * with a `nest` (indicating the spork nesting depth), an `offset`
+ * (indicating the offset in the frame at which the spork data slots
+ * begin) and a `spwns` pointer to an array (of `nest` size) whose
+ * elements record the alternate return addresses of nested `spork`s.
+ * The sourceSeqIndex field indicates the sequence of source names
+ * corresponding to the frame as an index into sourceSeqs;
+ * see sources.h.
  */
 typedef const uint16_t *GC_frameOffsets;
 
-typedef const struct GC_pcallInfo {
-  GC_returnAddress parl;
-  GC_returnAddress parr;
-} *GC_pcallInfo;
+// How to split up tokens at promotion
+typedef uint32_t GC_tokenPolicy;
+
+typedef const GC_returnAddress *GC_sporkSpwns;
+typedef const GC_tokenPolicy *GC_tokenPolicies;
+typedef const struct GC_sporkInfo {
+  const uint32_t nest;
+  const uint32_t offset;
+  const GC_tokenPolicies tokenPolicies;
+  const GC_sporkSpwns spwns;
+} *GC_sporkInfo;
 
 typedef enum {
   CONT_FRAME,
   CRETURN_FRAME,
   FUNC_FRAME,
   HANDLER_FRAME,
-  PCALL_CONT_FRAME,
-  PCALL_PARL_FRAME,
-  PCALL_PARR_FRAME,
+  SPORK_SPWN_FRAME,
 } GC_frameKind;
 
 typedef const struct GC_frameInfo {
   const GC_frameKind kind;
   const GC_frameOffsets offsets;
-  const GC_pcallInfo pcallInfo;
   const uint16_t size;
   const GC_sourceSeqIndex sourceSeqIndex;
+  const GC_sporkInfo sporkInfo;
 } *GC_frameInfo;
 typedef uint32_t GC_frameIndex;
 #define PRIFI PRIu32
@@ -72,5 +80,11 @@ typedef uint32_t GC_frameIndex;
 static inline GC_frameIndex getFrameIndexFromReturnAddress (GC_state s, GC_returnAddress ra);
 static inline GC_frameInfo getFrameInfoFromFrameIndex (GC_state s, GC_frameIndex findex);
 static inline GC_frameInfo getFrameInfoFromReturnAddress (GC_state s, GC_returnAddress ra);
+
+/* We need `(frameTop - GC_RETURNADDRESS_SIZE)` to be the return address of the
+ * frame. In other words, frameTop should be the StackTop pointer, if this frame
+ * was just pushed.
+ */
+static inline GC_frameInfo getFrameInfoFromFrameTopPointer (GC_state s, pointer frameTop);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

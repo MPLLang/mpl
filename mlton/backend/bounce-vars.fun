@@ -36,6 +36,7 @@ fun shouldAvoid (Block.T {kind, ...}) =
     * going over a bad edge *)
    case kind of
         Kind.Jump => true
+      | Kind.SpoinSync _ => true
       | _ => false
 
 fun shouldBounceAt (Block.T {kind, ...}) =
@@ -44,9 +45,11 @@ fun shouldBounceAt (Block.T {kind, ...}) =
     * which variables go to the stack,
     * and similarly to above,
     * cannot be frivolously changed *)
-   case Kind.frameStyle kind of
-        Kind.OffsetsAndSize => true
-      | _ => false
+   case kind of
+      Kind.Cont _ => true
+    | Kind.CReturn {func, ...} => CFunction.mayGC func
+    | Kind.Handler => true
+    | _ => false
 
 structure Weight = struct
 
@@ -102,7 +105,20 @@ fun transform p =
       fun transformFunc func =
          let
             val {args, blocks, name, raises, returns, start} = Function.dest func
-            val liveInfo = Live.live (func, {shouldConsider = fn _ => true})
+            val liveInfo =
+               let
+                  fun extraEdges (Block.T {kind, ...}) =
+                     case kind of
+                        Kind.Cont {handler, ...} =>
+                           (* Make sure that a cont's live vars
+                            * includes variables live in its handler.
+                            *)
+                           Handler.foldLabel (handler, [], op::)
+                      | _ => []
+               in
+                  Live.live (func, {extraEdges = extraEdges,
+                                    shouldConsider = fn _ => true})
+               end
             fun beginNoFormals label = #beginNoFormals ((#labelLive liveInfo) label)
 
             val {loops, ...} = DirectedGraph.LoopForest.dest
@@ -117,7 +133,7 @@ fun transform p =
 
             val {get=labelInfo, ...} = Property.get
                (Label.plist, Property.initFun
-                  (fn _ => {inLoop=ref NotInLoop, block=ref NONE}))
+                  (fn l => {inLoop=ref NotInLoop, block=ref NONE, alt=Label.new l}))
 
             val numRewritten = ref 0
             fun setRewrite (v, weight) =
@@ -323,8 +339,13 @@ fun transform p =
 
             fun insertRewriteBlock (destLabel, direction) =
                let
-                  val {block, ...} = labelInfo destLabel
-                  val Block.T {label=destLabel, args=destArgs, ...} = (valOf o !) block
+                  val {block, alt, ...} = labelInfo destLabel
+                  val Block.T {label=destLabel, kind=destKind, args=destArgs, ...} = (valOf o !) block
+                  val tgtLabel =
+                     case destKind of
+                        Kind.SporkSpwn _ => alt
+                      | Kind.SpoinSync _ => alt
+                      | _ => destLabel
 
                   val args = Vector.map (destArgs, fn (v, ty) => (Var.new v, ty))
                   val live = beginNoFormals destLabel
@@ -359,23 +380,26 @@ fun transform p =
                                pinned=true,
                                src=src}
                         end)
-                  (* Due to the loop forest construction, (i.e. shouldAvoid)
-                   * The kind of a block on the edge is always Kind.Jump
-                   * since every non-Jump must be followed by a case
-                   * transfer to exit the loop conditionally. *)
-                  val kind = Kind.Jump
                   val label = Label.new destLabel
                   val jumpArgs = Vector.map (args, fn (v, ty) => Operand.Var {var=v, ty=ty})
-                  val transfer = Transfer.Goto {dst=destLabel, args=jumpArgs}
-                  val block = Block.T {args=args, kind=kind, label=label, statements=statements, transfer=transfer}
+                  val transfer = Transfer.Goto {dst=tgtLabel, args=jumpArgs}
+                  val block = Block.T {args=args, kind=destKind, label=label, statements=statements, transfer=transfer}
                   val _ = List.push (newBlocks, block)
+
+                  val _ = Control.diagnostics (fn show =>
+                    let
+                      open Layout
+                    in
+                      show (seq [str "Pushing new rewrite block ", Label.layout label]);
+                      show (Block.layout block)
+                    end)
                in
                   label
                end
 
             fun handleBlock (b as Block.T {args, kind, label, statements, transfer}) =
                let
-                  val {inLoop, ...} = labelInfo label
+                  val {inLoop, alt, ...} = labelInfo label
                   val inLoop = !inLoop
                   fun test l =
                      let
@@ -387,18 +411,37 @@ fun transform p =
                            | (InLoop _, NotInLoop) => SOME LeaveLoop
                            | _ => NONE
                      end
-                  val needsRewrite = ref false
                   fun rewrite destLabel =
                      case test destLabel of
                           NONE => destLabel
-                        | SOME dir =>
-                             ( needsRewrite := true ;
-                               insertRewriteBlock (destLabel, dir))
+                        | SOME dir => insertRewriteBlock (destLabel, dir)
                   val newTransfer = Transfer.replaceLabels(transfer, rewrite)
+                  fun split () =
+                     let
+                        val _ =
+                           List.push (newBlocks, Block.T {args = args,
+                                                          kind = Kind.Jump,
+                                                          label = alt,
+                                                          statements = statements,
+                                                          transfer = newTransfer})
+                        val newArgs = Vector.map (args, fn (x, ty) => (Var.new x, ty))
+                     in
+                        Block.T {args = newArgs,
+                                 kind = kind,
+                                 label = label,
+                                 statements = Vector.new0 (),
+                                 transfer = Transfer.Goto {args = Vector.map (newArgs, fn (x, ty) => Operand.Var {ty = ty, var = x}),
+                                                           dst = alt}}
+                     end
                in
-                  if !needsRewrite
-                     then Block.T {args=args, kind=kind, label=label, statements=statements, transfer=newTransfer}
-                     else b
+                  case kind of
+                     Kind.SporkSpwn _ => split ()
+                   | Kind.SpoinSync _ => split ()
+                   | _ => Block.T {args = args,
+                                   kind = kind,
+                                   label = label,
+                                   statements = statements,
+                                   transfer = newTransfer}
                end
             val _ = Vector.foreach (blocks, fn b => List.push (newBlocks, handleBlock b))
             val newBlocks = Vector.fromListRev (!newBlocks)

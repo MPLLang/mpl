@@ -14,10 +14,10 @@ struct
 
   type 'a t = 'a result
 
-  fun result f =
-    Finished (f ()) handle e => Raised e
+  fun __inline_always__ result f =
+    Finished (__inline_always__ f ()) handle e => Raised e
 
-  fun extractResult r =
+  fun __inline_always__ extractResult r =
     case r of
       Finished x => x
     | Raised e => raise e

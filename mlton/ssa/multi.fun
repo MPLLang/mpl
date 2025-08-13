@@ -213,23 +213,9 @@ fun multi (p as Program.T {functions, main, ...})
                                      (FuncInfo.threadCopyCurrent fi)))
                               else ()
                           end
-                      | PCall {func = g, ...}
-                       => let
-                            val gi = funcInfo g
-                          in
-                            Calls.inc (FuncInfo.calls gi) ;
-                            addEdge {from = funcNode f,
-                                     to = funcNode g} ;
-                            if usesThreadsOrConts
-                              then ThreadCopyCurrent.when
-                                   (FuncInfo.threadCopyCurrent gi,
-                                    fn () =>
-                                    (ThreadCopyCurrent.force
-                                     (LabelInfo.threadCopyCurrent li) ;
-                                     ThreadCopyCurrent.force
-                                     (FuncInfo.threadCopyCurrent fi)))
-                              else ()
-                          end
+                      (* TODO: should spork/spoin trigger multi? *)
+                      (* | Spork {spid, cont, spwn} => ??? *)
+                      (* | Spoin {spid, seq, sync} => ??? *)
                       | Runtime {prim, ...}
                       => if usesThreadsOrConts
                             andalso

@@ -113,11 +113,12 @@ signature RSSA_TREE =
                         return: Return.t}
              | Goto of {args: Operand.t vector,
                         dst: Label.t}
-             | PCall of {args: Operand.t vector,
-                         func: Func.t,
+             | Spork of {spid: Spid.t,
                          cont: Label.t,
-                         parl: Label.t,
-                         parr: Label.t}
+                         spwn: Label.t}
+             | Spoin of {spid: Spid.t,
+                         seq: Label.t,
+                         sync: Label.t}
              (* Raise implicitly raises to the caller.  
               * I.E. the local handler stack must be empty.
               *)
@@ -149,7 +150,8 @@ signature RSSA_TREE =
              | CReturn of {func: Type.t CFunction.t}
              | Handler
              | Jump
-             | PCallReturn of {cont: Label.t, parl: Label.t, parr: Label.t}
+             | SporkSpwn of {spid: Spid.t}
+             | SpoinSync of {spid: Spid.t}
 
             datatype frameStyle = None | OffsetsAndSize | SizeOnly
             val frameStyle: t -> frameStyle

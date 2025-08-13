@@ -241,17 +241,19 @@ fun simplifyTypes (I.Program.T {body, datatypes}) =
          end
       and fixLambda (l: I.Lambda.t): O.Lambda.t =
          let
-            val {arg, argType, body, mayInline} = I.Lambda.dest l
+            val {arg, argType, body, inline} = I.Lambda.dest l
          in
             O.Lambda.make {arg = arg,
                            argType = fixType argType,
                            body = fixExp body,
-                           mayInline = mayInline}
+                           inline = inline}
          end
       and fixPrimExp (e: I.PrimExp.t): O.PrimExp.t =
          case e of
-            I.PrimExp.App {arg, func} => O.PrimExp.App {arg = fixVarExp arg,
-                                                        func = fixVarExp func}
+            I.PrimExp.App {arg, func, inline} =>
+               O.PrimExp.App {arg = fixVarExp arg,
+                              func = fixVarExp func,
+                              inline = inline}
           | I.PrimExp.Case {cases, default, test} =>
                let
                   val cases =

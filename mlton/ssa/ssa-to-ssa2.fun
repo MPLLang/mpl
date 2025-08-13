@@ -247,21 +247,24 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
       fun convertTransfer (t: S.Transfer.t): S2.Transfer.t =
          case t of
             S.Transfer.Bug => S2.Transfer.Bug
-          | S.Transfer.Call {args, func, return} =>
+          | S.Transfer.Call {args, func, inline = inline, return} =>
                S2.Transfer.Call {args = args,
                                  func = func,
+                                 inline = inline,
                                  return = convertReturn return}
           | S.Transfer.Case {cases, default, test} =>
                S2.Transfer.Case {cases = convertCases cases,
                                  default = default,
                                  test = test}
           | S.Transfer.Goto r => S2.Transfer.Goto r
-          | S.Transfer.PCall {args, func, cont, parl, parr} =>
-               S2.Transfer.PCall {args = args,
-                                  func = func,
+          | S.Transfer.Spork {spid, cont, spwn} =>
+               S2.Transfer.Spork {spid = spid,
                                   cont = cont,
-                                  parl = parl,
-                                  parr = parr}
+                                  spwn = spwn}
+          | S.Transfer.Spoin {spid, seq, sync} =>
+               S2.Transfer.Spoin {spid = spid,
+                                  seq = seq,
+                                  sync = sync}
           | S.Transfer.Raise v => S2.Transfer.Raise v
           | S.Transfer.Return v => S2.Transfer.Return v
           | S.Transfer.Runtime {args, prim, return} =>
@@ -280,7 +283,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
          List.map
          (functions, fn f =>
           let
-             val {args, blocks, mayInline, name, raises, returns, start} =
+             val {args, blocks, inline, name, raises, returns, start} =
                 S.Function.dest f
              fun rr tvo = Option.map (tvo, convertTypes)
              val blocks = Vector.map (blocks, convertBlock)
@@ -289,7 +292,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
           in
              S2.Function.new {args = convertFormals args,
                               blocks = blocks,
-                              mayInline = mayInline,
+                              inline = inline,
                               name = name,
                               raises = rr raises,
                               returns = rr returns,

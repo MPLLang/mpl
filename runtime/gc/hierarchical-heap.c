@@ -1290,7 +1290,7 @@ void HM_HH_freeAllDependants(
   HM_UnionFindNode child = parent->dependant1;
   parent->dependant1 = NULL;
 
-  size_t numFreed = 0;
+  LOCAL_USED_FOR_ASSERT size_t numFreed = 0;
 
   /** Invariant: parent (and every node above it) has an inverted dependant1
     * pointer, which is pointing to its ancestor. There must be NO pointer

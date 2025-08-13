@@ -22,7 +22,7 @@ structure Scope = UniqueId ()
 
 fun zoneFunction f =
    let
-      val {args, mayInline, name, raises, returns, start, ...} = Function.dest f
+      val {args, inline, name, raises, returns, start, ...} = Function.dest f
       datatype z = datatype Exp.t
       datatype z = datatype Statement.t
       val {get = labelInfo: Label.t -> {isInLoop: bool ref,
@@ -236,7 +236,7 @@ fun zoneFunction f =
    in
       Function.new {args = args,
                     blocks = blocks,
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,

@@ -73,7 +73,7 @@ signature CORE_ML =
             type t
             datatype noMatch = Impossible | RaiseAgain | RaiseBind | RaiseMatch
             datatype node =
-               App of t * t
+               App of {func: t, arg: t, inline: InlineAttr.t}
              | Case of {ctxt: unit -> Layout.t,
                         kind: string * string,
                         nest: string list,
@@ -147,11 +147,11 @@ signature CORE_ML =
             val dest: t -> {arg: Var.t,
                             argType: Type.t,
                             body: Exp.t,
-                            mayInline: bool}
+                            inline: InlineAttr.t}
             val make: {arg: Var.t,
                        argType: Type.t,
                        body: Exp.t,
-                       mayInline: bool} -> t
+                       inline: InlineAttr.t} -> t
          end
       sharing type Exp.lambda = Lambda.t
 

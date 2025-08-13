@@ -1,4 +1,4 @@
-(* Copyright (C) 2019-2021 Matthew Fluet.
+(* Copyright (C) 2019-2021,2024 Matthew Fluet.
  * Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -29,6 +29,7 @@ signature ATOMS' =
       structure Field: FIELD
       structure Func: FUNC
       structure Handler: HANDLER
+      structure InlineAttr: INLINE_ATTR
       structure IntSize: INT_SIZE
       structure Label: LABEL
       structure Prim: PRIM
@@ -41,6 +42,7 @@ signature ATOMS' =
       structure SortedRecord: RECORD
       structure SourceInfo: SOURCE_INFO
       structure SourceMaps: SOURCE_MAPS
+      structure Spid: SPID
       structure Symbol: SYMBOL
       structure Tycon: TYCON
       structure TyconKind: TYCON_KIND
@@ -66,6 +68,7 @@ signature ATOMS' =
          = Tycon.RealSize
       sharing RealX = Const.RealX
       sharing SourceInfo = ProfileExp.SourceInfo
+      sharing Spid = Prim.Spid
       sharing TyconKind = Tycon.Kind
       sharing WordSize = Cases.WordSize = CType.WordSize = Prim.WordSize
          = Tycon.WordSize = WordX.WordSize
@@ -101,6 +104,7 @@ signature ATOMS =
       sharing Field = Atoms.Field
       sharing Func = Atoms.Func
       sharing Handler = Atoms.Handler
+      sharing InlineAttr = Atoms.InlineAttr
       sharing IntSize = Atoms.IntSize
       sharing Label = Atoms.Label
       sharing Prim = Atoms.Prim
@@ -114,6 +118,7 @@ signature ATOMS =
       sharing SourceInfo = Atoms.SourceInfo
       sharing SourceMaps = Atoms.SourceMaps
       sharing Symbol = Atoms.Symbol
+      sharing Spid = Atoms.Spid
       sharing Tycon = Atoms.Tycon
       sharing TyconKind = Atoms.TyconKind
       sharing Tyvar = Atoms.Tyvar

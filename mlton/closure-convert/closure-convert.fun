@@ -43,6 +43,7 @@ in
    structure Block = Block
    structure Datatype = Datatype
    structure Dexp = DirectExp
+   structure Spid = Spid
    structure Func = Func
    structure Function = Function
    structure SourceInfo = SourceInfo
@@ -109,7 +110,7 @@ structure Accum =
                  {globals = Vector.new0 ()}
                  (Function.new {args = Vector.new0 (),
                                 blocks = Vector.fromList blocks,
-                                mayInline = false, (* doesn't matter *)
+                                inline = InlineAttr.Auto, (* doesn't matter *)
                                 name = Func.newNoname (),
                                 raises = NONE,
                                 returns = SOME (Vector.new1 (Type.tuple tys)),
@@ -193,6 +194,17 @@ structure VarInfo =
                 isGlobal: bool ref,
                 lambda: Slambda.t option,
                 replacement: Var.t ref,
+                sporkInfo: {bodyres: Var.t,
+                            bodyexn: Var.t,
+                            data: Var.t,
+                            spwnarg_data: Var.t,
+                            spwnres: Var.t,
+                            seqres: Var.t,
+                            bodyres_data: Var.t,
+                            syncres: Var.t,
+                            exnseqres: Var.t,
+                            bodyexn_data: Var.t,
+                            exnsyncres: Var.t} option ref,
                 status: Status.t ref,
                 value: Value.t}
 
@@ -263,6 +275,7 @@ fun closureConvert
                                isGlobal = ref false,
                                lambda = lambda,
                                replacement = ref x,
+                               sporkInfo = ref NONE,
                                status = ref Status.init,
                                value = v})
             fun newVar (x, v) = newVar' (x, v, NONE)
@@ -308,7 +321,7 @@ fun closureConvert
                   datatype z = datatype PrimExp.t
                in
                   case exp of
-                     App {func, arg} =>
+                     App {func, arg, ...} =>
                         let val arg = varExp arg
                            val result = new ()
                         in Value.addHandler
@@ -353,46 +366,116 @@ fun closureConvert
                            ; Value.coerce {from = loopExp handler, to = result}
                         end
                    | Lambda l => set (loopLambda (l, var))
-                   | PrimApp {prim = Prim.PCall, targs, args} =>
-                        let
-                           fun targ i = Vector.sub (targs, i)
-                           val tb = targ 1
-                           val tc = targ 2
-                           val te = targ 4
-                           fun arg i = Vector.sub (args, i)
-                           val func = arg 0
-                           val farg = arg 1
-                           val cont = arg 2
-                           val parl = arg 3
-                           val parr = arg 4
-                           val rarg = arg 5
+                   | PrimApp {prim = Prim.Spork {tokenSplitPolicy}, targs, args} =>
+                     (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
+                     let fun targ i = Vector.sub (targs, i)
+                         fun arg i = Vector.sub (args, i)
+                         val tar = targ 1
+                         val tba = targ 2
+                         val tbr = targ 3
+                         val td = targ 4
+                         val tc = targ 5
+                         val body = arg 0
+                         val bodyarg = arg 1
+                         val spwn = arg 2
+                         val spwnarg = arg 3
+                         val seq = arg 4
+                         val sync = arg 5
+                         val exnseq = arg 6
+                         val exnsync = arg 7
 
-                           val fres = Var.newString "fres"
-                           val _ = loopBind {var = fres, ty = tb,
-                                             exp = App {func = func,
-                                                        arg = farg}}
+                         val bodyres = Var.newString "bodyres"
+                         val bodyexn = Var.newString "bodyexn"
 
-                           val result = new ()
+                         val data = Var.newString "data"
 
-                           val cres = Var.newString "cres"
-                           val _ = loopBind {var = cres, ty = tc,
-                                             exp = App {func = cont,
-                                                        arg = SvarExp.mono fres}}
-                           val _ = Value.coerce {from = value cres, to = result}
+                         val spwnarg_data = Var.newString "spwnarg_data"
+                         val spwnres = Var.newString "spwnres"
 
-                           val lres = Var.newString "lres"
-                           val _ = loopBind {var = lres, ty = tc,
-                                             exp = App {func = parl,
-                                                        arg = SvarExp.mono fres}}
-                           val _ = Value.coerce {from = value lres, to = result}
+                         val seqres = Var.newString "seqres"
+                         val bodyres_data = Var.newString "bodyres_data"
+                         val syncres = Var.newString "syncres"
 
-                           val rres = Var.newString "rres"
-                           val _ = loopBind {var = rres, ty = te,
-                                             exp = App {func = parr,
-                                                        arg = rarg}}
-                        in
-                           ()
-                        end
+                         val exnseqres = Var.newString "exnseqres"
+                         val bodyexn_data = Var.newString "bodyexn_data"
+                         val exnsyncres = Var.newString "exnsyncres"
+
+                         val result = new ()
+
+                         val inline = InlineAttr.Auto (* doesn't matter *)
+                         val {sporkInfo, ...} = varInfo var
+                         val _ = sporkInfo := SOME {bodyres = bodyres,
+                                                    bodyexn = bodyexn,
+                                                    data = data,
+                                                    spwnarg_data = spwnarg_data,
+                                                    spwnres = spwnres,
+                                                    seqres = seqres,
+                                                    bodyres_data = bodyres_data,
+                                                    syncres = syncres,
+                                                    exnseqres = exnseqres,
+                                                    bodyexn_data = bodyexn_data,
+                                                    exnsyncres = exnsyncres}
+
+                         val _ = loopBind {var = bodyres,
+                                           ty = tar,
+                                           exp = App {func = body,
+                                                      arg = bodyarg,
+                                                      inline = inline}}
+                         val _ = newVar (bodyexn, Value.fromType Stype.exn)
+
+                         val _ = newVar (data, Value.fromType td)
+                         val _ = Value.coerce {from = Value.sporkDataValue td,
+                                               to = value data}
+
+                         val _ = loopBind {var = spwnarg_data,
+                                           ty = Stype.tuple (Vector.new2 (tba, td)),
+                                           exp = Tuple (Vector.new2
+                                                        (spwnarg,
+                                                         SvarExp.mono data))}
+                         val _ = loopBind {var = spwnres,
+                                           ty = tbr,
+                                           exp = App {func = spwn,
+                                                      arg = SvarExp.mono spwnarg_data,
+                                                      inline = inline}}
+
+                         val _ = loopBind {var = seqres,
+                                           ty = tc,
+                                           exp = App {func = seq,
+                                                      arg = SvarExp.mono bodyres,
+                                                      inline = inline}}
+                         val _ = Value.coerce {from = value seqres, to = result}
+                         val _ = loopBind {var = bodyres_data,
+                                           ty = Stype.tuple (Vector.new2 (tar, td)),
+                                           exp = Tuple (Vector.new2
+                                                        (SvarExp.mono bodyres,
+                                                         SvarExp.mono data))}
+                         val _ = loopBind {var = syncres,
+                                           ty = tc,
+                                           exp = App {func = sync,
+                                                      arg = SvarExp.mono bodyres_data,
+                                                      inline = inline}}
+                         val _ = Value.coerce {from = value syncres, to = result}
+
+                         val _ = loopBind {var = exnseqres,
+                                           ty = tc,
+                                           exp = App {func = exnseq,
+                                                      arg = SvarExp.mono bodyexn,
+                                                      inline = inline}}
+                         val _ = Value.coerce {from = value exnseqres, to = result}
+                         val _ = loopBind {var = bodyexn_data,
+                                           ty = Stype.tuple (Vector.new2 (Stype.exn, td)),
+                                           exp = Tuple (Vector.new2
+                                                        (SvarExp.mono bodyexn,
+                                                         SvarExp.mono data))}
+                         val _ = loopBind {var = exnsyncres,
+                                           ty = tc,
+                                           exp = App {func = exnsync,
+                                                      arg = SvarExp.mono bodyexn_data,
+                                                      inline = inline}}
+                         val _ = Value.coerce {from = value exnsyncres, to = result}
+                     in
+                       ()
+                     end
                    | PrimApp {prim, args, ...} =>
                         set (Value.primApply {prim = prim,
                                               args = varExps args,
@@ -590,7 +673,6 @@ fun closureConvert
             Value.Lambdas l => lambdasInfo l
           | _ => Error.bug "ClosureConvert.valueLambdasInfo: non-lambda"
       val varLambdasInfo = valueLambdasInfo o value
-      val varExpLambdasInfo = varLambdasInfo o SvarExp.var
       val emptyTypes = Vector.new0 ()
       val datatypes =
          Vector.map
@@ -714,7 +796,7 @@ fun closureConvert
       (*------------------------------------*)                 
       (*               apply                *)
       (*------------------------------------*)
-      fun apply {func, arg, resultVal}: Dexp.t =
+      fun apply {func, arg, inline, resultVal}: Dexp.t =
          let
             val func = varExpInfo func
             val arg = varExpInfo arg
@@ -743,10 +825,46 @@ fun closureConvert
                                    args = Vector.new2 (Dexp.var env,
                                                        coerce (argExp, argVal,
                                                                value param)),
+                                   inline = inline,
                                    ty = valueType result},
                                   result, resultVal)}
                end))}
          end
+      (*------------------------------------*)
+      (*               unthunk              *)
+      (*------------------------------------*)
+      (*fun unthunk {func, resultVal}: Dexp.t =
+         let
+            val func = varExpInfo func
+            val funcVal = VarInfo.value func
+            val argVal = Value.tuple (Vector.new0 ())
+            val argExp = Dexp.unit
+            val ty = valueType resultVal
+            val {cons, ...} = valueLambdasInfo funcVal
+         in Dexp.casee
+            {test = convertVarInfo func,
+             ty = ty,
+             default = NONE,
+             cases =
+             Dexp.Con
+             (Vector.map
+              (cons, fn {lambda, con} =>
+               let
+                  val {arg = param, body, ...} = Slambda.dest lambda
+                  val info as LambdaInfo.T {name, ...} = lambdaInfo lambda
+                  val result = expValue body
+                  val env = (Var.newString "env", lambdaInfoType info)
+               in {con = con,
+                   args = Vector.new1 env,
+                   body = coerce (Dexp.call
+                                  {func = name,
+                                   args = Vector.new2 (Dexp.var env,
+                                                       coerce (argExp, argVal,
+                                                               value param)),
+                                   ty = valueType result},
+                                  result, resultVal)}
+               end))}
+         end*)
       (*------------------------------------*)
       (*             convertExp             *)
       (*------------------------------------*)
@@ -792,7 +910,7 @@ fun closureConvert
          if !Control.closureConvertShrink
             then Ssa.shrinkFunction {globals = Vector.new0 ()}
          else fn f => f
-      fun addFunc (ac, {args, body, isMain, mayInline, mayRaise, name, returns}) =
+      fun addFunc (ac, {args, body, isMain, inline, mayRaise, name, returns}) =
          let
             val (start, blocks) =
                Dexp.linearize (body, if mayRaise then Ssa.Handler.Caller else Ssa.Handler.Dead)
@@ -800,7 +918,7 @@ fun closureConvert
                shrinkFunction
                (Function.new {args = args,
                               blocks = Vector.fromList blocks,
-                              mayInline = mayInline,
+                              inline = inline,
                               name = name,
                               raises = if mayRaise
                                           then raises
@@ -833,7 +951,7 @@ fun closureConvert
                    Sdec.MonoVal {exp, var, ...} =>
                       let
                          val info as {isGlobal, value, ...} = varInfo var
-                         val (exp, ac) = convertPrimExp (exp, value, ac)
+                         val (exp, ac) = convertPrimExp (exp, info, ac)
                          val bind = {var = newVarInfo (var, info),
                                      ty = valueType value,
                                      exp = exp}
@@ -879,8 +997,9 @@ fun closureConvert
                           SprimExp.layout o #1,
                           Layout.ignore,
                           Trace.assertTrue)
-         (fn (e: SprimExp.t, v: Value.t, ac: Accum.t) =>
+         (fn (e: SprimExp.t, info: VarInfo.t, ac: Accum.t) =>
          let
+            val {value = v, ...} = info
             val ty = valueType v
             fun convertJoin (e, ac) =
                let val (e', ac) = convertExp (e, ac)
@@ -889,8 +1008,8 @@ fun closureConvert
             fun simple e = (e, ac)
          in
             case e of
-               SprimExp.App {func, arg} =>
-                  (apply {func = func, arg = arg, resultVal = v},
+               SprimExp.App {func, arg, inline} =>
+                  (apply {func = func, arg = arg, inline = inline, resultVal = v},
                    ac)
              | SprimExp.Case {test, cases, default} =>
                   let
@@ -982,138 +1101,160 @@ fun closureConvert
                                       args = Vector.new1 (lambdaInfoTuple info)},
                          ac)
                   end
-             | SprimExp.PrimApp {prim = Prim.PCall, targs, args} =>
-                  let
-                     fun targ i = Vector.sub (targs, i)
-                     val tb = targ 1
-                     val te = targ 4
-                     fun arg i = Vector.sub (args, i)
-                     val func = arg 0
-                     val farg = arg 1
-                     val cont = arg 2
-                     val parl = arg 3
-                     val parr = arg 4
-                     val rarg = arg 5
+             | SprimExp.PrimApp {prim = Prim.Spork {tokenSplitPolicy}, targs, args} =>
+               (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'bb * ('ar -> 'c) * ('ar * 'd -> 'c) -> 'c *)
+               let
+                 fun arg i = Vector.sub (args, i)
+                 val body = arg 0
+                 val bodyarg = arg 1
+                 val spwn = arg 2
+                 val spwnarg = arg 3
+                 val seq = arg 4
+                 val sync = arg 5
+                 val exnseq = arg 6
+                 val exnsync = arg 7
+                 val spid = Spid.newNoname ()
+                 val _ = Spid.setTokenSplitPolicy (spid, tokenSplitPolicy)
+                 val {bodyres, bodyexn, data, spwnarg_data, spwnres, bodyres_data, bodyexn_data, ...} =
+                    valOf (! (#sporkInfo info))
 
-                     val fres = Var.fromString "fres"
-                     val fres_value = Value.fromType tb
-                     val _ = setVarInfo (fres, {frees = ref (ref []),
-                                                isGlobal = ref false,
-                                                lambda = NONE,
-                                                replacement = ref fres,
-                                                status = ref Status.init,
-                                                value = fres_value})
-                     val _ =
-                        Vector.foreach
-                        (#cons (varExpLambdasInfo func), fn {lambda, ...} =>
-                         let
-                            val {body, ...} = Slambda.dest lambda
-                         in
-                            Value.coerce {from = expValue body, to = fres_value}
-                         end)
-                     val fres_ty = valueType fres_value
+                 val {value = bodyres_value, ...} = varInfo bodyres
+                 val {value = bodyexn_value, ...} = varInfo bodyexn
+                 val {value = data_value, ...} = varInfo data
+                 val {value = spwnarg_data_value, ...} = varInfo spwnarg_data
+                 val {value = spwnres_value, ...} = varInfo spwnres
+                 val {value = bodyres_data_value, ...} = varInfo bodyres_data
+                 val {value = bodyexn_data_value, ...} = varInfo bodyexn_data
+                 val bodyres_ty = valueType bodyres_value
+                 val bodyexn_ty = valueType bodyexn_value
+                 val data_ty = valueType data_value
+                 val spwnarg_data_ty = valueType spwnarg_data_value
+                 val spwnres_ty = valueType spwnres_value
+                 val bodyres_data_ty = valueType bodyres_data_value
+                 val bodyexn_data_ty = valueType bodyexn_data_value
 
-                     val args = Vector.new2 (SvarExp.var func, SvarExp.var farg)
-                     val args = Vector.keepAll (args, not o isGlobal)
+                 val body = apply {func = body,
+                                   arg = bodyarg,
+                                   inline = InlineAttr.Auto,
+                                   resultVal = bodyres_value}
 
-                     val name = Func.newString (Var.originalName (SvarExp.var func))
-                     val ac =
-                        newScope
-                        (args, fn args' =>
-                         let
-                            val args' =
-                               Vector.map2
-                               (args, args', fn (x, x') =>
-                                (x', valueType (value x)))
-                            val body = apply {func = func,
-                                              arg = farg,
-                                              resultVal = fres_value}
-                            val body =
-                               case raiseTy of
-                                  NONE => body
-                                | SOME raiseTy =>
-                                     Dexp.handlee
-                                     {try = body,
-                                      ty = fres_ty,
-                                      catch = (Var.newNoname (), raiseTy),
-                                      handler = Dexp.bug "PCall func raised"}
-                         in
-                            addFunc (ac, {args = args',
-                                          body = body,
-                                          isMain = false,
-                                          mayInline = true,
-                                          mayRaise = false,
-                                          name = name,
-                                          returns = Vector.new1 fres_ty})
-                         end)
+                 val seq =
+                    apply {func = seq,
+                           arg = SvarExp.mono bodyres,
+                           inline = InlineAttr.Auto,
+                           resultVal = v}
+                 val sync =
+                    newScope
+                    (Vector.new1 data, fn xs =>
+                     let
+                        val data' = Vector.first xs
+                     in
+                        Dexp.lett
+                        {decs = [{var = data',
+                                  exp = Dexp.primApp {args = Vector.new0 (),
+                                                      prim = Prim.Spork_getData spid,
+                                                      targs = Vector.new1 data_ty,
+                                                      ty = data_ty}},
+                                 {var = bodyres_data,
+                                  exp = Dexp.tuple {exps = Vector.new2 (convertVar bodyres,
+                                                                        convertVar data),
+                                                    ty = bodyres_data_ty}}],
+                         body = apply {func = sync,
+                                       arg = SvarExp.mono bodyres_data,
+                                       inline = InlineAttr.Auto,
+                                       resultVal = v}}
+                     end)
+                 val valCont =
+                    {arg = (bodyres, bodyres_ty),
+                     body = Dexp.spoin
+                              {spid = spid,
+                               seq = seq,
+                               sync = sync,
+                               ty = ty}}
 
-                     val args = Vector.map (args, convertVar)
+                 val exnseq =
+                    apply {func = exnseq,
+                           arg = SvarExp.mono bodyexn,
+                           inline = InlineAttr.Auto,
+                           resultVal = v}
+                 val exnsync =
+                    newScope
+                    (Vector.new1 data, fn xs =>
+                     let
+                        val data' = Vector.first xs
+                     in
+                        Dexp.lett
+                        {decs = [{var = data',
+                                  exp = Dexp.primApp {args = Vector.new0 (),
+                                                      prim = Prim.Spork_getData spid,
+                                                      targs = Vector.new1 data_ty,
+                                                      ty = data_ty}},
+                                 {var = bodyexn_data,
+                                  exp = Dexp.tuple {exps = Vector.new2 (convertVar bodyexn,
+                                                                        convertVar data),
+                                                    ty = bodyexn_data_ty}}],
+                         body = apply {func = exnsync,
+                                       arg = SvarExp.mono bodyexn_data,
+                                       inline = InlineAttr.Auto,
+                                       resultVal = v}}
+                     end)
+                 val exnCont =
+                    {arg = (bodyexn, bodyexn_ty),
+                     body = Dexp.spoin
+                              {spid = spid,
+                               seq = exnseq,
+                               sync = exnsync,
+                               ty = ty}}
 
-                     val (carg, cont) =
-                        newScope
-                        (Vector.new1 fres, fn xs =>
-                         let
-                            val carg = Vector.first xs
-                         in
-                            (carg,
-                             apply {func = cont,
-                                    arg = SvarExp.mono fres,
-                                    resultVal = v})
-                         end)
-                     val (larg, parl) =
-                        newScope
-                        (Vector.new1 fres, fn xs =>
-                         let
-                            val larg = Vector.first xs
-                         in
-                            (larg,
-                             apply {func = parl,
-                                    arg = SvarExp.mono fres,
-                                    resultVal = v})
-                         end)
+                 val cont = Dexp.try
+                              {exp = body,
+                               ty = ty,
+                               valCont = valCont,
+                               exnCont = exnCont}
 
-                     val rres = Var.fromString "rres"
-                     val rres_value = Value.fromType te
-                     val _ = setVarInfo (rres, {frees = ref (ref []),
-                                                isGlobal = ref false,
-                                                lambda = NONE,
-                                                replacement = ref rres,
-                                                status = ref Status.init,
-                                                value = rres_value})
-                     val _ =
-                        Vector.foreach
-                        (#cons (varExpLambdasInfo parr), fn {lambda, ...} =>
-                         let
-                            val {body, ...} = Slambda.dest lambda
-                         in
-                            Value.coerce {from = expValue body, to = rres_value}
-                         end)
-                     val rres_ty = valueType rres_value
-                     val parr = apply {func = parr, arg = rarg,
-                                       resultVal = rres_value}
-                     val parr =
-                        case raiseTy of
-                           NONE => parr
-                         | SOME raiseTy =>
-                              Dexp.handlee
-                              {try = parr,
-                               ty = rres_ty,
-                               catch = (Var.newNoname (), raiseTy),
-                               handler = Dexp.bug "PCall parr raised"}
-                     val parr =
-                        Dexp.name (parr, fn _ =>
-                                   Dexp.bug "PCall parr returned")
-                  in
-                     (Dexp.pcall {func = name,
-                                  args = args,
-                                  carg = (carg, fres_ty),
-                                  cont = cont,
-                                  larg = (larg, fres_ty),
-                                  parl = parl,
-                                  parr = parr,
-                                  ty = ty},
-                      ac)
-                  end
+                 val spwn = apply {func = spwn,
+                                   arg = SvarExp.mono spwnarg_data,
+                                   inline = InlineAttr.Auto,
+                                   resultVal = spwnres_value}
+                 val spwn =
+                    case raiseTy of
+                       NONE => spwn
+                     | SOME raiseTy =>
+                          Dexp.handlee
+                          {try = spwn,
+                           ty = spwnres_ty,
+                           catch = (Var.newNoname (), raiseTy),
+                           handler = Dexp.bug "Spork spwn raised"}
+                 val spwn =
+                    Dexp.name (spwn, fn _ =>
+                               Dexp.bug "Spork spwn returned")
+                 val spwn =
+                    newScope
+                    (Vector.new1 data, fn xs =>
+                     let
+                        val data' = Vector.first xs
+                     in
+                        Dexp.lett
+                        {decs = [{var = data',
+                                  exp = Dexp.primApp {args = Vector.new0 (),
+                                                      prim = Prim.Spork_getData spid,
+                                                      targs = Vector.new1 data_ty,
+                                                      ty = data_ty}},
+                                 {var = spwnarg_data,
+                                  exp = Dexp.tuple {exps = Vector.new2 (convertVarExp spwnarg,
+                                                                        convertVar data),
+                                                    ty = spwnarg_data_ty}}],
+                         body = spwn}
+                     end)
+
+                 val exp = Dexp.spork
+                             {spid = spid,
+                              cont = cont,
+                              spwn = spwn,
+                              ty = ty}
+               in
+                 (exp, ac)
+               end
              | SprimExp.PrimApp {prim, targs, args} =>
                   let
                      val prim = Prim.map (prim, convertType)
@@ -1199,11 +1340,11 @@ fun closureConvert
                                          v1 (coerce (convertVarInfo y,
                                                      VarInfo.value y, v)))
                              end
-                        | Prim.PCall_forkThreadAndSetData _ =>
+                        | Prim.Spork_forkThreadAndSetData _ =>
                              let
                                 val t = varExpInfo (arg 0)
                                 val x = varExpInfo (arg 1)
-                                val v = Value.pcallDataValue (Vector.first targs)
+                                val v = Value.sporkDataValue (Vector.first targs)
                              in
                                 primApp (v1 (valueType v),
                                          v2 (convertVarInfo t,
@@ -1261,6 +1402,7 @@ fun closureConvert
                                    typeOps = {deArray = Type.deArray,
                                               deArrow = fn _ => Error.bug "ClosureConvert.convertPrimExp: deArrow",
                                               deRef = Type.deRef,
+                                              deTuple = Type.deTuple,
                                               deVector = Type.deVector,
                                               deWeak = Type.deWeak}}),
                                   Vector.map (args, convertVarInfo))
@@ -1282,7 +1424,7 @@ fun closureConvert
                          info as LambdaInfo.T {frees, name, recs, ...},
                          ac: Accum.t): Accum.t =
          let
-            val {arg = argVar, body, mayInline, ...} = Slambda.dest lambda
+            val {arg = argVar, body, inline, ...} = Slambda.dest lambda
             val argVarInfo = varInfo argVar
             val env = Var.newString "env"
             val envType = lambdaInfoType info
@@ -1311,7 +1453,7 @@ fun closureConvert
                  addFunc (ac, {args = args,
                                body = body,
                                isMain = false,
-                               mayInline = mayInline,
+                               inline = inline,
                                mayRaise = true,
                                name = name,
                                returns = returns})
@@ -1328,7 +1470,7 @@ fun closureConvert
              val (body, ac) = convertExp (body, Accum.empty)
              val ac = addFunc (ac, {args = Vector.new0 (),
                                     body = body,
-                                    mayInline = false,
+                                    inline = InlineAttr.Never,
                                     mayRaise = false,
                                     isMain = true,
                                     name = main,

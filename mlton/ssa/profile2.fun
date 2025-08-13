@@ -13,7 +13,7 @@ open S
 
 fun addProfileFunction (f: Function.t)  =
    let
-      val {args, blocks, mayInline, name, raises, returns, start} =
+      val {args, blocks, inline, name, raises, returns, start} =
          Function.dest f
       val extraBlocks = ref []
       val siF =
@@ -103,7 +103,7 @@ fun addProfileFunction (f: Function.t)  =
                       end
              val (leaveStmts, transfer) =
                 case transfer of
-                   Transfer.Call {args, func, return} => 
+                   Transfer.Call {args, func, inline, return} => 
                       (case return of
                           Return.Dead => doit ()
                         | Return.NonTail {cont, handler} => 
@@ -119,11 +119,13 @@ fun addProfileFunction (f: Function.t)  =
                                        (leaveL (),
                                         Transfer.Call {args = args,
                                                        func = func,
+                                                       inline = inline,
                                                        return = return})
                                     end
                                | Handler.Handle _ => doitL ())
                         | Return.Tail => doitLF ())
-                 | Transfer.PCall _ => doitL ()
+                 | Transfer.Spork _ => doitL ()
+                 | Transfer.Spoin _ => doitL ()
                  | Transfer.Raise _ => doitLF ()
                  | Transfer.Return _ => doitLF ()
                  | _ => doitL ()
@@ -140,7 +142,7 @@ fun addProfileFunction (f: Function.t)  =
    in
       Function.new {args = args,
                     blocks = blocks,
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,
@@ -155,7 +157,7 @@ fun addProfile (Program.T {datatypes, functions, globals, main}) =
 
 fun dropProfileFunction f =
    let
-      val {args, blocks, mayInline, name, raises, returns, start} =
+      val {args, blocks, inline, name, raises, returns, start} =
          Function.dest f
       val blocks =
          Vector.map
@@ -170,7 +172,7 @@ fun dropProfileFunction f =
    in
       Function.new {args = args,
                     blocks = blocks,
-                    mayInline = mayInline,
+                    inline = inline,
                     name = name,
                     raises = raises,
                     returns = returns,

@@ -144,7 +144,7 @@ fun lambdaFree {program = Program.T {body, ...},
          end
       and primExp (e, s) = 
          case e of
-            App {func, arg} => (varExp (func, s); varExp (arg, s))
+            App {func, arg, ...} => (varExp (func, s); varExp (arg, s))
           | Case {test, cases, default} =>
                (varExp (test, s)
                 ; Option.app (default, fn e => exp (e, s))

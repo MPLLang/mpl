@@ -113,9 +113,9 @@ datatype 'a t =
  | MLton_share (* to rssa (as nop or runtime C fn) *)
  | MLton_size (* to rssa (as runtime C fn) *)
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
- | PCall (* closure convert *)
- | PCall_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
- | PCall_getData (* backend *)
+ | Spork of {tokenSplitPolicy: Word32.word} (* closure convert *)
+ | Spork_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
+ | Spork_getData of Spid.t (* backend *)
  | Real_Math_acos of RealSize.t (* codegen *)
  | Real_Math_asin of RealSize.t (* codegen *)
  | Real_Math_atan of RealSize.t (* codegen *)
@@ -294,10 +294,13 @@ fun toString (n: 'a t): string =
        | MLton_share => "MLton_share"
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
-       | PCall => "PCall"
-       | PCall_forkThreadAndSetData {youngest=false} => "PCall_forkThreadAndSetData"
-       | PCall_forkThreadAndSetData {youngest=true} => "PCall_forkThreadAndSetData_youngest"
-       | PCall_getData => "PCall_getData"
+       | Spork {tokenSplitPolicy=0w0} => "spork_fair"
+       | Spork {tokenSplitPolicy=0w1} => "spork_keep"
+       | Spork {tokenSplitPolicy=0w2} => "spork_give"
+       | Spork {tokenSplitPolicy=pol} => Error.bug ("unknown spork tokensplitpolicy " ^ Word32.toString pol)
+       | Spork_forkThreadAndSetData {youngest=false} => "spork_forkThreadAndSetData"
+       | Spork_forkThreadAndSetData {youngest=true} => "spork_forkThreadAndSetData_youngest"
+       | Spork_getData spid => concat ["spork_getData<", Spid.toString spid, ">"]
        | Real_Math_acos s => real (s, "Math_acos")
        | Real_Math_asin s => real (s, "Math_asin")
        | Real_Math_atan s => real (s, "Math_atan")
@@ -459,9 +462,9 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_share, MLton_share) => true
     | (MLton_size, MLton_size) => true
     | (MLton_touch, MLton_touch) => true
-    | (PCall, PCall) => true
-    | (PCall_forkThreadAndSetData ws1, PCall_forkThreadAndSetData ws2) => ws1 = ws2
-    | (PCall_getData, PCall_getData) => true
+    | (Spork {tokenSplitPolicy = tsp1}, Spork {tokenSplitPolicy = tsp2}) => tsp1 = tsp2
+    | (Spork_forkThreadAndSetData yo1, Spork_forkThreadAndSetData yo2) => yo1 = yo2
+    | (Spork_getData spid, Spork_getData spid') => Spid.equals (spid, spid')
     | (Real_Math_acos s, Real_Math_acos s') => RealSize.equals (s, s')
     | (Real_Math_asin s, Real_Math_asin s') => RealSize.equals (s, s')
     | (Real_Math_atan s, Real_Math_atan s') => RealSize.equals (s, s')
@@ -644,9 +647,9 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_share => MLton_share
     | MLton_size => MLton_size
     | MLton_touch => MLton_touch
-    | PCall => PCall
-    | PCall_forkThreadAndSetData z => PCall_forkThreadAndSetData z
-    | PCall_getData => PCall_getData
+    | Spork tsp => Spork tsp
+    | Spork_forkThreadAndSetData z => Spork_forkThreadAndSetData z
+    | Spork_getData spid => Spork_getData spid
     | Real_Math_acos z => Real_Math_acos z
     | Real_Math_asin z => Real_Math_asin z
     | Real_Math_atan z => Real_Math_atan z
@@ -729,6 +732,11 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | World_save => World_save
 
 val cast: 'a t -> 'b t = fn p => map (p, fn _ => Error.bug "Prim.cast")
+
+fun replaceSpid (p, f) =
+   case p of
+      Spork_getData spid => Spork_getData (f spid)
+    | _ => p
 
 fun cpointerGet ctype =
    let datatype z = datatype CType.t
@@ -855,9 +863,9 @@ val kind: 'a t -> Kind.t =
        | MLton_share => SideEffect
        | MLton_size => DependsOnState
        | MLton_touch => SideEffect
-       | PCall => SideEffect
-       | PCall_forkThreadAndSetData _ => SideEffect
-       | PCall_getData => DependsOnState
+       | Spork _ => SideEffect
+       | Spork_forkThreadAndSetData _ => SideEffect
+       | Spork_getData _ => DependsOnState
        | Real_Math_acos _ => DependsOnState (* depends on rounding mode *)
        | Real_Math_asin _ => DependsOnState (* depends on rounding mode *)
        | Real_Math_atan _ => DependsOnState (* depends on rounding mode *)
@@ -1066,10 +1074,12 @@ in
        MLton_share,
        MLton_size,
        MLton_touch,
-       PCall,
-       PCall_forkThreadAndSetData {youngest=true},
-       PCall_forkThreadAndSetData {youngest=false},
-       PCall_getData,
+       Spork {tokenSplitPolicy = 0w0},
+       Spork {tokenSplitPolicy = 0w1},
+       Spork {tokenSplitPolicy = 0w2},
+       Spork_forkThreadAndSetData {youngest=true},
+       Spork_forkThreadAndSetData {youngest=false},
+       (*Spork_getData,*)
        Ref_assign {writeBarrier=true},
        Ref_assign {writeBarrier=false},
        Ref_cas NONE,
@@ -1198,6 +1208,7 @@ fun 'a checkApp (prim: 'a t,
                   targs: 'a vector,
                   typeOps = {array: 'a -> 'a,
                              arrow: 'a * 'a -> 'a,
+                             tuple: 'a vector -> 'a,
                              bool: 'a,
                              cpointer: 'a,
                              equals: 'a * 'a -> bool,
@@ -1247,6 +1258,16 @@ fun 'a checkApp (prim: 'a t,
          andalso equals (arg3', arg 3)
          andalso equals (arg4', arg 4)
          andalso equals (arg5', arg 5)
+      fun eightArgs (arg0', arg1', arg2', arg3', arg4', arg5', arg6', arg7') () =
+         8 = Vector.length args
+         andalso equals (arg0', arg 0)
+         andalso equals (arg1', arg 1)
+         andalso equals (arg2', arg 2)
+         andalso equals (arg3', arg 3)
+         andalso equals (arg4', arg 4)
+         andalso equals (arg5', arg 5)
+         andalso equals (arg6', arg 6)
+         andalso equals (arg7', arg 7)
       fun nArgs args' () =
          Vector.equals (args', args, equals)
       fun done (args, result') =
@@ -1258,9 +1279,9 @@ fun 'a checkApp (prim: 'a t,
       fun oneTarg f =
          1 = Vector.length targs
          andalso done (f (targ 0))
-      fun fiveTargs f =
-         5 = Vector.length targs
-         andalso done (f (targ 0, targ 1, targ 2, targ 3, targ 4))
+      fun sixTargs f =
+         6 = Vector.length targs
+         andalso done (f (targ 0, targ 1, targ 2, targ 3, targ 4, targ 5))
       local
          fun make f s = let val t = f s
                         in noTargs (fn () => (oneArg t, t))
@@ -1406,21 +1427,22 @@ fun 'a checkApp (prim: 'a t,
        | MLton_share => oneTarg (fn t => (oneArg t, unit))
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
        | MLton_touch => oneTarg (fn t => (oneArg t, unit))
-       | PCall =>
-            (* pcall : ('a -> 'b) * 'a * ('b -> 'c) * ('b -> 'c) * ('d -> 'e) * 'd -> 'c *)
-            fiveTargs (fn (ta, tb, tc, td, te) =>
+       | Spork _ =>
+            (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
+            (*        ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
+            sixTargs (fn (taa, tar, tba, tbr, td, tc) =>
                        let
-                          val func = arrow (ta, tb)
-                          val farg = ta
-                          val cont = arrow (tb, tc)
-                          val parl = arrow (tb, tc)
-                          val parr = arrow (td, te)
-                          val rarg = td
+                          val cont = arrow (taa, tar)
+                          val spwn = arrow (tuple (Vector.new2 (tba, td)), tbr)
+                          val seq = arrow (tar, tc)
+                          val sync = arrow (tuple (Vector.new2 (tar, td)), tc)
+                          val exnseq = arrow (exn, tc)
+                          val exnsync = arrow (tuple (Vector.new2 (exn, td)), tc)
                        in
-                          (sixArgs (func,farg,cont,parl,parr,rarg), tc)
+                          (eightArgs (cont, taa, spwn, tba, seq, sync, exnseq, exnsync), tc)
                        end)
-       | PCall_forkThreadAndSetData _ => oneTarg (fn t => (twoArgs (thread, t), thread))
-       | PCall_getData => oneTarg (fn t => (noArgs, t))
+       | Spork_forkThreadAndSetData _ => oneTarg (fn t => (twoArgs (thread, t), thread))
+       | Spork_getData _ => oneTarg (fn t => (noArgs, t))
        | Real_Math_acos s => realUnary s
        | Real_Math_asin s => realUnary s
        | Real_Math_atan s => realUnary s
@@ -1527,11 +1549,12 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                             typeOps = {deArray: 'a -> 'a,
                                        deArrow: 'a -> 'a * 'a,
                                        deRef: 'a -> 'a,
+                                       deTuple: 'a -> 'a vector,
                                        deVector: 'a -> 'a,
                                        deWeak: 'a -> 'a}}) =
    let
       val one = Vector.new1
-      val five = Vector.new5
+      val six = Vector.new6
       fun arg i = Vector.sub (args, i)
       datatype z = datatype t
    in
@@ -1561,15 +1584,20 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_share => one (arg 0)
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
-       | PCall =>
-            (* pcall : ('a -> 'b) * 'a * ('b -> 'c) * ('b -> 'c) * ('d -> 'e) * 'd -> 'c *)
-            five (#1 (deArrow (arg 0)),
-                  #2 (deArrow (arg 0)),
-                  #2 (deArrow (arg 2)),
-                  #1 (deArrow (arg 4)),
-                  #2 (deArrow (arg 4)))
-       | PCall_forkThreadAndSetData _ => one (arg 1)
-       | PCall_getData => one result
+       | Spork _ =>
+            (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
+            let
+               val (taa, tar) = deArrow (arg 0)
+               val (tba_td, tbr) = deArrow (arg 2)
+               val tba_td = deTuple tba_td
+               val tba = Vector.sub (tba_td, 0)
+               val td = Vector.sub (tba_td, 1)
+               val tc = result
+            in
+               six (taa, tar, tba, tbr, td, tc)
+            end
+       | Spork_forkThreadAndSetData _ => one (arg 1)
+       | Spork_getData _ => one result
        | Ref_assign _ => one (deRef (arg 0))
        | Ref_cas _ => one (deRef (arg 0))
        | Ref_deref _ => one (deRef (arg 0))

@@ -283,8 +283,10 @@ fun monomorphise (Xprogram.T {datatypes, body, ...}): Sprogram.t =
           end) arg
       and monoPrimExp (e: XprimExp.t): SprimExp.t =
          case e of
-            XprimExp.App {func, arg} =>
-               SprimExp.App {func = monoVarExp func, arg = monoVarExp arg}
+            XprimExp.App {func, arg, inline} =>
+               SprimExp.App {func = monoVarExp func,
+                             arg = monoVarExp arg,
+                             inline = inline}
           | XprimExp.Case {test, cases, default} =>
                let
                   val cases =
@@ -326,13 +328,13 @@ fun monomorphise (Xprogram.T {datatypes, body, ...}): Sprogram.t =
           | XprimExp.Var x => SprimExp.Var (monoVarExp x)
       and monoLambda l: Slambda.t =
          let
-            val {arg, argType, body, mayInline} = Xlambda.dest l
+            val {arg, argType, body, inline} = Xlambda.dest l
             val (arg, argType) = renameMono (arg, argType)
          in
             Slambda.make {arg = arg,
                           argType = argType,
                           body = monoExp body,
-                          mayInline = mayInline}
+                          inline = inline}
          end
       (*------------------------------------*)
       (*              monoDec               *)

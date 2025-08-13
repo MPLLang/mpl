@@ -266,7 +266,7 @@ fun transform (program: Program.t): Program.t =
           (Label.plist, Property.initRaise ("localRef.labelInfo", Label.layout))
       fun rewrite (f: Function.t, refs): Function.t =
          let
-            val {args, blocks, mayInline, name, raises, returns, start} =
+            val {args, blocks, inline, name, raises, returns, start} =
                Function.dest f
             (* Diagnostics *)
             val _ =
@@ -354,7 +354,7 @@ fun transform (program: Program.t): Program.t =
             val blocks = Vector.map (blocks, rewriteBlock)
             val f = Function.new {args = args,
                                   blocks = blocks,
-                                  mayInline = mayInline,
+                                  inline = inline,
                                   name = name,
                                   raises = raises,
                                   returns = returns,
@@ -376,7 +376,7 @@ fun transform (program: Program.t): Program.t =
                    then f
                 else
                    let
-                      val {args, blocks, mayInline, name, raises, returns,
+                      val {args, blocks, inline, name, raises, returns,
                            start} = Function.dest f
                       val locals = Vector.fromListRev locals
                       val localsLabel = Label.newNoname ()
@@ -391,7 +391,7 @@ fun transform (program: Program.t): Program.t =
                    in
                       Function.new {args = args,
                                     blocks = blocks,
-                                    mayInline = mayInline,
+                                    inline = inline,
                                     name = name,
                                     raises = raises,
                                     returns = returns,

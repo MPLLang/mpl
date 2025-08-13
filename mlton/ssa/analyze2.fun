@@ -161,27 +161,27 @@ fun 'a analyze
                in ()
                end
           | Goto {dst, args} => coerces ("goto", values args, labelValues dst)
-          | PCall {func, args, cont, parl, parr} =>
+          | Spork {cont, spwn, ...} =>
                let
-                  val {args = formals, raises, returns} = funcInfo func
-                  val _ = coerces ("pcall args/formals", values args, formals)
-                  val _ =
-                     Option.app
-                     (raises, fn _ =>
-                      Error.bug "Analyze.loopTransfer (pcall raise mismatch)")
-                  val _ =
-                     Option.app
-                     (returns, fn vs =>
-                      (coerces ("pcall cont/returns", vs, labelValues cont)
-                       ; coerces ("pcall parl/returns", vs, labelValues parl)))
-                  val _ =
-                     if Vector.isEmpty (labelValues parr)
+                  fun ensureNullary j =
+                     if Vector.isEmpty (labelValues j)
                         then ()
-                     else Error.bug (concat ["Analyze.loopTransfer (pcall parr ",
-                                             Label.toString parr,
-                                             " must be nullary)"])
+                        else Error.bug (concat ["Analyze.loopTransfer (spork ",
+                                                Label.toString j,
+                                                " must be nullary)"])
                in
-                  ()
+                  (ensureNullary cont; ensureNullary spwn)
+               end
+          | Spoin {seq, sync, ...} =>
+               let
+                  fun ensureNullary j =
+                     if Vector.isEmpty (labelValues j)
+                        then ()
+                        else Error.bug (concat ["Analyze.loopTransfer (spoin ",
+                                                Label.toString j,
+                                                " must be nullary)"])
+               in
+                  (ensureNullary seq; ensureNullary sync)
                end
           | Raise xs =>
                (case shouldRaises of

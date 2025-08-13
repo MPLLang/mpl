@@ -37,3 +37,9 @@ GC_frameInfo getFrameInfoFromReturnAddress (GC_state s, GC_returnAddress ra) {
   frameInfo = getFrameInfoFromFrameIndex(s, frameIndex);
   return frameInfo;
 }
+
+GC_frameInfo getFrameInfoFromFrameTopPointer (GC_state s, pointer frametop) {
+  GC_returnAddress ret = *((GC_returnAddress*)(frametop - GC_RETURNADDRESS_SIZE));
+  GC_frameInfo fi = getFrameInfoFromReturnAddress(s, ret);
+  return fi;
+}

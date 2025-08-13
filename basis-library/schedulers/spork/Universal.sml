@@ -6,10 +6,10 @@ end =
 struct
   type t = exn
 
-  fun 'a embed () =
+  fun 'a __inline_always__ embed () =
     let
       exception UnivTag of 'a
-      fun project (e: t): 'a option =
+      fun __inline_always__ project (e: t): 'a option =
         case e of
           UnivTag a => SOME a
         | _ => NONE

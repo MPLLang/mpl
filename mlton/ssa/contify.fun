@@ -274,24 +274,6 @@ structure InitReachCallersCallees =
                             addEdge {from = f_node,
                                      to = g_node}
                           end
-                       | Block.T {transfer = PCall {func = g, cont, parl, parr, ...}, ...}
-                       => let
-                             val callers = FuncData.callers' (getFuncData g)
-                             val g_node = getFuncNode g
-                             fun doit l =
-                                let
-                                   val c = {cont = l, handler = Handler.Dead}
-                                in
-                                   List.push (#nontail callees, (g, c));
-                                   List.push (#nontail callers, (f, c))
-                                end
-                             val _ = doit cont
-                             val _ = doit parl
-                             val _ = doit parr
-                          in
-                             addEdge {from = f_node,
-                                      to = g_node}
-                          end
                        | _ => ())
                    end)
 
@@ -374,9 +356,14 @@ structure AnalyzeDom =
               (functions,
                fn func
                 => let
-                     val {name = f, blocks, ...} = Function.dest func
+                     val {name = f, inline, blocks, ...} = Function.dest func
                      val f_reach = FuncData.reach (getFuncData f)
                      val f_node = getFuncNode f
+                     val _ =
+                        if InlineAttr.mayInline inline
+                           then ()
+                        else addEdge {from = Root,
+                                      to = f_node}
                    in
                      if f_reach
                        then Vector.foreach
@@ -422,14 +409,6 @@ structure AnalyzeDom =
                                                          to = g_node}
                                         end
                                    else ()
-                              | Block.T {transfer = PCall {func = g, ...}, ...}
-                              => let
-                                    val g_node = getFuncNode g
-                                 in
-                                    (* We can't contify functions that are PCall-ed. *)
-                                    addEdge {from = Root,
-                                             to = g_node}
-                                 end
                               | _ => ())
                        else (* {(Root, f) | not (Reach (f))} *)
                             addEdge {from = Root,
@@ -673,13 +652,14 @@ structure Transform =
              let
                 val transfer
                   = case transfer
-                      of Call {func, args, return}
+                      of Call {func, args, inline, return}
                        => ((case return of
                                Return.NonTail r => addContPrefixes (f, r, c)
                              | _ => ());
                            case FuncData.replace (getFuncData func) of
                               NONE => Call {func = func,
                                             args = args,
+                                            inline = inline,
                                             return = Return.compose (c, return)}
                             | SOME {label, ...} =>
                                  Goto {dst = label, args = args})
@@ -709,7 +689,7 @@ structure Transform =
                let
                   val {args = f_args, 
                        blocks = f_blocks,
-                       mayInline = f_mayInline,
+                       inline = f_inline,
                        name = f, 
                        raises = f_raises,
                        returns = f_returns,
@@ -731,7 +711,7 @@ structure Transform =
                            in 
                               shrink (Function.new {args = f_args,
                                                     blocks = f_blocks,
-                                                    mayInline = f_mayInline,
+                                                    inline = f_inline,
                                                     name = f,
                                                     raises = f_raises,
                                                     returns = f_returns,

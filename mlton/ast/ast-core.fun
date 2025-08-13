@@ -338,12 +338,12 @@ structure Priority =
 
 datatype expNode =
     Andalso of exp * exp
-  | App of {func: exp, arg: exp, wasInfix: bool}
+  | App of {func: exp, arg: exp, inline: InlineAttr.t, wasInfix: bool}
   | Case of exp * match
   | Const of Const.t
   | Constraint of exp * Type.t
-  | FlatApp of exp vector
-  | Fn of match
+  | FlatApp of exp vector * InlineAttr.t
+  | Fn of match * InlineAttr.t
   | Handle of exp * match
   | If of exp * exp * exp
   | Let of dec * exp
@@ -367,9 +367,10 @@ and decNode =
   | Fix of {fixity: Fixity.t,
             ops: Vid.t vector}
   | Fun of {tyvars: Tyvar.t vector,
-            fbs: {body: exp,
-                  pats: Pat.t vector,
-                  resultType: Type.t option} vector vector}
+            fbs: ({body: exp,
+                   pats: Pat.t vector,
+                   resultType: Type.t option} vector
+                  * InlineAttr.t) vector}
   | Local of dec * dec
   | Open of Longstrid.t vector
   | Overload of Priority.t * Var.t * 
@@ -380,7 +381,8 @@ and decNode =
   | Val of {tyvars: Tyvar.t vector,
             vbs: {exp: exp,
                   pat: Pat.t} vector,
-            rvbs: {match: match,
+            rvbs: {inline: InlineAttr.t,
+                   match: match,
                    pat: Pat.t} vector}
 and matchNode = T of (Pat.t * exp) vector
 withtype
@@ -450,7 +452,7 @@ fun layoutExp arg =
          Andalso (e, e') =>
             delimit (mayAlign [layoutExpF e,
                                seq [str "andalso ", layoutExpF e']])
-       | App {func, arg, wasInfix} =>
+       | App {func, arg, inline, wasInfix} =>
             if wasInfix
                then let
                        val (arg1, arg2) =
@@ -465,11 +467,20 @@ fun layoutExp arg =
                                   | NONE => Error.bug "AstCore.Exp.layout: App, wasInfix")
                            | _ => Error.bug "AstCore.Exp.layout: App, wasInfix"
                     in
-                       delimit (seq [layoutExpF arg1, str " ",
+                       delimit (seq [case inline of
+                                        InlineAttr.Always => str "__inline_always__ "
+                                      | InlineAttr.Auto => empty
+                                      | InlineAttr.Never => str "__inline_never__ ",
+                                     layoutExpF arg1, str " ",
                                      layoutExpF func, str " ",
                                      layoutExpF arg2])
                     end
-               else delimit (mayAlign [layoutExpF func, layoutExpF arg])
+               else delimit (mayAlign [case inline of
+                                          InlineAttr.Always => str "__inline_always__ "
+                                        | InlineAttr.Auto => empty
+                                        | InlineAttr.Never => str "__inline_never__ ",
+                                       layoutExpF func,
+                                       layoutExpF arg])
        | Case (expr, match) =>
             delimit (align [seq [str "case ", layoutExpT expr,
                                  str " of"],
@@ -477,11 +488,22 @@ fun layoutExp arg =
        | Const c => Const.layout c
        | Constraint (expr, constraint) =>
             delimit (layoutConstraint (layoutExpF expr, constraint))
-       | FlatApp es =>
+       | FlatApp (es, inline) =>
             if Vector.length es = 1
                then layoutExp (Vector.first es, isDelimited)
-            else delimit (seq (separate (Vector.toListMap (es, layoutExpF), " ")))
-       | Fn m => delimit (seq [str "fn ", layoutMatch m])
+            else delimit (seq ((case inline of
+                                   InlineAttr.Always => str "__inline_always__ "
+                                 | InlineAttr.Auto => empty
+                                 | InlineAttr.Never => str "__inline_never__ ")
+                               ::
+                               separate (Vector.toListMap (es, layoutExpF), " ")))
+       | Fn (m, inline) =>
+            delimit (seq [str "fn ",
+                          case inline of
+                             InlineAttr.Always => str "__inline_always__ "
+                           | InlineAttr.Auto => empty
+                           | InlineAttr.Never => str "__inline_never__ ",
+                          layoutMatch m])
        | Handle (try, match) =>
             delimit (align [layoutExpF try,
                             seq [str "handle ", layoutMatch match]])
@@ -576,8 +598,12 @@ and layoutDec d =
 and layoutFun {tyvars, fbs} =
    layoutTyvarsAndsSusp ("fun", (tyvars, fbs), layoutFb)
 
-and layoutFb clauses =
-   alignPrefix (Vector.toListMap (clauses, layoutClause), "| ")
+and layoutFb (clauses, inline) =
+   mayAlign [case inline of
+                InlineAttr.Always => str "__inline_always__"
+              | InlineAttr.Auto => empty
+              | InlineAttr.Never => str "__inline_never__",
+             alignPrefix (Vector.toListMap (clauses, layoutClause), "| ")]
 
 and layoutClause ({pats, resultType, body}) =
    mayAlign [seq [maybeConstrain (Pat.layoutFlatApp pats,
@@ -599,8 +625,13 @@ and layoutVal {tyvars, vbs, rvbs} =
 and layoutVb {pat, exp} =
    bind (Pat.layoutT pat, layoutExpT exp)
 
-and layoutRvb {pat, match, ...} =
-   bind (Pat.layout pat, seq [str "fn ", layoutMatch match])
+and layoutRvb {pat, match, inline, ...} =
+   bind (Pat.layout pat, seq [str "fn ",
+                              case inline of
+                                 InlineAttr.Always => str "__inline_always__ "
+                               | InlineAttr.Auto => empty
+                               | InlineAttr.Never => str "__inline_never__ ",
+                              layoutMatch match])
 
 fun checkSyntaxExp (e: exp): unit =
    let
@@ -612,8 +643,8 @@ fun checkSyntaxExp (e: exp): unit =
        | Case (e, m) => (c e; checkSyntaxMatch m)
        | Const _ => ()
        | Constraint (e, t) => (c e; Type.checkSyntax t)
-       | FlatApp es => Vector.foreach (es, c)
-       | Fn m => checkSyntaxMatch m
+       | FlatApp (es, _) => Vector.foreach (es, c)
+       | Fn (m, _) => checkSyntaxMatch m
        | Handle (e, m) => (c e; checkSyntaxMatch m)
        | If (e1, e2, e3) => (c e1; c e2; c e3)
        | Let (d, e) => (checkSyntaxDec d; c e)
@@ -666,7 +697,7 @@ and checkSyntaxDec (d: dec): unit =
     | Fun {tyvars, fbs, ...} =>
          (reportDuplicateTyvars (tyvars,
                                  {ctxt = mkCtxt (d, layoutDec)})
-          ; Vector.foreach (fbs, fn clauses =>
+          ; Vector.foreach (fbs, fn (clauses, _) =>
                             Vector.foreach
                             (clauses, fn {body, pats, resultType} =>
                              (checkSyntaxExp body
@@ -680,7 +711,7 @@ and checkSyntaxDec (d: dec): unit =
     | Val {tyvars, rvbs, vbs, ...} =>
          (reportDuplicateTyvars (tyvars,
                                  {ctxt = mkCtxt (d, layoutDec)})
-          ; Vector.foreach (rvbs, fn {match, pat} =>
+          ; Vector.foreach (rvbs, fn {match, pat, ...} =>
                             (checkSyntaxMatch match
                              ; Pat.checkSyntax pat))
           ; Vector.foreach (vbs, fn {exp, pat} =>
@@ -701,7 +732,7 @@ structure Exp =
 
       fun constraint (e, t) = makeRegion (Constraint (e, t), region e)
 
-      fun fnn rs =
+      fun fnn (rs, inline) =
          let
             val r =
                if Vector.isEmpty rs
@@ -709,7 +740,7 @@ structure Exp =
                else Region.append (Pat.region (#1 (Vector.first rs)),
                                    region (#2 (Vector.last rs)))
          in
-            makeRegion (Fn (Match.makeRegion (Match.T rs, r)), r)
+            makeRegion (Fn (Match.makeRegion (Match.T rs, r), inline), r)
          end
 
       fun longvid name =
@@ -718,8 +749,8 @@ structure Exp =
 
       val var = longvid o Longvid.short o Vid.fromVar
 
-      fun app (e1: t, e2: t): t =
-         makeRegion (App {func = e1, arg = e2, wasInfix = false},
+      fun app (e1: t, e2: t, inline): t =
+         makeRegion (App {func = e1, arg = e2, inline = inline, wasInfix = false},
                      Region.append (region e1, region e2))
 
       fun lett (ds: dec vector, e: t, r: Region.t): t =

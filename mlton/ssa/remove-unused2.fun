@@ -591,7 +591,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
       fun visitTransfer (t: Transfer.t, fi: FuncInfo.t) =
          case t of
             Bug => ()
-          | Call {args, func, return} =>
+          | Call {args, func, return, ...} =>
                let
                   datatype u = None
                              | Caller
@@ -722,36 +722,23 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                in
                   ()
                end
-          | PCall {args, func, cont, parl, parr} =>
+          | Spork {spid, cont, spwn} =>
                let
-                  val fi' = funcInfo func
-                  val () = flowVarInfoTysVars (FuncInfo.args fi', args)
-                  fun doit label =
-                     let
-                        val li = labelInfo label
-                        val () =
-                           Option.app
-                           (FuncInfo.returns fi', fn xts =>
-                            flowVarInfoTysVarInfoTys
-                            (LabelInfo.args li, xts))
-                        val () =
-                           FuncInfo.whenReturns
-                           (fi', visitLabelInfoTh li)
-                     in
-                        ()
-                     end
-                  val () = doit cont
-                  val () = doit parl
-                  val () =
-                     let
-                        val li = labelInfo parr
-                        val () = visitLabelInfoTh li ()
-                     in
-                        ()
-                     end
-                  val () = visitFuncInfo fi'
+                 val licont = labelInfo cont
+                 val lispwn = labelInfo spwn
+                 val () = visitLabelInfo licont
+                 val () = visitLabelInfo lispwn
                in
-                  ()
+                 ()
+               end
+          | Spoin {spid, seq, sync} =>
+               let
+                 val liseq = labelInfo seq
+                 val lisync = labelInfo sync
+                 val () = visitLabelInfo liseq
+                 val () = visitLabelInfo lisync
+               in
+                 ()
                end
           | Raise xs =>
                (FuncInfo.raisee fi
@@ -1264,7 +1251,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
       fun simplifyTransfer (t: Transfer.t, fi: FuncInfo.t): Transfer.t =
          case t of
             Bug => Bug
-          | Call {func, args, return} =>
+          | Call {func, args, inline, return} =>
                let
                   val fi' = funcInfo func
                   datatype u = None
@@ -1357,6 +1344,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                in
                   Call {func = func,
                         args = args,
+                        inline = inline,
                         return = return}
                end
           | Case {test, cases = Cases.Con cases, default} =>
@@ -1405,29 +1393,14 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                               fn (x, (y, _)) => if VarInfo.isUsed y
                                                    then SOME x
                                                 else NONE))}
-          | PCall {func, args, cont, parl, parr} =>
-               let
-                  val fi' = funcInfo func
-                  fun doit label =
-                     if FuncInfo.mayReturn fi'
-                        then getContWrapperLabel (label, valOf (FuncInfo.returns fi'))
-                        else getBugFunc fi
-                  val cont = doit cont
-                  val parl = doit parl
-                  val parr = parr
-                  val args =
-                     Vector.keepAllMap2
-                     (args, FuncInfo.args fi', fn (x, (y, _)) =>
-                      if VarInfo.isUsed y
-                         then SOME x
-                      else NONE)
-               in
-                  PCall {func = func,
-                         args = args,
-                         cont = cont,
-                         parl = parl,
-                         parr = parr}
-               end
+          | Spork {spid, cont, spwn} =>
+               Spork {spid = spid,
+                      cont = cont,
+                      spwn = spwn}
+          | Spoin {spid, seq, sync} =>
+               Spoin {spid = spid,
+                      seq = seq,
+                      sync = sync}
           | Raise xs =>
                Raise (Vector.keepAllMap2
                       (xs, valOf (FuncInfo.raises fi),
@@ -1478,7 +1451,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
       val shrink = shrinkFunction {globals = globals}
       fun simplifyFunction (f: Function.t): Function.t option =
          let
-            val {args, blocks, mayInline, name, start, ...} = Function.dest f
+            val {args, blocks, inline, name, start, ...} = Function.dest f
             val fi = funcInfo name
          in
             if FuncInfo.isUsed fi
@@ -1517,7 +1490,7 @@ fun transform2 (Program.T {datatypes, globals, functions, main}) =
                     in
                        SOME (shrink (Function.new {args = args,
                                                    blocks = blocks,
-                                                   mayInline = mayInline,
+                                                   inline = inline,
                                                    name = name,
                                                    raises = raises,
                                                    returns = returns,

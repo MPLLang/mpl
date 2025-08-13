@@ -11,6 +11,7 @@ signature AST_ATOMS_STRUCTS =
    sig
       structure AdmitsEquality: ADMITS_EQUALITY
       structure CharSize: CHAR_SIZE
+      structure InlineAttr: INLINE_ATTR
       structure IntSize: INT_SIZE
       structure RealSize: REAL_SIZE
       structure Record: RECORD
