@@ -1,6 +1,6 @@
 # MaPLe (MPL)
 
-MaPLe (MPL) is a functional language for provably efficient and safe multicore
+MaPLe is a functional language for provably efficient and safe multicore
 parallelism.
 
 Features:
@@ -106,26 +106,41 @@ applications in MPL, as well as cross-language performance comparisons with
 C++, Go, Java,
 and multicore OCaml.
 
-## Libraries
+## Libraries and Projects
 
 We recommend using the [smlpkg](https://github.com/diku-dk/smlpkg) package
-manager. MPL supports the full SML language, so existing libraries for
+manager. MaPLe supports the full SML language, so existing libraries for
 SML can be used.
 
-In addition, here are a few libraries that make use of MPL for parallelism:
-  * [`github.com/MPLLang/mpllib`](https://github.com/MPLLang/mpllib): implements
-  a variety of data structures (sequences, sets, dictionaries, graphs, matrices, meshes,
-  images, etc.) and parallel algorithms (map, reduce, scan, filter, sorting,
-  search, tokenization, graph processing, computational geometry, etc.). Also
-  includes basic utilies (e.g. parsing command-line arguments) and
-  benchmarking infrastructure.
+Here are a few libraries and projects that make use of MaPLe for parallelism:
+  * [`github.com/MPLLang/mpllib`](https://github.com/MPLLang/mpllib): grab-bag
+  library with a variety of data structures (sequences, sets, dictionaries,
+  graphs, matrices, meshes, images, etc.) and parallel algorithms
+  (map, reduce, scan, filter, sorting, search, tokenization, graph processing,
+  computational geometry, etc.). Also includes basic utilies
+  (e.g. parsing command-line arguments) and benchmarking infrastructure.
   * [`github.com/shwestrick/sml-audio`](https://github.com/shwestrick/sml-audio):
-  a library for audio processing with I/O support for `.wav` files.
+  a library for audio processing and I/O support for `.wav` files.
+  * [`github.com/shwestrick/sml-matrix-market`](https://github.com/shwestrick/sml-matrix-market):
+  a library for parsing [MatrixMarket](https://math.nist.gov/MatrixMarket/formats.html) files
+  * [`github.com/shwestrick/mpl-seam-carve`](https://github.com/shwestrick/mpl-seam-carve):
+  image resizing by [seam carving](https://en.wikipedia.org/wiki/Seam_carving),
+  demonstrating parallelism in MaPLe.
+  * [`github.com/shwestrick/mpl-wc`](https://github.com/shwestrick/mpl-wc):
+  a simple clone of the Unix `wc` utility demonstrating parallelism in MaPLe.
+  * [`github.com/shwestrick/mpl-1brc`](https://github.com/shwestrick/mpl-1brc):
+  an example solution to the [1 Billion Row Challenge](https://www.morling.dev/blog/one-billion-row-challenge/),
+  demonstrating some features of MaPLe.
+  * [`github.com/shwestrick/mpl-tinykaboom`](https://github.com/shwestrick/mpl-tinykaboom):
+  a port of a [port (Futhark)](https://github.com/athas/tinykaboom) of the
+  [KABOOM (C++)](https://github.com/ssloy/tinykaboom) tiny graphics program.
+  * [`github.com/UmutAcarLab/grafeyn`](https://github.com/UmutAcarLab/grafeyn):
+  a hybrid Feynman-Schrödinger pure quantum simulator written in MaPLe.
 
 
 ## Parallel and Concurrent Extensions
 
-MPL extends SML with a number of primitives for parallelism and concurrency.
+MaPLe extends SML with a number of primitives for parallelism and concurrency.
 Take a look at `examples/` to see these primitives in action.
 
 ### The `ForkJoin` Structure
@@ -133,6 +148,8 @@ Take a look at `examples/` to see these primitives in action.
 val par: (unit -> 'a) * (unit -> 'b) -> 'a * 'b
 val parfor: int -> (int * int) -> (int -> unit) -> unit
 val alloc: int -> 'a array
+val parform: (int * int) -> (int -> unit) -> unit
+val reducem: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
 ```
 The `par` primitive takes two functions to execute in parallel and
 returns their results.
@@ -143,6 +160,9 @@ range `(i, j)`, and a function `f`, and executes `f(k)` in parallel for each
 control: `parfor` splits the input range into approximately `(j-i)/g` subranges,
 each of size at most `g`, and each subrange is processed sequentially. The
 grain-size must be at least 1, in which case the loop is "fully parallel".
+**Note**: This function should only be used if a reasonable grain size can be
+passed as argument. This is often cumbersome.
+In general, we recommend using `parform` instead (described below).
 
 The `alloc` primitive takes a length and returns a fresh, uninitialized array
 of that size. **Warning**: To guarantee no errors, the programmer must be
@@ -151,10 +171,27 @@ be used as a low-level primitive in the efficient implementation of
 high-performance libraries. It is integrated with the scheduler and memory
 management system to perform allocation in parallel and be safe-for-GC.
 
+The `parform` primitive is a parallel for loop, similar to `parfor` above,
+except with no grain parameter. The parallelism of the loop is automatically
+managed. In general, we recommend using `parform` instead of `parfor`.
+
+The `reducem` primitive performs an automatically managed parallel reduction.
+It takes a "sum" function `c`, a "zero" element `z`, a range `(i,j)`, and
+a function `f`, and computes the "sum" of `[f(i), ..., f(j-1)`] in parallel
+with respect to `c`. For example:
+  * `reduce op+ 0 (0, Array.length a) (fn i => Array.sub (a, i))` computes the
+  sum of an array `a`
+  * `reduce Real.max Real.negInf (0, n) (fn i => f (Real.fromInt i / Real.fromInt n))`
+  samples a function `f: real -> real` at `n` evenly-spaced locations in
+  the range `[0.0, 1.0]` to find the maximum value.
+
 ### The `MLton.Parallel` Structure
 ```
 val compareAndSwap: 'a ref -> ('a * 'a) -> 'a
 val arrayCompareAndSwap: ('a array * int) -> ('a * 'a) -> 'a
+
+val fetchAndAdd: int ref -> int -> int
+val arrayFetchAndAdd: int array * int -> int -> int
 ```
 
 `compareAndSwap r (x, y)` performs an atomic
@@ -170,6 +207,14 @@ etc.). The semantics are a bit murky.
 `arrayCompareAndSwap (a, i) (x, y)` behaves the same as `compareAndSwap` but
 on arrays instead of references. This performs a CAS at index `i` of array
 `a`, and does not read or write at any other locations of the array.
+
+`fetchAndAdd r d` performs an atomic [fetch-and-add](https://en.wikipedia.org/wiki/Fetch-and-add)
+which atomically retrieves and the value of the specified memory cell `r`
+adds `d` to it, returning the original value stored in `r` before the update.
+
+`arrayFetchAndAdd (a, i) d` behaves the same as `fetchAndAdd` except on
+arrays instead of references. It performs a fetch-and-add at index `i` of
+array `a`, and does not read or write at any other locations of the array.
 
 ## Using MPL
 
@@ -304,8 +349,8 @@ $ git clone https://github.com/mpllang/mpl-switch
 # ... add ./mpl-switch/ to your PATH ...
 
 $ mpl-switch init
-$ mpl-switch install v0.5.2
-$ mpl-switch select v0.5.2
+$ mpl-switch install v0.5.3
+$ mpl-switch select v0.5.3
 
 # MPL is now installed at ~/.mpl/bin/mpl
 # final step: add ~/.mpl/bin/ to your PATH
