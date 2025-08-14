@@ -1208,7 +1208,7 @@ struct
     let
       val mySchedThread = Thread.current ()
       val _ = HH.setDepth (mySchedThread, 1)
-      val _ = HH.setMinLocalCollectionDepth (mySchedThread, 2)
+      val _ = HH.setMinLocalCollectionDepth (mySchedThread, 1)
 
       val myId = myWorkerId ()
       val myRand = SimpleRandom.rand myId
@@ -1230,7 +1230,8 @@ struct
         let
           fun loop tries =
             if tries = P * 100 then
-              ( IdleTimer.tick ()
+              ( MLton.GC.collect ()
+              ; IdleTimer.tick ()
               ; traceSchedSleepEnter ()
               ; OS.Process.sleep (Time.fromNanoseconds (LargeInt.fromInt (P * 100)))
               ; traceSchedSleepLeave ()
