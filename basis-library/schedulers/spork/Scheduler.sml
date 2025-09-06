@@ -40,38 +40,8 @@ struct
           NONE => die (fn _ => "Cannot parse integer from \"-" ^ key ^ " " ^ s ^ "\"")
         | SOME x => x
 
-  (* val spawnCost = Word32.fromInt (parseInt "sched-spawn-cost" 1) *)
-  val spawnCost = 0w1: Word32.word
-
   type gcstate = MLton.Pointer.t
   val gcstate = _prim "GC_state": unit -> gcstate;
-
-  val getHeartbeatMicroseconds =
-    _import "GC_getHeartbeatMicroseconds" runtime private: gcstate -> Word32.word;
-  val heartbeatMicroseconds =
-    LargeInt.fromInt (Word32.toInt (getHeartbeatMicroseconds (gcstate())))
-
-  val getHeartbeatRelayerThreshold =
-    _import "GC_getHeartbeatRelayerThreshold" runtime private: gcstate -> Word32.word;
-  val relayerThreshold =
-    Word32.toInt (getHeartbeatRelayerThreshold (gcstate ()))
-
-  val getWealthPerHeartbeat =
-    _import "GC_getHeartbeatTokens" runtime private: gcstate -> Word32.word;
-  val wealthPerHeartbeat =
-    getWealthPerHeartbeat (gcstate()): Word32.word
-
-  val tryConsumeSpareHeartbeats =
-    _import "GC_tryConsumeSpareHeartbeats" runtime private: gcstate * Word32.word -> bool;
-  val tryConsumeSpareHeartbeats =
-    (fn w => if tryConsumeSpareHeartbeats (gcstate (), w) then () else die (fn _ => "tried to consume " ^ Word32.toString w ^ " tokens, but didn't have enough"))
-
-  val addSpareHeartbeats =
-    _import "GC_addSpareHeartbeats" runtime private: gcstate * Word32.word -> Word32.word;
-  val addSpareHeartbeats =
-    (fn w => addSpareHeartbeats (gcstate (), w)): Word32.word -> Word32.word
-  
-  val currentSpareHeartbeatTokens = _prim "Heartbeat_tokens": unit -> Word32.word;
 
   datatype TokenPolicy =
       TokenPolicyFair (* 0w0 *)
@@ -202,7 +172,7 @@ struct
       , rightSideResult: 'a Result.t option ref
       , incounter: int ref
       , tidRight: Word64.word
-      , spareHeartbeatsGiven: Word32.word
+      , spareHeartbeatsGiven: Heartbeat.token_count
       , tokenPolicy: TokenPolicy
       , gcj: gc_joinpoint option
       }
@@ -265,7 +235,7 @@ struct
       val notOkay =
         depth < Queue.capacity
         andalso depthOkayForDECheck depth
-        andalso currentSpareHeartbeatTokens () >= spawnCost
+        andalso Heartbeat.enoughToSpawn ()
         andalso HH.canForkThread thread
     in
       if notOkay then
@@ -641,14 +611,14 @@ struct
         val tidParent = DE.decheckGetTid thread
         val (tidLeft, tidRight) = DE.decheckFork ()
 
-        val _ = tryConsumeSpareHeartbeats spawnCost
+        val _ = Heartbeat.consumeSpare Heartbeat.spawnCost
 
         val tokenPolicy = nextPromotionTokenPolicy interruptedLeftThread
         val giveTokens = case tokenPolicy of
-                             TokenPolicyFair => Word32.>> (currentSpareHeartbeatTokens (), 0w1)
-                           | TokenPolicyKeep => 0w0
-                           | TokenPolicyGive => currentSpareHeartbeatTokens ()
-        val _ = tryConsumeSpareHeartbeats giveTokens
+                             TokenPolicyFair => Heartbeat.halfOfCurrent ()
+                           | TokenPolicyKeep => Heartbeat.zero
+                           | TokenPolicyGive => Heartbeat.currentSpare ()
+        val _ = Heartbeat.consumeSpare giveTokens
         (* val spareBefore = currentSpareHeartbeatTokens () *)
         (* val spareHB = ref 0w0 *)
         val jp =
@@ -731,16 +701,15 @@ struct
         val tidParent = DE.decheckGetTid thread
         val (tidLeft, tidRight) = DE.decheckFork ()
 
-        val currentSpare = currentSpareHeartbeatTokens ()
-        val halfSpare = Word32.>> (currentSpare, 0w1)
-        val _ = tryConsumeSpareHeartbeats halfSpare
+        val half = Heartbeat.halfOfCurrent ()
+        val _ = Heartbeat.consumeSpare half
 
         fun g' () =
           let
             val () = DE.copySyncDepthsFromThread (thread, Thread.current (), depth+1)
             val () = DE.decheckSetTid tidRight
             val () = HH.forceLeftHeap(myWorkerId(), Thread.current ())
-            val _ = addSpareHeartbeats halfSpare
+            val _ = Heartbeat.addSpare half
             val _ = Thread.atomicEnd()
 
             val gr = Result.result g
@@ -791,7 +760,7 @@ struct
           , rightSideResult = rightSideResult
           , incounter = incounter
           , tidRight = tidRight
-          , spareHeartbeatsGiven = halfSpare
+          , spareHeartbeatsGiven = half
           , tokenPolicy = TokenPolicyFair
           , gcj = gcj
           }
@@ -843,8 +812,8 @@ struct
                 val _ = doClearSuspects (thread, newDepth)
                 val _ = if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
                 val _ = case tokenPolicy of
-                            TokenPolicyGive => addSpareHeartbeats spareHeartbeatsGiven
-                          | _ => 0w0
+                            TokenPolicyGive => Heartbeat.addSpare spareHeartbeatsGiven
+                          | _ => Heartbeat.zero
                 val _ = incrementNumFastJoins ()
             in
               NONE
@@ -920,14 +889,13 @@ struct
          * handler restores them.
          *)
 
-        val hadEnoughToSpawnBefore =
-          (currentSpareHeartbeatTokens () >= spawnCost)
+        val hadEnoughToSpawnBefore = Heartbeat.enoughToSpawn ()
 
-        val _ = addSpareHeartbeats wealthPerHeartbeat
+        val _ = Heartbeat.addSpare Heartbeat.tokensPerBeat
 
         fun loop i =
           if
-            currentSpareHeartbeatTokens () >= spawnCost
+            Heartbeat.enoughToSpawn ()
             andalso maybeSpawn {youngestOptimization = false} thread
           then
             loop (i+1)
@@ -962,7 +930,7 @@ struct
       * these to all processes
       *)
     val _ =
-      if P > relayerThreshold then () else
+      if P > Heartbeat.relayerThreshold then () else
         MLton.Signal.setHandler
           ( MLton.Itimer.signal MLton.Itimer.Real
           , MLton.Signal.Handler.inspectInterrupted
@@ -1039,7 +1007,7 @@ struct
       , maybeSpawn = maybeSpawn
       , setQueueDepth = setQueueDepth
       , returnToSchedEndAtomic = returnToSchedEndAtomic
-      , tryConsumeSpareHeartbeats = tryConsumeSpareHeartbeats
+      , tryConsumeSpareHeartbeats = Heartbeat.consumeSpare
       , addEagerSpawns = addEagerSpawns
       , assertAtomic = assertAtomic
       , error = (fn s => die (fn _ => s)) : string -> unit
@@ -1053,12 +1021,10 @@ struct
      * spork definition
      *)
 
-    fun __inline_always__ noTokens () = __inline_always__ currentSpareHeartbeatTokens () < spawnCost
-
     fun __inline_always__ tryPromoteNow yo =
       ( Thread.atomicBegin ()
       ; if
-          not (noTokens ()) andalso
+          Heartbeat.enoughToSpawn () andalso
           #maybeSpawn (sched_package ()) yo (Thread.current ())
         then
           #addEagerSpawns (sched_package ()) 1
@@ -1086,7 +1052,7 @@ struct
         val (inject, project) = Universal.embed ()
 
         fun __inline_always__ body' (): 'a =
-            ((if noTokens () then () else tryPromoteNow {youngestOptimization = true});
+            ((if not (Heartbeat.enoughToSpawn ()) then () else tryPromoteNow {youngestOptimization = true});
              __inline_always__ body ())
 
         fun spwn' ((), J jp): unit =
@@ -1099,7 +1065,7 @@ struct
             val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
 
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            val _ = addSpareHeartbeats (#spareHeartbeatsGiven jp)
+            val _ = Heartbeat.addSpare (#spareHeartbeatsGiven jp)
             val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
             val _ = Thread.atomicEnd()
 
@@ -1449,10 +1415,10 @@ struct
 
 
   val _ =
-    if P > relayerThreshold then () else
+    if P > Heartbeat.relayerThreshold then () else
       MLton.Itimer.set (MLton.Itimer.Real,
-        { interval = Time.fromMicroseconds heartbeatMicroseconds
-        , value = Time.fromMicroseconds heartbeatMicroseconds
+        { interval = Time.fromMicroseconds Heartbeat.interval
+        , value = Time.fromMicroseconds Heartbeat.interval
         })
 
 
