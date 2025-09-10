@@ -1,4 +1,4 @@
-../mpllib/sources.$(COMPAT).mlb
+../../mpllib/sources.$(COMPAT).mlb
 f32.sml
 vec3.sml
 TinyKaboom.sml

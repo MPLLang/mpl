@@ -1,4 +1,4 @@
-../mpllib/sources.$(COMPAT).mlb
+../../mpllib/sources.$(COMPAT).mlb
 AS.sml
 BruteForce.sml
 PrefixDoubling.sml

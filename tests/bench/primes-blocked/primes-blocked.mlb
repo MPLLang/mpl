@@ -1,2 +1,2 @@
-../mpllib/sources.$(COMPAT).mlb
+../../mpllib/sources.$(COMPAT).mlb
 primes-blocked.sml

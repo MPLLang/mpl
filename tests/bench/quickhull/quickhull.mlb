@@ -1,4 +1,4 @@
-../mpllib/sources.$(COMPAT).mlb
+../../mpllib/sources.$(COMPAT).mlb
 ParseFile.sml
 TreeSeq.sml
 

@@ -1,4 +1,4 @@
-../mpllib/sources.$(COMPAT).mlb
+../../mpllib/sources.$(COMPAT).mlb
 ../bignum-add/Bignum.sml
 Add.sml
 ../bignum-add/SequentialAdd.sml

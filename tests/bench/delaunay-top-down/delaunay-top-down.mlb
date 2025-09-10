@@ -1,4 +1,4 @@
-../mpllib/sources.$(COMPAT).mlb
+../../mpllib/sources.$(COMPAT).mlb
 HashTable.sml
 DelaunayTriangulationTopDown.sml
 main.sml

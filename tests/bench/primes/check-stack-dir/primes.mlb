@@ -1,5 +1,5 @@
 $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/fork-join.mlb
 
-../mpllib/sources.$(COMPAT).mlb
+../../mpllib/sources.$(COMPAT).mlb
 primes.sml

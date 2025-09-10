@@ -1,4 +1,4 @@
-../mpllib/sources.$(COMPAT).mlb
+../../mpllib/sources.$(COMPAT).mlb
 SerialBFS.sml
 OffsetSearch.sml
 NondetBFS.sml
