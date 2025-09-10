@@ -1,0 +1,28 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install mlton libgmp-dev gcc make
+
+      - name: Build
+        run: make --silent
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpl
+          path: build/bin
