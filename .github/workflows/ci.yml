@@ -16,7 +16,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get mlton libgmp-dev gcc
+          sudo apt-get install mlton libgmp-dev gcc make
 
       - name: Build
         run: make
