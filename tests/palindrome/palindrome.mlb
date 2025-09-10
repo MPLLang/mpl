@@ -1,0 +1,3 @@
+../mpllib/sources.$(COMPAT).mlb
+Pal.sml
+main.sml

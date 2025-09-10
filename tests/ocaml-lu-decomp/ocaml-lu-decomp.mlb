@@ -1,0 +1,7 @@
+../mpllib/sources.$(COMPAT).mlb
+(*local
+  $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
+in
+  structure Random
+end*)
+main.sml

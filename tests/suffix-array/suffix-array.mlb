@@ -1,0 +1,5 @@
+../mpllib/sources.$(COMPAT).mlb
+AS.sml
+BruteForce.sml
+PrefixDoubling.sml
+main.sml
