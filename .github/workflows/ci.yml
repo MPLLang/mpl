@@ -3,8 +3,16 @@ name: Build
 on:
   push:
     branches: [ "main" ]
+    paths-ignore:
+      - 'docs/**'
+      - 'doc/license/**'
+      - 'examples/**'
   pull_request:
     branches: [ "main" ]
+    paths-ignore:
+      - 'docs/**'
+      - 'doc/license/**'
+      - 'examples/**'
 
 jobs:
   build:
