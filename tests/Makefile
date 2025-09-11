@@ -7,7 +7,8 @@ RMAT_GRAPH      :=$(PBBS_DIR)/testData/graphData/rMatGraph
 UC_INPUTS       := $(INPUT_DIR)/uniform-circle-1M $(INPUT_DIR)/uniform-circle-20M
 RMAT_INPUTS     := $(INPUT_DIR)/rmat-1M-symm $(INPUT_DIR)/rmat-10M-symm
 RMAT_BIN_INPUTS := $(patsubst %,%-bin,$(RMAT_INPUTS))
-ALL_INPUTS      := $(UC_INPUTS) $(RMAT_INPUTS) $(RMAT_BIN_INPUTS)
+TEXT_INPUTS     := $(INPUT_DIR)/words-8 $(INPUT_DIR)/words-32
+ALL_INPUTS      := $(UC_INPUTS) $(RMAT_INPUTS) $(RMAT_BIN_INPUTS) $(TEXT_INPUTS)
 
 .PHONY: all clean deepclean
 
@@ -33,6 +34,12 @@ $(INPUT_DIR)/rmat-%-symm: $(RMAT_GRAPH)
 
 $(INPUT_DIR)/rmat-%-symm-bin: bench/graphio.bin $(INPUT_DIR)/rmat-%-symm 
 	$< $(word 2, $^) -outfile $@
+
+$(INPUT_DIR)/words:
+	curl -L -o $@ https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_alpha.txt
+
+$(INPUT_DIR)/words-%: $(INPUT_DIR)/words
+	shuf -n $$(( $$(wc -l < $<) * $(*) )) -o $@ --repeat $<
 
 $(INPUT_DIR):
 	mkdir -p $@
