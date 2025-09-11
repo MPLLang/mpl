@@ -36,6 +36,7 @@ local
     "allowFFI true"
     "allowPrim true"
   in
+    Heartbeat.sml
     Scheduler.sml
   end
   ForkJoin.sml
