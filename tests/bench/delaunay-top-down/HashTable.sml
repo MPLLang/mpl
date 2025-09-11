@@ -80,7 +80,7 @@ struct
 
 
   fun bcas (r, old, new) =
-    MLton.eq (old, MLton.Parallel.compareAndSwap r (old, new))
+    MLton.eq (old, Concurrency.cas r (old, new))
 
 
   (* fun atomic_combine_with (f: 'a * 'a -> 'a) (arr: 'a array, i) (x: 'a) =

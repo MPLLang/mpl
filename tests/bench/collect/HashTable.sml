@@ -56,7 +56,7 @@ struct
           else
             let
               val current' =
-                MLton.Parallel.arrayCompareAndSwap (arr, i) (current, desired)
+                Concurrency.casArray (arr, i) (current, desired)
             in
               if MLton.eq (current', current) then () else loop current'
             end
