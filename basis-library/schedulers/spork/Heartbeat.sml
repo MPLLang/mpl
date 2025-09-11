@@ -65,8 +65,8 @@ struct
   fun addSpare tokens =
     addSpareFFI (gcstate (), tokens)
 
-  val spawnCost = 0w1
-  val zero = 0w0
+  val spawnCost: token_count = 0w1
+  val zero: token_count = 0w0
 
   fun halfOfCurrent () =
     Word32.>> (currentSpare (), 0w1)
