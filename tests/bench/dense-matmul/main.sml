@@ -1,6 +1,6 @@
 structure CLA = CommandLineArgs
 
-val n = CLA.parseInt "N" 1024
+val n = CLA.parseInt "n" 1024
 val _ =
   if Util.boundPow2 n = n then ()
   else Util.die "sidelength N must be a power of two"

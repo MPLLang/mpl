@@ -35,7 +35,7 @@ fun primes n =
  * parse command-line arguments and run
  *)
 
-val n = CLA.parseInt "N" (100 * 1000 * 1000)
+val n = CLA.parseInt "n" (100 * 1000 * 1000)
 
 val msg = "generating primes up to " ^ Int.toString n
 val result = Benchmark.run msg (fn _ => primes n)

@@ -1,7 +1,7 @@
 structure CLA = CommandLineArgs
 structure P = Pal
 
-val n = CLA.parseInt "N" (1000 * 1000)
+val n = CLA.parseInt "n" (1000 * 1000)
 
 (* makes the sequence `ababab...` *)
 fun gen i = if i mod 2 = 0 then #"a" else #"b"

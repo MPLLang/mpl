@@ -7,9 +7,9 @@
  *)
 
 structure CLA = CommandLineArgs
-val mat_size = CLA.parseInt "mat_size" 1200
+val mat_size = CLA.parseInt "n" 1200
 val chunk_size = CLA.parseInt "chunk_size" 16
-val _ = print ("mat_size " ^ Int.toString mat_size ^ "\n")
+val _ = print ("n" ^ Int.toString mat_size ^ "\n")
 val _ = print ("chunk_size " ^ Int.toString chunk_size ^ "\n")
 
 (* ocaml source:

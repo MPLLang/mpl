@@ -15,7 +15,7 @@ fun randPt seed =
     (1.0 + r * Math.cos(theta), 1.0 + r * Math.sin(theta))
   end
 
-val filename = CLA.parseString "infile" ""
+val filename = CLA.parseString "input" ""
 val outfile = CLA.parseString "outfile" ""
 val n = CLA.parseInt "n" (1000 * 1000 * 100)
 val doCheck = CLA.parseFlag "check"

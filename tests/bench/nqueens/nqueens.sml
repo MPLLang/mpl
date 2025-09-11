@@ -27,8 +27,8 @@ fun countSol n =
     search 0 []
   end
 
-val n = CommandLineArgs.parseInt "N" 13
-val _ = print ("N " ^ Int.toString n ^ "\n")
+val n = CommandLineArgs.parseInt "n" 13
+val _ = print ("n " ^ Int.toString n ^ "\n")
 
 val msg =
   "counting number of " ^ Int.toString n ^ "x" ^ Int.toString n ^ " solutions"

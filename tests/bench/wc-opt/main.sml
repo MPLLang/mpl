@@ -2,19 +2,17 @@ structure CLA = CommandLineArgs
 structure Seq = ArraySequence
 
 val n = CLA.parseInt "n" (1000 * 1000 * 100)
-val filePath = CLA.parseString "infile" ""
-
 val source =
-  if filePath = "" then
-    (*Seq.tabulate (fn _ => #" ") n*)
-    Seq.tabulate (fn i => Char.chr (Util.hash i mod 255)) n
-  else
+  case CLA.positional () of
+    [filePath] => 
     let
       val (source, tm) = Util.getTime (fn _ => ReadFile.contentsSeq filePath)
       val _ = print ("loadtime " ^ Time.fmt 3 tm ^ "\n")
     in
       source
     end
+  | _ =>
+    Seq.tabulate (fn i => Char.chr (Util.hash i mod 255)) n
 
 fun task () =
   WC.wc source
