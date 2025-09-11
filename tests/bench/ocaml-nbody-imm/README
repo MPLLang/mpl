@@ -1,0 +1,3 @@
+Difference from ocaml-nbody:
+  - switch from mutable fields in planet to fully immutable record
+  - switch from imperative main loop to purely functional

@@ -1,0 +1,23 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+  $(SML_LIB)/basis/mpl.mlb
+  $(SML_LIB)/basis/fork-join.mlb
+
+  local
+    $(SML_LIB)/basis/build/sources.mlb
+  in
+    structure VectorExtra = Vector
+  end
+  PosixWriteFile.sml
+  mpl.sml
+in
+  structure ForkJoin
+  structure Concurrency
+  structure ReadFile
+  structure WriteFile
+  structure GCStats
+  structure RuntimeStats
+  structure MLton
+  structure VectorExtra
+end
