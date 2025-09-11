@@ -39,6 +39,12 @@ $(INPUT_DIR)/words:
 	curl -L -o $@ https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_alpha.txt
 
 $(INPUT_DIR)/words-%: $(INPUT_DIR)/words
+	# Evil shell magic:
+	# 1. count the lines of the original words file
+	# 2. multiply that by n in words-n
+	# 3. shuffle with repetition that many times
+	#
+	# You can technically create words-n for any n, not just 8 or 32
 	shuf -n $$(( $$(wc -l < $<) * $(*) )) -o $@ --repeat $<
 
 $(INPUT_DIR):
