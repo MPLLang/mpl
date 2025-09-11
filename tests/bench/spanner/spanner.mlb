@@ -1,4 +1,0 @@
-../../mpllib/sources.$(COMPAT).mlb
-../ldd/LDD.sml
-Spanner.sml
-main.sml
