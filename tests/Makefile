@@ -11,7 +11,8 @@ UC_INPUTS       := $(INPUT_DIR)/uniform-circle-1M $(INPUT_DIR)/uniform-circle-20
 RMAT_INPUTS     := $(INPUT_DIR)/rmat-1M-symm $(INPUT_DIR)/rmat-10M-symm
 RMAT_BIN_INPUTS := $(patsubst %,%-bin,$(RMAT_INPUTS))
 TEXT_INPUTS     := $(INPUT_DIR)/words-8 $(INPUT_DIR)/words-32
-ALL_INPUTS      := $(UC_INPUTS) $(RMAT_INPUTS) $(RMAT_BIN_INPUTS) $(TEXT_INPUTS)
+BIN_INPUTS      := $(INPUT_DIR)/mangore-waltz.wav $(INPUT_DIR)/pano.ppm $(INPUT_DIR)/moon-landing.wav
+ALL_INPUTS      := $(UC_INPUTS) $(RMAT_INPUTS) $(RMAT_BIN_INPUTS) $(TEXT_INPUTS) $(BIN_INPUTS)
 
 .PHONY: all clean deepclean
 
@@ -25,6 +26,9 @@ $(PBBS_DIR):
 
 $(RAND_PTS) $(RMAT_GRAPH): $(PBBS_DIR)
 	$(MAKE) -C $(@D) $(@F)
+
+$(BIN_INPUTS):
+	curl -L https://raw.githubusercontent.com/MPLLang/parallel-ml-bench/refs/heads/main/inputs/$(notdir $@) -o $@
 
 $(INPUT_DIR)/uniform-circle-%: $(RAND_PTS)
 	$< -s $(subst M,000000,$(*)) $@
@@ -101,7 +105,7 @@ MISC_TESTS       := tinykaboom reverb seam-carve range-tree raytracer ocaml-nbod
 ALL_TESTS := $(NUMERICAL_TESTS) $(WORDS_TESTS) $(CIRC_TESTS) $(RMAT_TESTS) $(MISC_TESTS)
 $(ALL_TESTS): %: $(BIN_DIR)/%.$(COMPILER_NAME)
 
-tests: $(ALL_TESTS)
+test: $(ALL_TESTS)
 
 $(NUMERICAL_TESTS):
 ifdef N
@@ -110,15 +114,18 @@ else
 	$(BIN_DIR)/$@.$(COMPILER_NAME) -n $($@_N)
 endif
 
+.SECONDEXPANSION:
+
 ifdef WORDS
 $(WORDS_TESTS):
 	$(BIN_DIR)/$@.$(COMPILER_NAME) $($@_PRE) $(WORDS)
 else
-$(WORDS_TESTS): $(%_W)
-	$(BIN_DIR)/$@.$(COMPILER_NAME) $($@_PRE) $($@_W)
+$(WORDS_TESTS): $$($$@_W)
+	$(BIN_DIR)/$@.$(COMPILER_NAME) $($@_PRE) $<
 endif
 
-$(CIRC_TESTS): $(INPUT_DIR)/uniform-circle-$(%_C)
+
+$(CIRC_TESTS): $(INPUT_DIR)/uniform-circle-$$($$@_C)
 	$(BIN_DIR)/$@.$(COMPILER_NAME) -input $<
 
 $(RMAT_TESTS): $(INPUT_DIR)/rmat-10M-symm-bin
@@ -127,10 +134,10 @@ $(RMAT_TESTS): $(INPUT_DIR)/rmat-10M-symm-bin
 tinykaboom:
 	$(BIN_DIR)/$@.$(COMPILER_NAME) -width 100 -height 100 -frames 10 -fps 1
 
-reverb: 
+reverb: $(INPUT_DIR)/mangore-waltz.wav
 	$(BIN_DIR)/$@.$(COMPILER_NAME) $(INPUT_DIR)/mangore-waltz.wav
 
-seam-carve:
+seam-carve: $(INPUT_DIR)/pano.ppm
 	$(BIN_DIR)/$@.$(COMPILER_NAME) $(INPUT_DIR)/pano.ppm -num-seams 100
 
 range-tree:
