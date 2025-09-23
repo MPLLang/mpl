@@ -104,6 +104,7 @@ signature PRIM =
        | MLton_share (* to rssa (as nop or runtime C fn) *)
        | MLton_size (* to rssa (as runtime C fn) *)
        | MLton_touch (* to rssa (as nop) or backend (as nop) *)
+       (* TODO: add isLoop bool *)
        | Spork of {tokenSplitPolicy: Word32.word} (* closure convert *)
        | Spork_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
        | Spork_getData of Spid.t (* backend *)

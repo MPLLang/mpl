@@ -145,6 +145,7 @@ structure Operand =
           | _ => false
    end
 
+(* # NOTE: Safe to inline in C *)
 fun implementsPrim (p: 'a Prim.t): bool =
    let
       datatype z = datatype Prim.t
@@ -1512,6 +1513,7 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
                             ))
                          ; jump label)
                    | Goto dst => gotoLabel (dst, {tab = true})
+                   (* TODO: does loopiness affect this section? *)
                    | Spork {cont, ...} => gotoLabel (cont, {tab = true})
                    | Raise {raisesTo} =>
                         (outputStatement (Statement.PrimApp

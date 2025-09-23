@@ -57,6 +57,7 @@ signature DIRECT_EXP =
            val linearizeGoto:
               t * Return.Handler.t * Label.t -> Label.t * Block.t list
            val name: t * (Var.t -> t) -> t
+           (* TODO: I don't think this needs to be messed with *)
            val spork: {spid: Spid.t, cont: t, spwn: t, ty: Type.t} -> t
            val spoin: {spid: Spid.t, seq: t, sync: t, ty: Type.t} -> t
            val primApp: {args: t vector,

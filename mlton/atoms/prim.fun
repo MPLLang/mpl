@@ -113,6 +113,7 @@ datatype 'a t =
  | MLton_share (* to rssa (as nop or runtime C fn) *)
  | MLton_size (* to rssa (as runtime C fn) *)
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
+ (* TODO: add isLoop: bool*)
  | Spork of {tokenSplitPolicy: Word32.word} (* closure convert *)
  | Spork_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
  | Spork_getData of Spid.t (* backend *)
@@ -294,6 +295,7 @@ fun toString (n: 'a t): string =
        | MLton_share => "MLton_share"
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
+       (* TODO: spork {tokenSplitPolicy, isLoop} *)
        | Spork {tokenSplitPolicy=0w0} => "spork_fair"
        | Spork {tokenSplitPolicy=0w1} => "spork_keep"
        | Spork {tokenSplitPolicy=0w2} => "spork_give"
@@ -462,6 +464,7 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_share, MLton_share) => true
     | (MLton_size, MLton_size) => true
     | (MLton_touch, MLton_touch) => true
+    (* TODO: isLoop1 = isLoop2 *)
     | (Spork {tokenSplitPolicy = tsp1}, Spork {tokenSplitPolicy = tsp2}) => tsp1 = tsp2
     | (Spork_forkThreadAndSetData yo1, Spork_forkThreadAndSetData yo2) => yo1 = yo2
     | (Spork_getData spid, Spork_getData spid') => Spid.equals (spid, spid')
@@ -647,6 +650,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_share => MLton_share
     | MLton_size => MLton_size
     | MLton_touch => MLton_touch
+    (* TODO: spork tsp isLoop *)
     | Spork tsp => Spork tsp
     | Spork_forkThreadAndSetData z => Spork_forkThreadAndSetData z
     | Spork_getData spid => Spork_getData spid
@@ -863,6 +867,7 @@ val kind: 'a t -> Kind.t =
        | MLton_share => SideEffect
        | MLton_size => DependsOnState
        | MLton_touch => SideEffect
+       (* TODO *)
        | Spork _ => SideEffect
        | Spork_forkThreadAndSetData _ => SideEffect
        | Spork_getData _ => DependsOnState
@@ -1074,6 +1079,7 @@ in
        MLton_share,
        MLton_size,
        MLton_touch,
+       (* TODO: Spork {tokenSplitPolicy = ..., isLoop = ...} *)
        Spork {tokenSplitPolicy = 0w0},
        Spork {tokenSplitPolicy = 0w1},
        Spork {tokenSplitPolicy = 0w2},
@@ -1428,6 +1434,7 @@ fun 'a checkApp (prim: 'a t,
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
        | MLton_touch => oneTarg (fn t => (oneArg t, unit))
        | Spork _ =>
+       (* TODO: Add isLoop arg -> sevenTargs and nineTargs? *)
             (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
             (*        ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
             sixTargs (fn (taa, tar, tba, tbr, td, tc) =>
@@ -1585,6 +1592,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
        | Spork _ =>
+       (* TODO: add isLoop *)
             (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
             let
                val (taa, tar) = deArrow (arg 0)

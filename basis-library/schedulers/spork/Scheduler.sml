@@ -1024,6 +1024,7 @@ struct
     fun __inline_always__ tryPromoteNow yo =
       ( Thread.atomicBegin ()
       ; if
+        (* ! Second heartbeat check *)
           Heartbeat.enoughToSpawn () andalso
           #maybeSpawn (sched_package ()) yo (Thread.current ())
         then
@@ -1052,6 +1053,7 @@ struct
         val (inject, project) = Universal.embed ()
 
         fun __inline_always__ body' (): 'a =
+          (* ! First Hearbeat Check *)
             ((if not (Heartbeat.enoughToSpawn ()) then () else tryPromoteNow {youngestOptimization = true});
              __inline_always__ body ())
 
