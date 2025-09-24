@@ -113,7 +113,8 @@ datatype 'a t =
  | MLton_share (* to rssa (as nop or runtime C fn) *)
  | MLton_size (* to rssa (as runtime C fn) *)
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
- (* TODO: add isLoop: bool*)
+ (* TODO: choose between unrolled and regular *)
+ | Spork_choose
  | Spork of {tokenSplitPolicy: Word32.word} (* closure convert *)
  | Spork_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
  | Spork_getData of Spid.t (* backend *)
@@ -295,7 +296,8 @@ fun toString (n: 'a t): string =
        | MLton_share => "MLton_share"
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
-       (* TODO: spork {tokenSplitPolicy, isLoop} *)
+       (* TODO: choose spork *)
+       | Spork_choose => "spork_choose"
        | Spork {tokenSplitPolicy=0w0} => "spork_fair"
        | Spork {tokenSplitPolicy=0w1} => "spork_keep"
        | Spork {tokenSplitPolicy=0w2} => "spork_give"

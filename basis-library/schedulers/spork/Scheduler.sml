@@ -103,13 +103,18 @@ struct
         * (exn -> 'c)		(* exn seq  *)
         * (exn * 'd -> 'c)	(* exn sync *)
         -> 'c;
+  val primSporkChoose' =
+    _prim "spork_choose"
+      : ('u -> 'v) -> 'a -> 'a -> 'a
+
   fun __inline_always__ primSporkFair (body, spwn, seq, sync, exnseq, exnsync) =
       __inline_always__ primSporkFair' (body, (), spwn, (), seq, sync, exnseq, exnsync)
   fun __inline_always__ primSporkKeep (body, spwn, seq, sync, exnseq, exnsync) =
       __inline_always__ primSporkKeep' (body, (), spwn, (), seq, sync, exnseq, exnsync)
   fun __inline_always__ primSporkGive (body, spwn, seq, sync, exnseq, exnsync) =
       __inline_always__ primSporkGive' (body, (), spwn, (), seq, sync, exnseq, exnsync)
-  
+  (* TODO: add primSporkChoose *)
+
   val primForkThreadAndSetData = _prim "spork_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
   val primForkThreadAndSetData_youngest = _prim "spork_forkThreadAndSetData_youngest": Thread.t * 'a -> Thread.p;
 
