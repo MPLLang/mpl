@@ -294,8 +294,80 @@ struct
       val fIntInf = LoopsInt.parform
     end)
 
-  val pareduce = Pareduce.f
+  local
+    (* fallback to regular implementation until runtime supports spork_choose *)
+    fun primSporkChoose (loopBody, unrolled, regular) = regular
+
+    fun unifiedReducem (combine: 'a * 'a -> 'a) (zero: 'a) (lo: int, hi: int) (f: int -> 'a) : 'a =
+    let
+      fun regularImpl () =
+        let
+          val pareduce = case Int.precision of
+              SOME 8 => Loops8.pareduce
+            | SOME 16 => Loops16.pareduce
+            | SOME 32 => Loops32.pareduce
+            | SOME 64 => Loops64.pareduce
+            | _ => LoopsInt.pareduce
+        in
+          pareduce (lo, hi) zero (fn (i, a) => combine (a, f i)) combine
+        end
+
+      fun unrolledImpl () =
+        Parfor.pareduce (lo, hi) zero (fn (i, a) => combine (a, f i)) combine
+    in
+      primSporkChoose (f, unrolledImpl (), regularImpl ())
+    end
+
+    fun unifiedParform (lo: int, hi: int) (f: int -> unit) : unit =
+    let
+      fun regularImpl () =
+        let
+          val parform = case Int.precision of
+              SOME 8 => Loops8.parform
+            | SOME 16 => Loops16.parform
+            | SOME 32 => Loops32.parform
+            | SOME 64 => Loops64.parform
+            | _ => LoopsInt.parform
+        in
+          parform (lo, hi) f
+        end
+
+      fun unrolledImpl () =
+        let
+          val _ = Parfor.pareduce (lo, hi) () (fn (i, _) => f i) (fn _ => ())
+        in
+          ()
+        end
+    in
+      primSporkChoose (f, unrolledImpl (), regularImpl ())
+    end
+
+    fun unifiedPareduce (lo: int, hi: int) (zero: 'a) (step: int * 'a -> 'a) (combine: 'a * 'a -> 'a) : 'a =
+    let
+      fun regularImpl () =
+        let
+          val pareduce = case Int.precision of
+              SOME 8 => Loops8.pareduce
+            | SOME 16 => Loops16.pareduce
+            | SOME 32 => Loops32.pareduce
+            | SOME 64 => Loops64.pareduce
+            | _ => LoopsInt.pareduce
+        in
+          pareduce (lo, hi) zero step combine
+        end
+
+      fun unrolledImpl () =
+        Parfor.pareduce (lo, hi) zero step combine
+
+      fun loopBody i = step (i, zero)
+    in
+      primSporkChoose (loopBody, unrolledImpl (), regularImpl ())
+    end
+  in
+    val reducem = unifiedReducem
+    val parform = unifiedParform
+    val pareduce = unifiedPareduce
+  end
+
   val pareduceBreakExn = PareduceBreakExn.f
-  val reducem = Reducem.f
-  val parform = Parform.f
 end

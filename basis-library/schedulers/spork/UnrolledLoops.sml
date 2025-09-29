@@ -1,4 +1,4 @@
-structure Parfor: PARFOR =
+structure Parfor =
 struct
 
   type word = Word64.word
@@ -35,8 +35,8 @@ struct
                 let
                   val mid = midpoint (i + 0w8, j)
                 in
-                  ForkJoin.spork {
-                    tokenPolicy = ForkJoin.TokenPolicyFair,
+                  Scheduler.SporkJoin.spork {
+                    tokenPolicy = Scheduler.TokenPolicyFair,
                     body = fn () => loop1 (a', i + 0w8, mid),
                     spwn = fn () => loop1 (z, mid, j),
                     seq  = fn a'' => loop1 (a'', mid, j),
@@ -45,8 +45,8 @@ struct
                   }
                 end
           in
-            ForkJoin.spork {
-              tokenPolicy = ForkJoin.TokenPolicyGive,
+            Scheduler.SporkJoin.spork {
+              tokenPolicy = Scheduler.TokenPolicyGive,
               body = fn () =>
                 let
                   val a = step (a, i)
@@ -79,8 +79,8 @@ struct
                 let
                   val mid = midpoint (i + 0w4, j)
                 in
-                  ForkJoin.spork {
-                    tokenPolicy = ForkJoin.TokenPolicyFair,
+                  Scheduler.SporkJoin.spork {
+                    tokenPolicy = Scheduler.TokenPolicyFair,
                     body = fn () => loop1 (a', i + 0w4, mid),
                     spwn = fn () => loop1 (z, mid, j),
                     seq  = fn a'' => loop1 (a'', mid, j),
@@ -89,8 +89,8 @@ struct
                   }
                 end
           in
-            ForkJoin.spork {
-              tokenPolicy = ForkJoin.TokenPolicyGive,
+            Scheduler.SporkJoin.spork {
+              tokenPolicy = Scheduler.TokenPolicyGive,
               body = fn () =>
                 let
                   val a = step (a, i)
@@ -119,8 +119,8 @@ struct
                 let
                   val mid = midpoint (i + 0w2, j)
                 in
-                  ForkJoin.spork {
-                    tokenPolicy = ForkJoin.TokenPolicyFair,
+                  Scheduler.SporkJoin.spork {
+                    tokenPolicy = Scheduler.TokenPolicyFair,
                     body = fn () => loop1 (a', i + 0w2, mid),
                     spwn = fn () => loop1 (z, mid, j),
                     seq  = fn a'' => loop1 (a'', mid, j),
@@ -129,8 +129,8 @@ struct
                   }
                 end
           in
-            ForkJoin.spork {
-              tokenPolicy = ForkJoin.TokenPolicyGive,
+            Scheduler.SporkJoin.spork {
+              tokenPolicy = Scheduler.TokenPolicyGive,
               body = fn () =>
                 let
                   val a = step (a, i)
@@ -157,8 +157,8 @@ struct
                 let
                   val mid = midpoint (i + 0w1, j)
                 in
-                  ForkJoin.spork {
-                    tokenPolicy = ForkJoin.TokenPolicyFair,
+                  Scheduler.SporkJoin.spork {
+                    tokenPolicy = Scheduler.TokenPolicyFair,
                     body = fn () => loop1 (a', i + 0w1, mid),
                     spwn = fn () => loop1 (z, mid, j),
                     seq  = fn a'' => loop1 (a'', mid, j),
@@ -167,8 +167,8 @@ struct
                   }
                 end
           in
-            ForkJoin.spork {
-              tokenPolicy = ForkJoin.TokenPolicyGive,
+            Scheduler.SporkJoin.spork {
+              tokenPolicy = Scheduler.TokenPolicyGive,
               body = fn () => step (a, i),
               seq = fn a' => loop2 (a', i + 0w1, j),
               sync = g,

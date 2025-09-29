@@ -114,7 +114,7 @@ datatype 'a t =
  | MLton_size (* to rssa (as runtime C fn) *)
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
  (* TODO: choose between unrolled and regular *)
- | Spork_choose
+ | Spork_choose of {tokenSplitPolicy: Word32.word} (* closure convert *)
  | Spork of {tokenSplitPolicy: Word32.word} (* closure convert *)
  | Spork_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
  | Spork_getData of Spid.t (* backend *)
@@ -297,7 +297,10 @@ fun toString (n: 'a t): string =
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
        (* TODO: choose spork *)
-       | Spork_choose => "spork_choose"
+       | Spork_choose {tokenSplitPolicy=0w0} => "spork_choose_fair"
+       | Spork_choose {tokenSplitPolicy=0w1} => "spork_choose_keep"
+       | Spork_choose {tokenSplitPolicy=0w2} => "spork_choose_give"
+       | Spork_choose {tokenSplitPolicy=pol} => Error.bug ("unknown spork tokensplitpolicy " ^ Word32.toString pol)
        | Spork {tokenSplitPolicy=0w0} => "spork_fair"
        | Spork {tokenSplitPolicy=0w1} => "spork_keep"
        | Spork {tokenSplitPolicy=0w2} => "spork_give"
