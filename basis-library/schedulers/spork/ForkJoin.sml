@@ -72,6 +72,7 @@ functor ManagedLoops (LoopIndex: LOOP_INDEX) :>
 sig
   val pareduce: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val pareduceBreakExn: (int * int) -> 'a -> (('a -> exn) * int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
+  val pareduceBounds: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a * int * int -> 'a) -> ('a * 'a * int * int * int -> 'a) -> 'a
   val reducem: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
   val parform: (int * int) -> (int -> unit) -> unit
 end =
@@ -108,6 +109,34 @@ struct
       in
         __inline_always__ iter z (LoopIndex.fromInt (Int.min (i, j)), LoopIndex.fromInt j)
       end
+
+
+  (* Takes two merge functions: one for merging result of seq execution with that of the entire rest of the loop (merge1), and the other for merging two halves of a split loop range (merge2). This is helpful in situations where we want to treat those merges differently (e.g. custom implementation of scan and filter). *)
+  fun __inline_always__ pareduceBounds (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge1: 'a * 'a * int * int -> 'a) (merge2: 'a * 'a * int * int * int -> 'a): 'a =
+      let fun iter (b: 'a) (i: idx, j: idx): 'a =
+              if LoopIndex.equal (i, j) then b else
+                let fun __inline_never__ split () =
+                        if LoopIndex.equal (LoopIndex.increment i, j) then z else
+                          let val mid = LoopIndex.midpoint (LoopIndex.increment i, j)
+                              val (b1, b2) = par (fn () => iter z (LoopIndex.increment i, mid),
+                                                  fn () => iter z (mid, j))
+                          in
+                            merge2 (b1, b2, LoopIndex.toInt (LoopIndex.increment i), LoopIndex.toInt mid, LoopIndex.toInt j)
+                          end
+                in
+                  spork {
+                    tokenPolicy = TokenPolicyGive,
+                    body = fn () => __inline_always__ step (LoopIndex.toInt i, b),
+                    spwn = split,
+                    seq = fn b' => iter b' (LoopIndex.increment i, j),
+                    sync = fn (b1, b2) => merge1 (b1, b2, LoopIndex.toInt i, LoopIndex.toInt j),
+                    unstolen = SOME (fn b' => merge1 (b', split (), LoopIndex.toInt i, LoopIndex.toInt j))
+                  }
+                end
+      in
+        __inline_always__ iter z (LoopIndex.fromInt (Int.min (i, j)), LoopIndex.fromInt j)
+      end
+
 
 
   fun __inline_always__ pareduceBreak (i: int, j: int) (z: 'a) (step: int * 'a -> 'a * bool) (merge: 'a * 'a -> 'a): 'a =
