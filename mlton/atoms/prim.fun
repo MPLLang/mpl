@@ -1088,6 +1088,9 @@ in
        Spork {tokenSplitPolicy = 0w0},
        Spork {tokenSplitPolicy = 0w1},
        Spork {tokenSplitPolicy = 0w2},
+       Spork_choose {tokenSplitPolicy = 0w0},
+       Spork_choose {tokenSplitPolicy = 0w1},
+       Spork_choose {tokenSplitPolicy = 0w2},
        Spork_forkThreadAndSetData {youngest=true},
        Spork_forkThreadAndSetData {youngest=false},
        (*Spork_getData,*)
