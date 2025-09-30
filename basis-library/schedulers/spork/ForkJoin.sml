@@ -296,7 +296,7 @@ struct
 
   local
     (* fallback to regular implementation until runtime supports spork_choose *)
-    fun primSporkChoose (loopBody, unrolled, regular) = regular
+    fun primSporkChoose (loopBody, unrolled, regular) = unrolled
 
     fun unifiedReducem (combine: 'a * 'a -> 'a) (zero: 'a) (lo: int, hi: int) (f: int -> 'a) : 'a =
     let
