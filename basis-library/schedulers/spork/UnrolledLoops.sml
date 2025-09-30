@@ -1,4 +1,4 @@
-structure Parfor =
+structure Unrolled =
 struct
 
   type word = Word64.word

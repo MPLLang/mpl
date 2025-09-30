@@ -313,7 +313,7 @@ struct
         end
 
       fun unrolledImpl () =
-        Parfor.pareduce (lo, hi) zero (fn (i, a) => combine (a, f i)) combine
+        Unrolled.pareduce (lo, hi) zero (fn (i, a) => combine (a, f i)) combine
     in
       primSporkChoose (f, unrolledImpl (), regularImpl ())
     end
@@ -334,7 +334,7 @@ struct
 
       fun unrolledImpl () =
         let
-          val _ = Parfor.pareduce (lo, hi) () (fn (i, _) => f i) (fn _ => ())
+          val _ = Unrolled.pareduce (lo, hi) () (fn (i, _) => f i) (fn _ => ())
         in
           ()
         end
@@ -357,7 +357,7 @@ struct
         end
 
       fun unrolledImpl () =
-        Parfor.pareduce (lo, hi) zero step combine
+        Unrolled.pareduce (lo, hi) zero step combine
 
       fun loopBody i = step (i, zero)
     in
