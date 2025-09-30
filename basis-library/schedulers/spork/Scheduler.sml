@@ -116,7 +116,7 @@ struct
   fun __inline_always__ primSporkGive (body, spwn, seq, sync, exnseq, exnsync) =
       __inline_always__ primSporkGive' (body, (), spwn, (), seq, sync, exnseq, exnsync)
   (* TODO: Re-enable after implementing spork_choose *)
-  fun __inline_always__ primSporkChoose (loopBody, unrolled, regular) = regular
+  fun __inline_always__ primSporkChoose (loopBody, unrolled, regular) = unrolled
 
   val primForkThreadAndSetData = _prim "spork_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
   val primForkThreadAndSetData_youngest = _prim "spork_forkThreadAndSetData_youngest": Thread.t * 'a -> Thread.p;
