@@ -224,6 +224,8 @@ in
 
       parse.sig
       parse.sml
+
+      word32.sml
    in
       signature APPEND_LIST
       signature ARRAY
@@ -349,6 +351,7 @@ in
       structure Vector
       structure Word
       structure Word8
+      structure Word32
 
       functor Control
       functor Env

@@ -104,6 +104,7 @@ var.fun
 func.sig
 label.sig
 spid.sig
+spid.fun
 ffi.sig
 ffi.fun
 cases.sig

@@ -133,6 +133,7 @@ structure Unit
 structure Vector
 structure Word
 structure Word8
+structure Word32
 
 functor Control
 functor Env

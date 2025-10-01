@@ -230,7 +230,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                      Vector.equals (spwns1, spwns2, Label.equals)
                   fun hash (offset, tokenPolicies, spwns) =
                      Hash.combine (Bytes.hash offset,
-                                   Hash.combine(Hash.vectorMap (tokenPolicies, fn p => p),
+                                   Hash.combine(Hash.vectorMap (tokenPolicies, Word.fromLarge o Word32.toLarge),
                                                 Hash.vectorMap (spwns, Label.hash)))
                in
                   HashTable.new {equals = equals,

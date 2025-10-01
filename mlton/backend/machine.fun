@@ -736,14 +736,14 @@ structure SporkInfo =
          in
             record [("index", Int.layout index),
                     ("offset", Bytes.layout offset),
-                    ("tokenPolicies", Vector.layout Word.layout tokenPolicies),
+                    ("tokenPolicies", Vector.layout Word32.layout tokenPolicies),
                     ("spwns", Vector.layout Label.layout spwns)]
          end
 
       fun hash (T {index, offset, tokenPolicies, spwns}) =
          Hash.combine (Word.fromInt index,
          Hash.combine (Bytes.hash offset,
-         Hash.combine (Hash.vectorMap (tokenPolicies, fn p => p),
+         Hash.combine (Hash.vectorMap (tokenPolicies, fn p => Word.fromLarge (Word32.toLarge p)),
                        Hash.vectorMap (spwns, Label.hash))))
    end
 
