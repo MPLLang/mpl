@@ -158,6 +158,7 @@ val convertPrimExpInfo = Trace.info "ClosureConvert.convertPrimExp"
 val valueTypeInfo = Trace.info "ClosureConvert.valueType"
 
 structure LambdaFree = LambdaFree (Sxml)
+(* # NOTE: Free variable analysis *)
 
 local
    open LambdaFree
@@ -1101,6 +1102,7 @@ fun closureConvert
                                       args = Vector.new1 (lambdaInfoTuple info)},
                          ac)
                   end
+               (* TODO: isLoop bool *)
              | SprimExp.PrimApp {prim = Prim.Spork {tokenSplitPolicy}, targs, args} =>
                (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'bb * ('ar -> 'c) * ('ar * 'd -> 'c) -> 'c *)
                let
@@ -1340,6 +1342,7 @@ fun closureConvert
                                          v1 (coerce (convertVarInfo y,
                                                      VarInfo.value y, v)))
                              end
+                             (* TODO: loopy stuff? *)
                         | Prim.Spork_forkThreadAndSetData _ =>
                              let
                                 val t = varExpInfo (arg 0)

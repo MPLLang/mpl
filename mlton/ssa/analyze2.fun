@@ -161,6 +161,7 @@ fun 'a analyze
                in ()
                end
           | Goto {dst, args} => coerces ("goto", values args, labelValues dst)
+          (* TODO: loopy stuff? *)
           | Spork {cont, spwn, ...} =>
                let
                   fun ensureNullary j =

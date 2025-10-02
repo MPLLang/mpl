@@ -294,8 +294,79 @@ struct
       val fIntInf = LoopsInt.parform
     end)
 
-  val pareduce = Pareduce.f
+  local
+    (* fallback to regular implementation until runtime supports spork_choose *)
+    fun __inline_always__ primSporkChoose (loopBody, unrolled, regular) = __inline_always__ unrolled ()
+
+    fun unifiedReducem (combine: 'a * 'a -> 'a) (zero: 'a) (lo: int, hi: int) (f: int -> 'a) : 'a =
+    let
+      fun __inline_always__ regularImpl () =
+        let
+        (* TODO: look into this piece *)
+          val pareduce = case Int.precision of
+              SOME 8 => Loops8.pareduce
+            | SOME 16 => Loops16.pareduce
+            | SOME 32 => Loops32.pareduce
+            | SOME 64 => Loops64.pareduce
+            | _ => LoopsInt.pareduce
+        in
+          pareduce (lo, hi) zero (fn (i, a) => combine (a, f i)) combine
+        end
+
+      fun __inline_always__ unrolledImpl () =
+        __inline_always__ Unrolled.pareduce (lo, hi) zero (fn (i, a) => combine (a, f i)) combine
+    in
+      primSporkChoose (__inline_always__ f, __inline_always__ unrolledImpl, __inline_always__ regularImpl)
+    end
+
+    fun unifiedParform (lo: int, hi: int) (f: int -> unit) : unit =
+    let
+      fun __inline_always__ regularImpl () =
+        let
+          val parform = case Int.precision of
+              SOME 8 => Loops8.parform
+            | SOME 16 => Loops16.parform
+            | SOME 32 => Loops32.parform
+            | SOME 64 => Loops64.parform
+            | _ => LoopsInt.parform
+        in
+          parform (lo, hi) f
+        end
+
+      fun __inline_always__ unrolledImpl () =
+        __inline_always__ Unrolled.pareduce (lo, hi) () (fn (i, _) => f i) (fn _ => ())
+
+    in
+      primSporkChoose (__inline_always__ f, __inline_always__ unrolledImpl, __inline_always__ regularImpl)
+    end
+
+    fun __inline_always__ unifiedPareduce (lo: int, hi: int) (zero: 'a) (step: int * 'a -> 'a) (combine: 'a * 'a -> 'a) : 'a =
+    let
+      fun __inline_always__ regularImpl () =
+        let
+          val pareduce = case Int.precision of
+              SOME 8 => Loops8.pareduce
+            | SOME 16 => Loops16.pareduce
+            | SOME 32 => Loops32.pareduce
+            | SOME 64 => Loops64.pareduce
+            | _ => LoopsInt.pareduce
+        in
+          pareduce (lo, hi) zero step combine
+        end
+
+      fun __inline_always__ unrolledImpl () =
+        __inline_always__ Unrolled.pareduce (lo, hi) zero step combine
+
+      fun __inline_always__ loopBody i = step (i, zero)
+    in
+      primSporkChoose (__inline_always__ loopBody, __inline_always__ unrolledImpl, __inline_always__ regularImpl)
+    end
+  in
+    val reducem = unifiedReducem
+    val parform = unifiedParform
+    val pareduce = unifiedPareduce
+    val parfor = ForkJoin0.parfor
+  end
+
   val pareduceBreakExn = PareduceBreakExn.f
-  val reducem = Reducem.f
-  val parform = Parform.f
 end

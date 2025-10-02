@@ -176,6 +176,7 @@ fun toMachine (rssa: Rssa.Program.t) =
             NONE => (NONE, fn _ => NONE)
           | SOME {sourceMaps, getFrameSourceSeqIndex} => (SOME sourceMaps, getFrameSourceSeqIndex)
       (* Frame info *)
+      (* TODO: isLoopy stuff? *)
       local
          val frameInfos: M.FrameInfo.t list ref = ref []
          val nextFrameInfo = Counter.generator 0
@@ -1181,6 +1182,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                            (parallelMove {dsts = dsts', srcs = srcs'},
                             M.Transfer.Goto dst)
                         end
+                  (* TODO: loopy? *)
                    | R.Transfer.Spork {spid, cont, spwn} =>
                         simple (M.Transfer.Spork
                                 {spid = spid,

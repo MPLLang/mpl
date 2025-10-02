@@ -43,6 +43,7 @@ datatype t =
  | Let of {decs: {var: Var.t, exp: t} list,
            body: t}
  | Name of t * (Var.t -> t)
+ (* TODO: isLoop *)
  | Spork of {spid: Spid.t,
              cont: t,
              spwn: t,

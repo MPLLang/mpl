@@ -38,6 +38,7 @@ local
   in
     Heartbeat.sml
     Scheduler.sml
+    UnrolledLoops.sml
   end
   ForkJoin.sml
 in
