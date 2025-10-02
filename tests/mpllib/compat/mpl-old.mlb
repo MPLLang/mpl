@@ -1,0 +1,25 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+  $(SML_LIB)/basis/unsafe.mlb
+  $(SML_LIB)/basis/fork-join.mlb
+
+  local
+    $(SML_LIB)/basis/build/sources.mlb
+  in
+    structure ArrayExtra = Array
+    structure VectorExtra = Vector
+    structure Word8ArrayExtra = Word8Array
+  end
+
+  PosixReadFile.sml
+  mpl-old.sml
+in
+  structure ForkJoin
+  structure Concurrency
+  structure ReadFile
+  structure GCStats
+  structure MLton
+  structure VectorExtra
+  structure RuntimeStats
+end
