@@ -158,7 +158,6 @@ val convertPrimExpInfo = Trace.info "ClosureConvert.convertPrimExp"
 val valueTypeInfo = Trace.info "ClosureConvert.valueType"
 
 structure LambdaFree = LambdaFree (Sxml)
-(* # NOTE: Free variable analysis *)
 
 local
    open LambdaFree
@@ -477,6 +476,13 @@ fun closureConvert
                      in
                        ()
                      end
+                     (* ! THIS IS OBVIOUSLY BRICKED *)
+                     (* TODO: Check usage properly *)
+                   | PrimApp {prim = Prim.Spork_choose, targs, args} =>
+                      (* spork_choose: ('u -> 'v) -> (unit -> 'a) -> (unit -> 'a) -> 'a
+                       * Don't try to apply primApply with function arguments; just create
+                       * a fresh abstract value of the result type *)
+                      new' ()
                    | PrimApp {prim, args, ...} =>
                         set (Value.primApply {prim = prim,
                                               args = varExps args,
@@ -1102,7 +1108,6 @@ fun closureConvert
                                       args = Vector.new1 (lambdaInfoTuple info)},
                          ac)
                   end
-               (* TODO: isLoop bool *)
              | SprimExp.PrimApp {prim = Prim.Spork {tokenSplitPolicy}, targs, args} =>
                (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'bb * ('ar -> 'c) * ('ar * 'd -> 'c) -> 'c *)
                let
@@ -1256,6 +1261,49 @@ fun closureConvert
                               ty = ty}
                in
                  (exp, ac)
+               end
+             (* TODO: Check usage properly *)
+             (* ! THIS IS BRICKED *)
+             | SprimExp.PrimApp {prim = Prim.Spork_choose, targs, args} =>
+               (* spork_choose: ('u -> 'v) -> (unit -> 'a) -> (unit -> 'a) -> 'a
+                * For now, apply the regular implementation (third arg) to unit *)
+               let
+                 fun arg i = Vector.sub (args, i)
+                 val regular = arg 2
+                 val func = varExpInfo regular
+                 val funcVal = VarInfo.value func
+                 val unitExp = Dexp.tuple {exps = Vector.new0 (),
+                                          ty = Type.tuple (Vector.new0 ())}
+                 val unitVal = Value.tuple (Vector.new0 ())
+                 val ty_result = valueType v
+                 val {cons, ...} = valueLambdasInfo funcVal
+               in
+                 (* Generate application of regular to unit, similar to apply function *)
+                 (Dexp.casee
+                   {test = convertVarInfo func,
+                    ty = ty_result,
+                    default = NONE,
+                    cases =
+                    Dexp.Con
+                    (Vector.map
+                      (cons, fn {lambda, con} =>
+                       let
+                         val {arg = param, body, ...} = Slambda.dest lambda
+                         val info as LambdaInfo.T {name, ...} = lambdaInfo lambda
+                         val result = expValue body
+                         val env = (Var.newString "env", lambdaInfoType info)
+                       in {con = con,
+                           args = Vector.new1 env,
+                           body = coerce (Dexp.call
+                                         {func = name,
+                                          args = Vector.new2 (Dexp.var env,
+                                                             coerce (unitExp, unitVal,
+                                                                    value param)),
+                                          inline = InlineAttr.Auto,
+                                          ty = valueType result},
+                                         result, v)}
+                       end))},
+                  ac)
                end
              | SprimExp.PrimApp {prim, targs, args} =>
                   let

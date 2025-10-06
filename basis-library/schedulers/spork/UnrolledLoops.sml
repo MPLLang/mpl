@@ -1,12 +1,21 @@
-structure Unrolled =
+functor UnrolledLoops(WordImpl: WORD) =
 struct
 
-  type word = Word64.word
-  fun __inline_always__ w2i w = __inline_always__ Word64.toIntX w
-  fun __inline_always__ i2w i = __inline_always__ Word64.fromInt i
+  type word = WordImpl.word
+  fun __inline_always__ w2i w = __inline_always__ WordImpl.toIntX w
+  fun __inline_always__ i2w i = __inline_always__ WordImpl.fromInt i
+
+  val one   = __inline_always__ WordImpl.fromInt 1
+  val two   = __inline_always__ WordImpl.fromInt 2
+  val three = __inline_always__ WordImpl.fromInt 3
+  val four  = __inline_always__ WordImpl.fromInt 4
+  val five  = __inline_always__ WordImpl.fromInt 5
+  val six   = __inline_always__ WordImpl.fromInt 6
+  val seven = __inline_always__ WordImpl.fromInt 7
+  val eight = __inline_always__ WordImpl.fromInt 8
 
   fun __inline_always__ midpoint (i: word, j: word) =
-    i + (Word64.>> (j - i, 0w1))
+    WordImpl.+ (i, WordImpl.>> (WordImpl.- (j, i), 0w1))
 
 
   fun __inline_always__ pareduce (lo, hi) (z: 'a) (step': int * 'a -> 'a) (g: 'a * 'a -> 'a) : 'a =
@@ -26,18 +35,18 @@ struct
       (* fun __inline_always__ next stride =
         Word64.min (Word64.<< (stride, 0w1), 0w16) *)
 
-      
+
       fun loop8 (a, i, j) =
-        if i + 0w8 <= j then
+        if WordImpl.<= (WordImpl.+ (i, eight), j) then
           let
             fun __inline_never__ spwn a' =
-              if i + 0w8 >= j then a' else
+              if WordImpl.>= (WordImpl.+ (i, eight), j) then a' else
                 let
-                  val mid = midpoint (i + 0w8, j)
+                  val mid = midpoint (WordImpl.+ (i, eight), j)
                 in
                   Scheduler.SporkJoin.spork {
                     tokenPolicy = Scheduler.TokenPolicyFair,
-                    body = fn () => loop1 (a', i + 0w8, mid),
+                    body = fn () => loop1 (a', WordImpl.+ (i, eight), mid),
                     spwn = fn () => loop1 (z, mid, j),
                     seq  = fn a'' => loop1 (a'', mid, j),
                     sync = g,
@@ -50,17 +59,17 @@ struct
               body = fn () =>
                 let
                   val a = step (a, i)
-                  val a = step (a, i+0w1)
-                  val a = step (a, i+0w2)
-                  val a = step (a, i+0w3)
-                  val a = step (a, i+0w4)
-                  val a = step (a, i+0w5)
-                  val a = step (a, i+0w6)
-                  val a = step (a, i+0w7)
+                  val a = step (a, WordImpl.+ (i, one))
+                  val a = step (a, WordImpl.+ (i, two))
+                  val a = step (a, WordImpl.+ (i, three))
+                  val a = step (a, WordImpl.+ (i, four))
+                  val a = step (a, WordImpl.+ (i, five))
+                  val a = step (a, WordImpl.+ (i, six))
+                  val a = step (a, WordImpl.+ (i, seven))
                 in
                   a
                 end,
-              seq = fn a' => loop8 (a', i + 0w8, j),
+              seq = fn a' => loop8 (a', WordImpl.+ (i, eight), j),
               sync = g,
               spwn = fn () => spwn z,
               unstolen = SOME spwn
@@ -72,16 +81,16 @@ struct
 
 
       and loop4 (a, i, j) =
-        if i + 0w4 <= j then
+        if WordImpl.<= (WordImpl.+ (i, four), j) then
           let
             fun __inline_never__ spwn a' =
-              if i + 0w4 >= j then a' else
+              if WordImpl.>= (WordImpl.+ (i, four), j) then a' else
                 let
-                  val mid = midpoint (i + 0w4, j)
+                  val mid = midpoint (WordImpl.+ (i, four), j)
                 in
                   Scheduler.SporkJoin.spork {
                     tokenPolicy = Scheduler.TokenPolicyFair,
-                    body = fn () => loop1 (a', i + 0w4, mid),
+                    body = fn () => loop1 (a', WordImpl.+ (i, four), mid),
                     spwn = fn () => loop1 (z, mid, j),
                     seq  = fn a'' => loop1 (a'', mid, j),
                     sync = g,
@@ -94,13 +103,13 @@ struct
               body = fn () =>
                 let
                   val a = step (a, i)
-                  val a = step (a, i+0w1)
-                  val a = step (a, i+0w2)
-                  val a = step (a, i+0w3)
+                  val a = step (a, WordImpl.+ (i, one))
+                  val a = step (a, WordImpl.+ (i, two))
+                  val a = step (a, WordImpl.+ (i, three))
                 in
                   a
                 end,
-              seq = fn a' => loop8 (a', i + 0w4, j),
+              seq = fn a' => loop8 (a', WordImpl.+ (i, four), j),
               sync = g,
               spwn = fn () => spwn z,
               unstolen = SOME spwn
@@ -110,18 +119,18 @@ struct
           loop1 (a, i, j)
 
 
-      
+
       and loop2 (a, i, j) =
-        if i + 0w2 <= j then
+        if WordImpl.<= (WordImpl.+ (i, two), j) then
           let
             fun __inline_never__ spwn a' =
-              if i + 0w2 >= j then a' else
+              if WordImpl.>= (WordImpl.+ (i, two), j) then a' else
                 let
-                  val mid = midpoint (i + 0w2, j)
+                  val mid = midpoint (WordImpl.+ (i, two), j)
                 in
                   Scheduler.SporkJoin.spork {
                     tokenPolicy = Scheduler.TokenPolicyFair,
-                    body = fn () => loop1 (a', i + 0w2, mid),
+                    body = fn () => loop1 (a', WordImpl.+ (i, two), mid),
                     spwn = fn () => loop1 (z, mid, j),
                     seq  = fn a'' => loop1 (a'', mid, j),
                     sync = g,
@@ -134,11 +143,11 @@ struct
               body = fn () =>
                 let
                   val a = step (a, i)
-                  val a = step (a, i+0w1)
+                  val a = step (a, WordImpl.+ (i, one))
                 in
                   a
                 end,
-              seq = fn a' => loop4 (a', i + 0w2, j),
+              seq = fn a' => loop4 (a', WordImpl.+ (i, two), j),
               sync = g,
               spwn = fn () => spwn z,
               unstolen = SOME spwn
@@ -148,18 +157,18 @@ struct
           loop1 (a, i, j)
 
 
-      
+
       and loop1 (a, i, j) =
-        if i + 0w1 <= j then
+        if WordImpl.<= (WordImpl.+ (i, one), j) then
           let
             fun __inline_never__ spwn a' =
-              if i + 0w1 >= j then a' else
+              if WordImpl.>= (WordImpl.+ (i, one), j) then a' else
                 let
-                  val mid = midpoint (i + 0w1, j)
+                  val mid = midpoint (WordImpl.+ (i, one), j)
                 in
                   Scheduler.SporkJoin.spork {
                     tokenPolicy = Scheduler.TokenPolicyFair,
-                    body = fn () => loop1 (a', i + 0w1, mid),
+                    body = fn () => loop1 (a', WordImpl.+ (i, one), mid),
                     spwn = fn () => loop1 (z, mid, j),
                     seq  = fn a'' => loop1 (a'', mid, j),
                     sync = g,
@@ -170,7 +179,7 @@ struct
             Scheduler.SporkJoin.spork {
               tokenPolicy = Scheduler.TokenPolicyGive,
               body = fn () => step (a, i),
-              seq = fn a' => loop2 (a', i + 0w1, j),
+              seq = fn a' => loop2 (a', WordImpl.+ (i, one), j),
               sync = g,
               spwn = fn () => spwn z,
               unstolen = SOME spwn

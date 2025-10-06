@@ -113,8 +113,8 @@ datatype 'a t =
  | MLton_share (* to rssa (as nop or runtime C fn) *)
  | MLton_size (* to rssa (as runtime C fn) *)
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
- (* TODO: choose between unrolled and regular *)
- | Spork_choose of {tokenSplitPolicy: Word32.word} (* closure convert *)
+ (* Choose between unrolled and regular at compile time *)
+ | Spork_choose (* closure convert *)
  | Spork of {tokenSplitPolicy: Word32.word} (* closure convert *)
  | Spork_forkThreadAndSetData of {youngest: bool} (* to rssa (as runtime C fn) *)
  | Spork_getData of Spid.t (* backend *)
@@ -296,11 +296,7 @@ fun toString (n: 'a t): string =
        | MLton_share => "MLton_share"
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
-       (* TODO: choose spork *)
-       | Spork_choose {tokenSplitPolicy=0w0} => "spork_choose_fair"
-       | Spork_choose {tokenSplitPolicy=0w1} => "spork_choose_keep"
-       | Spork_choose {tokenSplitPolicy=0w2} => "spork_choose_give"
-       | Spork_choose {tokenSplitPolicy=pol} => Error.bug ("unknown spork tokensplitpolicy " ^ Word32.toString pol)
+       | Spork_choose => "spork_choose"
        | Spork {tokenSplitPolicy=0w0} => "spork_fair"
        | Spork {tokenSplitPolicy=0w1} => "spork_keep"
        | Spork {tokenSplitPolicy=0w2} => "spork_give"
@@ -469,7 +465,8 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_share, MLton_share) => true
     | (MLton_size, MLton_size) => true
     | (MLton_touch, MLton_touch) => true
-    (* TODO: isLoop1 = isLoop2 *)
+    (* TODO: Check usage properly *)
+    | (Spork_choose, Spork_choose) => true
     | (Spork {tokenSplitPolicy = tsp1}, Spork {tokenSplitPolicy = tsp2}) => tsp1 = tsp2
     | (Spork_forkThreadAndSetData yo1, Spork_forkThreadAndSetData yo2) => yo1 = yo2
     | (Spork_getData spid, Spork_getData spid') => Spid.equals (spid, spid')
@@ -655,8 +652,9 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_share => MLton_share
     | MLton_size => MLton_size
     | MLton_touch => MLton_touch
-    (* TODO: spork tsp isLoop *)
     | Spork tsp => Spork tsp
+    (* TODO: Check usage properly *)
+    | Spork_choose => Spork_choose
     | Spork_forkThreadAndSetData z => Spork_forkThreadAndSetData z
     | Spork_getData spid => Spork_getData spid
     | Real_Math_acos z => Real_Math_acos z
@@ -872,8 +870,9 @@ val kind: 'a t -> Kind.t =
        | MLton_share => SideEffect
        | MLton_size => DependsOnState
        | MLton_touch => SideEffect
-       (* TODO *)
        | Spork _ => SideEffect
+       (* TODO: Check usage properly *)
+       | Spork_choose => Functional
        | Spork_forkThreadAndSetData _ => SideEffect
        | Spork_getData _ => DependsOnState
        | Real_Math_acos _ => DependsOnState (* depends on rounding mode *)
@@ -1084,13 +1083,11 @@ in
        MLton_share,
        MLton_size,
        MLton_touch,
-       (* TODO: Spork {tokenSplitPolicy = ..., isLoop = ...} *)
        Spork {tokenSplitPolicy = 0w0},
        Spork {tokenSplitPolicy = 0w1},
        Spork {tokenSplitPolicy = 0w2},
-       Spork_choose {tokenSplitPolicy = 0w0},
-       Spork_choose {tokenSplitPolicy = 0w1},
-       Spork_choose {tokenSplitPolicy = 0w2},
+       (* TODO: Check usage properly *)
+       Spork_choose,
        Spork_forkThreadAndSetData {youngest=true},
        Spork_forkThreadAndSetData {youngest=false},
        (*Spork_getData,*)
@@ -1293,6 +1290,9 @@ fun 'a checkApp (prim: 'a t,
       fun oneTarg f =
          1 = Vector.length targs
          andalso done (f (targ 0))
+      fun twoTargs f =
+         2 = Vector.length targs
+         andalso done (f (targ 0, targ 1))
       fun sixTargs f =
          6 = Vector.length targs
          andalso done (f (targ 0, targ 1, targ 2, targ 3, targ 4, targ 5))
@@ -1442,7 +1442,6 @@ fun 'a checkApp (prim: 'a t,
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
        | MLton_touch => oneTarg (fn t => (oneArg t, unit))
        | Spork _ =>
-       (* TODO: Add isLoop arg -> sevenTargs and nineTargs? *)
             (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
             (*        ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
             sixTargs (fn (taa, tar, tba, tbr, td, tc) =>
@@ -1455,6 +1454,17 @@ fun 'a checkApp (prim: 'a t,
                           val exnsync = arrow (tuple (Vector.new2 (exn, td)), tc)
                        in
                           (eightArgs (cont, taa, spwn, tba, seq, sync, exnseq, exnsync), tc)
+                       end)
+       | Spork_choose =>
+            (* TODO: Check usage properly *)
+            (* spork_choose: ('u -> 'v) -> (unit -> 'a) -> (unit -> 'a) -> 'a
+             * where 'v = 'a, so really: ('u -> 'a) -> (unit -> 'a) -> (unit -> 'a) -> 'a *)
+            twoTargs (fn (ta, tu) =>
+                       let
+                          val loopBody = arrow (tu, ta)       (* First arg: loop body function 'u -> 'a *)
+                          val impl = arrow (unit, ta)         (* Second and third args: thunks unit -> 'a *)
+                       in
+                          (threeArgs (loopBody, impl, impl), ta)
                        end)
        | Spork_forkThreadAndSetData _ => oneTarg (fn t => (twoArgs (thread, t), thread))
        | Spork_getData _ => oneTarg (fn t => (noArgs, t))
@@ -1600,7 +1610,6 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
        | Spork _ =>
-       (* TODO: add isLoop *)
             (* spork: ('aa -> 'ar) * 'aa * ('ba * 'd -> 'br) * 'ba * ('ar -> 'c) * ('ar * 'd -> 'c) * (exn -> 'c) * (exn * 'd -> 'c) -> 'c *)
             let
                val (taa, tar) = deArrow (arg 0)
@@ -1611,6 +1620,15 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                val tc = result
             in
                six (taa, tar, tba, tbr, td, tc)
+            end
+       | Spork_choose =>
+            (* TODO: Check usage properly *)
+            (* spork_choose: ('u -> 'v) -> 'a -> 'a -> 'a *)
+            let
+               val ta = result  (* Result type 'a *)
+               val (tu, _) = deArrow (arg 0)  (* First arg: loop body ('u -> 'v) *)
+            in
+               Vector.new2 (ta, tu)
             end
        | Spork_forkThreadAndSetData _ => one (arg 1)
        | Spork_getData _ => one result
