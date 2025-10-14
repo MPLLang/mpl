@@ -52,6 +52,7 @@ local
    constant-propagation.fun
    contify.fun
    deep-flatten.fun
+   flatten-into-sequences.fun
    drop-spork.fun
    drop-spork2.fun
    duplicate-globals.fun
