@@ -50,7 +50,11 @@ struct
     case Type.dest ty of
       Type.Object {con = ObjectCon.Sequence, args: Type.t Prod.t} =>
         if Vector.forall (Prod.dest args, Option.isNone o try_flatten_tuples) then
-          NONE
+          if
+            Vector.forall
+              (Prod.dest args, Option.isNone o try_rewrite_type o #elt)
+          then NONE
+          else SOME (Type.sequence (Prod.map (args, rewrite_type)))
         else
           let
             val flattened =
@@ -101,8 +105,31 @@ struct
               NONE => 1
             | SOME elts => Vector.length elts)
           val (new_offsets, _) = vector_iterate_prefixes op+ 0 lens
+
+          val (new_offset, count) =
+            (Vector.sub (new_offsets, offset), Vector.sub (lens, offset))
+
+          val () = Control.diagnostics (fn show =>
+            let
+              open Layout
+            in
+              show (seq
+                [ str "remap_offset "
+                , Type.layout sequence_ty
+                , str " "
+                , Int.layout offset
+                , str "; lens = "
+                , Vector.layout Int.layout lens
+                , str "; new_offsets = "
+                , Vector.layout Int.layout lens
+                , str "; result = "
+                , Int.layout new_offset
+                , str " "
+                , Int.layout count
+                ])
+            end)
         in
-          (Vector.sub (new_offsets, offset), Vector.sub (lens, offset))
+          (new_offset, count)
         end
 
     | _ =>
@@ -134,6 +161,18 @@ struct
             Error.bug
               ("FlattenIntoSequences.make_pack_statements: ground mismatch")
         val (var_src, ty_src) = Vector.sub (ground_vs_tys, 0)
+        (* val () =
+          if same_type (rewrite_type ty, ty_src) then
+            ()
+          else
+            Error.bug
+              ("FlattenIntoSequences.make_pack_statements: type mismatch: "
+               ^
+               Layout.toString (Layout.seq
+                 [ Type.layout (rewrite_type ty)
+                 , Layout.str " "
+                 , Type.layout ty_src
+                 ])) *)
       in
         Vector.new1
           (Statement.Bind
@@ -201,10 +240,35 @@ struct
               val ground_tys =
                 case Type.dest new_type of
                   Type.Object {con = ObjectCon.Sequence, args} =>
-                    Vector.map (Prod.dest args, #elt)
+                    let
+                      val args = Prod.dest args
+                    in
+                      Vector.tabulate (ground_count, fn i =>
+                        #elt (Vector.sub (args, new_offset + i)))
+                    end
                 | _ =>
                     Error.bug
                       ("FlattenIntoSequences.try_transform_select: bug!")
+
+              val () = Control.diagnostics (fn show =>
+                let
+                  open Layout
+                in
+                  show (seq
+                    [ str "try_transform_select "
+                    , Type.layout (get_var_type sequence)
+                    , str " "
+                    , Int.layout offset
+                    , str " -> "
+                    , Type.layout new_type
+                    , str " "
+                    , Int.layout new_offset
+                    , str " "
+                    , Int.layout ground_count
+                    , str "; ground_tys = "
+                    , Vector.layout Type.layout ground_tys
+                    ])
+                end)
 
               val () =
                 (* sanity check *)
@@ -279,6 +343,19 @@ struct
   fun make_unpack_statements (v: Var.t, ty: Type.t) :
     Statement.t vector * Var.t vector =
     let
+      val () = Control.diagnostics (fn show =>
+        let
+          open Layout
+        in
+          show
+            (seq
+               [ str "make_unpack_statements "
+               , Var.layout v
+               , str " "
+               , Type.layout ty
+               ])
+        end)
+
       fun error msg =
         Error.bug
           ("FlattenIntoSequences.make_unpack_statements: " ^ msg ^ ":  "
@@ -349,10 +426,33 @@ struct
         | SOME new_type =>
             let
               val old_type = get_var_type sequence
-              val (unpacks, ground_vs) =
-                make_unpack_statements (value, get_var_type value)
               val (new_offset, ground_count) =
                 remap_offset (get_var_type sequence) offset
+
+              val () = Control.diagnostics (fn show =>
+                let
+                  open Layout
+                in
+                  show (seq
+                    [ str "try_transform_update "
+                    , Type.layout old_type
+                    , str " "
+                    , Int.layout offset
+                    , str " -> "
+                    , Type.layout new_type
+                    , str " "
+                    , Int.layout new_offset
+                    , str " "
+                    , Int.layout ground_count
+                    ])
+                end)
+
+              val (unpacks, ground_vs) =
+                if is_ground_type (get_var_type value) then
+                  (Vector.new0 (), Vector.new1 value)
+                else
+                  make_unpack_statements (value, get_var_type value)
+
               val () =
                 (* sanity check *)
                 if ground_count = Vector.length ground_vs then
