@@ -872,7 +872,7 @@ val kind: 'a t -> Kind.t =
        | MLton_touch => SideEffect
        | Spork _ => SideEffect
        (* TODO: Check usage properly *)
-       | Spork_choose => Functional
+       | Spork_choose => SideEffect
        | Spork_forkThreadAndSetData _ => SideEffect
        | Spork_getData _ => DependsOnState
        | Real_Math_acos _ => DependsOnState (* depends on rounding mode *)
