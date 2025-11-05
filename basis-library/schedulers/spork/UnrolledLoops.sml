@@ -1,18 +1,24 @@
-functor UnrolledLoops(WordImpl: WORD) =
+functor UnrolledLoops(WordImpl: WORD) :>
+sig
+  val pareduce: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
+  val pareduceBreakExn: (int * int) -> 'a -> (('a -> exn) * int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
+  val reducem: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
+  val parform: (int * int) -> (int -> unit) -> unit
+end =
 struct
 
   type word = WordImpl.word
   fun __inline_always__ w2i w = __inline_always__ WordImpl.toIntX w
   fun __inline_always__ i2w i = __inline_always__ WordImpl.fromInt i
 
-  val one   = __inline_always__ WordImpl.fromInt 1
-  val two   = __inline_always__ WordImpl.fromInt 2
-  val three = __inline_always__ WordImpl.fromInt 3
-  val four  = __inline_always__ WordImpl.fromInt 4
-  val five  = __inline_always__ WordImpl.fromInt 5
-  val six   = __inline_always__ WordImpl.fromInt 6
-  val seven = __inline_always__ WordImpl.fromInt 7
-  val eight = __inline_always__ WordImpl.fromInt 8
+  val one = i2w 1
+  val two = i2w 2
+  val three = i2w 3
+  val four = i2w 4
+  val five = i2w 5
+  val six = i2w 6
+  val seven = i2w 7
+  val eight = i2w 8
 
   fun __inline_always__ midpoint (i: word, j: word) =
     WordImpl.+ (i, WordImpl.>> (WordImpl.- (j, i), 0w1))
@@ -192,5 +198,57 @@ struct
       __inline_always__
       loop1 (z, i2w lo, i2w hi)
     end
+
+
+  fun __inline_always__ pareduceBreakExn (i: int, j: int) (z: 'a) (step: ('a -> exn) * int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      let exception Break of 'a
+          fun step' (i, a) = (__inline_always__ step (Break, i, a), true) handle (Break b) => (b, false)
+          fun merge' ((b1, cont1), (b2, cont2)) =
+              if cont1 then (merge (b1, b2), cont2) else (b1, false)
+
+          (* we can reuse the pareduce structure but need to adapt it for break semantics *)
+          (* for simplicity, we'll use a basic implementation that wraps pareduce *)
+          (* a more optimized version would inline the break logic into the unrolled loops *)
+
+          fun continue (f : 'a -> 'a * bool) : 'a * bool -> 'a * bool =
+              fn (b, cont) => if cont then f b else (b, cont)
+
+          fun iter (b: 'a) (i: word, j: word): 'a * bool =
+              if i = j then (b, true) else
+                let
+                    fun __inline_never__ spwn b' =
+                        if WordImpl.>= (WordImpl.+ (i, one), j) then (b', true) else
+                          let val mid = midpoint (WordImpl.+ (i, one), j) in
+                            Scheduler.SporkJoin.spork {
+                              tokenPolicy = Scheduler.TokenPolicyFair,
+                              body = fn () => iter b' (WordImpl.+ (i, one), mid),
+                              spwn = fn () => iter z (mid, j),
+                              seq = continue (fn b' => iter b' (mid, j)),
+                              sync = merge',
+                              unstolen = NONE
+                          }
+                          end
+                in
+                  Scheduler.SporkJoin.spork {
+                    tokenPolicy = Scheduler.TokenPolicyGive,
+                    body = fn () => __inline_always__ step' (w2i i, b),
+                    spwn = fn () => spwn z,
+                    seq = continue (fn b' => iter b' (WordImpl.+ (i, one), j)),
+                    sync = merge',
+                    unstolen = SOME (continue spwn)
+                  }
+                end
+          val (result, cont) = __inline_always__ iter z (i2w (Int.min (i, j)), i2w j)
+      in
+        result
+      end
+
+
+  fun __inline_always__ reducem g z (lo, hi) f =
+    pareduce (lo, hi) z (fn (i, a) => __inline_always__ g (a, __inline_always__ f i)) g
+
+
+  fun __inline_always__ parform (lo: int, hi: int) (f: int -> unit) : unit =
+    pareduce (lo, hi) () (fn (i, _) => f i) (fn _ => ())
 
 end

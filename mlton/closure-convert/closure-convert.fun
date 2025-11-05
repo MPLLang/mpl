@@ -573,10 +573,12 @@ fun closureConvert
                       let
                          fun arg i = Vector.sub (args, i)
                          val regular = arg 2
+                         val unrolled = arg 1
                          val unitTy = Stype.tuple (Vector.new0 ())
                          val unitArg = Value.fromType unitTy
                          val result = new ()
                          val _ = Value.addHandler
+                         (* !TODO *)
                             (varExp regular, fn l =>
                              let
                                 val lambda = Value.Lambda.dest l
@@ -1430,8 +1432,8 @@ fun closureConvert
                  val func = varExpInfo chosenImpl
                  val funcVal = VarInfo.value func
                  (* unit value *)
-                 val unitTy = Type.tuple (Vector.new0 ())
-                 val unitExp = Dexp.tuple {exps = Vector.new0 (), ty = unitTy}
+                 val unitTy = Type.tuple (Vector.new0 ()) (* TODO: refactor as SType.unit *)
+                 val unitExp = Dexp.tuple {exps = Vector.new0 (), ty = unitTy} (* ! Dexp.unit = val unit = Tuple {exps = Vector.new0 (), ty = Type.unit} *)
                  val unitVal = Value.fromType (Stype.tuple (Vector.new0 ()))
                  val {cons, ...} = valueLambdasInfo funcVal
                in
