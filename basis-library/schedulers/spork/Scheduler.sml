@@ -109,6 +109,12 @@ struct
       * (unit -> 'a)      (* unrolled implementation *)
       * (unit -> 'a)      (* regular implementation *)
       -> 'a;
+  val primLoopChoose' =
+    _prim "loop_choose"
+      : ('u -> 'a)        (* loop body *)
+      * (unit -> 'a)      (* unrolled implementation *)
+      * (unit -> 'a)      (* regular implementation *)
+      -> 'a;
 
   fun __inline_always__ primSporkFair (body, spwn, seq, sync, exnseq, exnsync) =
       __inline_always__ primSporkFair' (body, (), spwn, (), seq, sync, exnseq, exnsync)
@@ -118,6 +124,8 @@ struct
       __inline_always__ primSporkGive' (body, (), spwn, (), seq, sync, exnseq, exnsync)
   fun __inline_always__ primSporkChoose (loopBody, unrolled, regular) =
       __inline_always__ primSporkChoose' (loopBody, unrolled, regular)
+  fun __inline_always__ primLoopChoose (loopBody, unrolled, regular) =
+      __inline_always__ primLoopChoose' (loopBody, unrolled, regular)
 
   val primForkThreadAndSetData = _prim "spork_forkThreadAndSetData": Thread.t * 'a -> Thread.p;
   val primForkThreadAndSetData_youngest = _prim "spork_forkThreadAndSetData_youngest": Thread.t * 'a -> Thread.p;

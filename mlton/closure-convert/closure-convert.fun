@@ -1464,6 +1464,100 @@ fun closureConvert
                        end))},
                   ac)
                end
+             | SprimExp.PrimApp {prim = Prim.Loop_choose, targs, args} =>
+               (* loop_choose: ('u -> 'a) -> (unit -> 'a) -> (unit -> 'a) -> 'a *)
+               let
+                 fun arg i = Vector.sub (args, i)
+                 val loopBodyVar = arg 0
+                 val unrolled = arg 1
+                 val regular = arg 2
+
+                 val loopBodyInfo = varExpInfo loopBodyVar
+                 val loopBodySize =
+                   let
+                     val v = #value loopBodyInfo
+                     fun extractLambda (v: Value.t): Slambda.t option =
+                       case Value.dest v of
+                          Value.Lambdas ls =>
+                            (case Lambdas.toList ls of
+                                l :: _ => SOME (Value.Lambda.dest l)
+                              | [] => NONE)
+                        | _ => NONE
+                   in
+                     case extractLambda v of
+                        SOME l =>
+                          let
+                            val size = sxmlLambdaSize l
+                            val _ = Control.diagnostics
+                              (fn display =>
+                               display (let open Layout
+                                        in seq [str "loop_choose loop body size: ",
+                                               Int.layout size]
+                                        end))
+                            val _ = analyzeLambdaBody l
+                          in
+                            size
+                          end
+                      | NONE =>
+                          let
+                            val _ = Control.diagnostics
+                              (fn display =>
+                               display (let open Layout
+                                        in seq [str "loop_choose: no lambda found for ",
+                                               SvarExp.layout loopBodyVar]
+                                        end))
+                          in
+                            0
+                          end
+                   end
+
+                 (* choose between unrolled and regular based on loop body size *)
+                 val threshold = 100  (* hardcoded for now *)
+                 val chosenImpl = if loopBodySize <= threshold then unrolled else regular
+                 val _ = Control.diagnostics
+                   (fn display =>
+                    display (let open Layout
+                             in seq [str "  Decision: using ",
+                                    str (if loopBodySize <= threshold then "UNROLLED" else "REGULAR"),
+                                    str " (threshold=100)"]
+                             end))
+
+                 (* apply the chosen implementation to unit *)
+                 val func = varExpInfo chosenImpl
+                 val funcVal = VarInfo.value func
+                 (* unit value *)
+                 val unitTy = Type.tuple (Vector.new0 ())
+                 val unitExp = Dexp.tuple {exps = Vector.new0 (), ty = unitTy}
+                 val unitVal = Value.fromType (Stype.tuple (Vector.new0 ()))
+                 val {cons, ...} = valueLambdasInfo funcVal
+               in
+                 (* ! heavy code duplication from apply *)
+                 (Dexp.casee
+                   {test = convertVarInfo func,
+                    ty = ty,
+                    default = NONE,
+                    cases =
+                    Dexp.Con
+                    (Vector.map
+                      (cons, fn {lambda, con} =>
+                       let
+                         val {arg = param, body, ...} = Slambda.dest lambda
+                         val info as LambdaInfo.T {name, ...} = lambdaInfo lambda
+                         val result = expValue body
+                         val env = (Var.newString "env", lambdaInfoType info)
+                       in {con = con,
+                           args = Vector.new1 env,
+                           body = coerce (Dexp.call
+                                         {func = name,
+                                          args = Vector.new2 (Dexp.var env,
+                                                             coerce (unitExp, unitVal,
+                                                                    value param)),
+                                          inline = InlineAttr.Auto,
+                                          ty = valueType result},
+                                         result, v)}
+                       end))},
+                  ac)
+               end
              | SprimExp.PrimApp {prim, targs, args} =>
                   let
                      val prim = Prim.map (prim, convertType)

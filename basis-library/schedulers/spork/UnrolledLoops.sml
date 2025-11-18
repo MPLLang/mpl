@@ -4,6 +4,8 @@ sig
   val pareduceBreakExn: (int * int) -> 'a -> (('a -> exn) * int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val reducem: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
   val parform: (int * int) -> (int -> unit) -> unit
+  val seqLoop: (int * int) -> (int -> unit) -> unit
+  val seqReduce: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
 end =
 struct
 
@@ -250,5 +252,63 @@ struct
 
   fun __inline_always__ parform (lo: int, hi: int) (f: int -> unit) : unit =
     pareduce (lo, hi) () (fn (i, _) => f i) (fn _ => ())
+
+
+  fun __inline_always__ seqLoop (lo: int, hi: int) (f: int -> unit) : unit =
+    let
+      fun loop8 (i: word, j: word) : unit =
+        if WordImpl.<= (WordImpl.+ (i, eight), j) then
+          let
+            val _ = __inline_always__ f (w2i i)
+            val _ = __inline_always__ f (w2i (WordImpl.+ (i, one)))
+            val _ = __inline_always__ f (w2i (WordImpl.+ (i, two)))
+            val _ = __inline_always__ f (w2i (WordImpl.+ (i, three)))
+            val _ = __inline_always__ f (w2i (WordImpl.+ (i, four)))
+            val _ = __inline_always__ f (w2i (WordImpl.+ (i, five)))
+            val _ = __inline_always__ f (w2i (WordImpl.+ (i, six)))
+            val _ = __inline_always__ f (w2i (WordImpl.+ (i, seven)))
+          in
+            loop8 (WordImpl.+ (i, eight), j)
+          end
+        else
+          loop1 (i, j)
+
+      and loop1 (i: word, j: word) : unit =
+        if WordImpl.< (i, j) then
+          (__inline_always__ f (w2i i); loop1 (WordImpl.+ (i, one), j))
+        else
+          ()
+    in
+      loop8 (i2w lo, i2w hi)
+    end
+
+
+  fun __inline_always__ seqReduce (combine: 'a * 'a -> 'a) (zero: 'a) (lo: int, hi: int) (f: int -> 'a) : 'a =
+    let
+      fun loop8 (acc: 'a, i: word, j: word) : 'a =
+        if WordImpl.<= (WordImpl.+ (i, eight), j) then
+          let
+            val acc = __inline_always__ combine (acc, __inline_always__ f (w2i i))
+            val acc = __inline_always__ combine (acc, __inline_always__ f (w2i (WordImpl.+ (i, one))))
+            val acc = __inline_always__ combine (acc, __inline_always__ f (w2i (WordImpl.+ (i, two))))
+            val acc = __inline_always__ combine (acc, __inline_always__ f (w2i (WordImpl.+ (i, three))))
+            val acc = __inline_always__ combine (acc, __inline_always__ f (w2i (WordImpl.+ (i, four))))
+            val acc = __inline_always__ combine (acc, __inline_always__ f (w2i (WordImpl.+ (i, five))))
+            val acc = __inline_always__ combine (acc, __inline_always__ f (w2i (WordImpl.+ (i, six))))
+            val acc = __inline_always__ combine (acc, __inline_always__ f (w2i (WordImpl.+ (i, seven))))
+          in
+            loop8 (acc, WordImpl.+ (i, eight), j)
+          end
+        else
+          loop1 (acc, i, j)
+
+      and loop1 (acc: 'a, i: word, j: word) : 'a =
+        if WordImpl.< (i, j) then
+          loop1 (__inline_always__ combine (acc, __inline_always__ f (w2i i)), WordImpl.+ (i, one), j)
+        else
+          acc
+    in
+      loop8 (zero, i2w lo, i2w hi)
+    end
 
 end

@@ -61,6 +61,8 @@ sig
   val pareduceBreakExn: (int * int) -> 'a -> (('a -> exn) * int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val reducem: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
   val parform: (int * int) -> (int -> unit) -> unit
+  val seqLoop: (int * int) -> (int -> unit) -> unit
+  val seqReduce: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
 end =
 struct
   type idx = LoopIndex.t
@@ -147,6 +149,26 @@ struct
 
   fun __inline_always__ parform (lo: int, hi: int) (f: int -> unit) : unit =
     reducem (fn _ => ()) () (lo, hi) f
+
+
+  fun __inline_always__ seqLoop (lo: int, hi: int) (f: int -> unit) : unit =
+    let
+      fun loop (i: idx, j: idx) : unit =
+        if LoopIndex.equal (i, j) then ()
+        else (__inline_always__ f (LoopIndex.toInt i); loop (LoopIndex.increment i, j))
+    in
+      loop (LoopIndex.fromInt (Int.min (lo, hi)), LoopIndex.fromInt hi)
+    end
+
+
+  fun __inline_always__ seqReduce (combine: 'a * 'a -> 'a) (zero: 'a) (lo: int, hi: int) (f: int -> 'a) : 'a =
+    let
+      fun loop (acc: 'a) (i: idx, j: idx) : 'a =
+        if LoopIndex.equal (i, j) then acc
+        else loop (__inline_always__ combine (acc, __inline_always__ f (LoopIndex.toInt i))) (LoopIndex.increment i, j)
+    in
+      loop zero (LoopIndex.fromInt (Int.min (lo, hi)), LoopIndex.fromInt hi)
+    end
 end
 
 
@@ -169,6 +191,9 @@ sig
 
   val parfor: int -> (int * int) -> (int -> unit) -> unit
   val alloc: int -> 'a array
+
+  val seqLoop: (int * int) -> (int -> unit) -> unit
+  val seqReduce: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
 
   val idleTimeSoFar: unit -> Time.time
   val workTimeSoFar: unit -> Time.time
@@ -280,7 +305,47 @@ struct
       val fInt16 = Unrolled16.parform
       val fInt32 = Unrolled32.parform
       val fInt64 = Unrolled64.parform
-      val fIntInf = Unrolled64.parform 
+      val fIntInf = Unrolled64.parform
+    end)
+
+  structure SeqLoop =
+    Int_ChooseFromInt (struct
+      type 'a t = (int * int) -> (int -> unit) -> unit
+      val fInt8 = Loops8.seqLoop
+      val fInt16 = Loops16.seqLoop
+      val fInt32 = Loops32.seqLoop
+      val fInt64 = Loops64.seqLoop
+      val fIntInf = LoopsInt.seqLoop
+    end)
+
+  structure SeqReduce =
+    Int_ChooseFromInt (struct
+      type 'a t = ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
+      val fInt8 = Loops8.seqReduce
+      val fInt16 = Loops16.seqReduce
+      val fInt32 = Loops32.seqReduce
+      val fInt64 = Loops64.seqReduce
+      val fIntInf = LoopsInt.seqReduce
+    end)
+
+  structure UnrolledSeqLoop =
+    Int_ChooseFromInt (struct
+      type 'a t = (int * int) -> (int -> unit) -> unit
+      val fInt8 = Unrolled8.seqLoop
+      val fInt16 = Unrolled16.seqLoop
+      val fInt32 = Unrolled32.seqLoop
+      val fInt64 = Unrolled64.seqLoop
+      val fIntInf = Unrolled64.seqLoop
+    end)
+
+  structure UnrolledSeqReduce =
+    Int_ChooseFromInt (struct
+      type 'a t = ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
+      val fInt8 = Unrolled8.seqReduce
+      val fInt16 = Unrolled16.seqReduce
+      val fInt32 = Unrolled32.seqReduce
+      val fInt64 = Unrolled64.seqReduce
+      val fIntInf = Unrolled64.seqReduce
     end)
 
   local
@@ -314,6 +379,22 @@ struct
     in
       primSporkChoose (__inline_always__ loopBody, __inline_always__ unrolledImpl, __inline_always__ regularImpl)
     end
+
+    fun __inline_always__ unifiedSeqLoop (lo: int, hi: int) (f: int -> unit) : unit =
+      let
+        fun __inline_always__ regularImpl () = __inline_always__ SeqLoop.f (lo, hi) f
+        fun __inline_always__ unrolledImpl () = __inline_always__ UnrolledSeqLoop.f (lo, hi) f
+      in
+        Scheduler.primLoopChoose (__inline_always__ f, __inline_always__ unrolledImpl, __inline_always__ regularImpl)
+      end
+
+    fun __inline_always__ unifiedSeqReduce (combine: 'a * 'a -> 'a) (zero: 'a) (lo: int, hi: int) (f: int -> 'a) : 'a =
+      let
+        fun __inline_always__ regularImpl () = __inline_always__ SeqReduce.f combine zero (lo, hi) f
+        fun __inline_always__ unrolledImpl () = __inline_always__ UnrolledSeqReduce.f combine zero (lo, hi) f
+      in
+        Scheduler.primLoopChoose (__inline_always__ f, __inline_always__ unrolledImpl, __inline_always__ regularImpl)
+      end
   in
     val reducem = __inline_always__ unifiedReducem
     val reduce =  __inline_always__ unifiedReducem
@@ -322,6 +403,8 @@ struct
     val parformDefault =  __inline_always__ Parform.f
     val pareduce =  __inline_always__ unifiedPareduce
     val parfor =  __inline_always__ ForkJoin0.parfor
+    val seqLoop = __inline_always__ unifiedSeqLoop
+    val seqReduce = __inline_always__ unifiedSeqReduce
   end
 
   val pareduceBreakExn = __inline_always__ PareduceBreakExn.f

@@ -113,6 +113,7 @@ datatype 'a t =
  | MLton_share (* to rssa (as nop or runtime C fn) *)
  | MLton_size (* to rssa (as runtime C fn) *)
  | MLton_touch (* to rssa (as nop) or backend (as nop) *)
+ | Loop_choose (* closure convert *)
  (* Choose between unrolled and regular at compile time *)
  | Spork_choose (* closure convert *)
  | Spork of {tokenSplitPolicy: Word32.word} (* closure convert *)
@@ -296,6 +297,7 @@ fun toString (n: 'a t): string =
        | MLton_share => "MLton_share"
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
+       | Loop_choose => "loop_choose"
        | Spork_choose => "spork_choose"
        | Spork {tokenSplitPolicy=0w0} => "spork_fair"
        | Spork {tokenSplitPolicy=0w1} => "spork_keep"
@@ -465,6 +467,7 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_share, MLton_share) => true
     | (MLton_size, MLton_size) => true
     | (MLton_touch, MLton_touch) => true
+    | (Loop_choose, Loop_choose) => true
     (* TODO: Check usage properly *)
     | (Spork_choose, Spork_choose) => true
     | (Spork {tokenSplitPolicy = tsp1}, Spork {tokenSplitPolicy = tsp2}) => tsp1 = tsp2
@@ -654,6 +657,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_touch => MLton_touch
     | Spork tsp => Spork tsp
     (* TODO: Check usage properly *)
+    | Loop_choose => Loop_choose
     | Spork_choose => Spork_choose
     | Spork_forkThreadAndSetData z => Spork_forkThreadAndSetData z
     | Spork_getData spid => Spork_getData spid
@@ -872,6 +876,7 @@ val kind: 'a t -> Kind.t =
        | MLton_touch => SideEffect
        | Spork _ => SideEffect
        (* TODO: Check usage properly *)
+       | Loop_choose => SideEffect
        | Spork_choose => SideEffect
        | Spork_forkThreadAndSetData _ => SideEffect
        | Spork_getData _ => DependsOnState
@@ -1087,6 +1092,7 @@ in
        Spork {tokenSplitPolicy = 0w1},
        Spork {tokenSplitPolicy = 0w2},
        (* TODO: Check usage properly *)
+       Loop_choose,
        Spork_choose,
        Spork_forkThreadAndSetData {youngest=true},
        Spork_forkThreadAndSetData {youngest=false},
@@ -1455,6 +1461,15 @@ fun 'a checkApp (prim: 'a t,
                        in
                           (eightArgs (cont, taa, spwn, tba, seq, sync, exnseq, exnsync), tc)
                        end)
+       | Loop_choose =>
+            (* TODO: Check usage properly *)
+            twoTargs (fn (ta, tu) =>
+                       let
+                          val loopBody = arrow (tu, ta)       (* First arg: loop body function 'u -> 'a *)
+                          val impl = arrow (unit, ta)         (* Second and third args: thunks unit -> 'a *)
+                       in
+                          (threeArgs (loopBody, impl, impl), ta)
+                       end)
        | Spork_choose =>
             (* TODO: Check usage properly *)
             (* spork_choose: ('u -> 'v) -> (unit -> 'a) -> (unit -> 'a) -> 'a
@@ -1620,6 +1635,14 @@ fun ('a, 'b) extractTargs (prim: 'b t,
                val tc = result
             in
                six (taa, tar, tba, tbr, td, tc)
+            end
+       | Loop_choose =>
+            (* TODO: Check usage properly *)
+            let
+               val ta = result  (* Result type 'a *)
+               val (tu, _) = deArrow (arg 0)  (* First arg: loop body ('u -> 'v) *)
+            in
+               Vector.new2 (ta, tu)
             end
        | Spork_choose =>
             (* TODO: Check usage properly *)
