@@ -1418,7 +1418,7 @@ fun closureConvert
                    end
 
                  (* choose between unrolled and regular based on loop body size *)
-                 val threshold = 100  
+                 val threshold = !Control.sporkChooseThreshold
                  val chosenImpl = if loopBodySize <= threshold then unrolled else regular
                  val _ = Control.diagnostics
                    (fn display =>
