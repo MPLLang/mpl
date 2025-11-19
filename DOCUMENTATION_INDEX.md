@@ -143,21 +143,42 @@ The Standard ML basis library implementation with MPL extensions.
 
 ### Parallel Scheduler
 
-📂 **[basis-library/schedulers/spork/](basis-library/schedulers/spork/)** - Work-stealing scheduler
+📂 **[basis-library/schedulers/spork/README.md](basis-library/schedulers/spork/README.md)** - **Work-stealing scheduler and ForkJoin**
 
-The core parallel execution engine for MPL:
+The core parallel execution engine for MPL (~11 source files):
+
+**Key Topics**:
+- Work-stealing scheduler with ABP deques
+- Fork-join parallelism structure
+- Heartbeat granularity control
+- Token policies (Fair, Keep, Give)
+- Hierarchical heap integration
+- Disentanglement checking
+- GC joinpoints and local collection
 
 **Key Files**:
-- `Scheduler.sml` - Main scheduler implementation
-- `ForkJoin.sml` - ForkJoin structure implementation
+- `Scheduler.sml` (~1,500 lines) - Main scheduler implementation
+- `ForkJoin.sml` (~1,000 lines) - ForkJoin structure implementation
 - `DequeABP.sml` - ABP work-stealing deque implementation
+- `HierarchicalHeapEBR.sml` - Epoch-based reclamation
 
 **Core Primitives**:
 - `ForkJoin.par` - Fork-join parallelism
 - `ForkJoin.parfor` - Parallel for loop (manual grain size)
 - `ForkJoin.parform` - Parallel for loop (automatic grain size)
 - `ForkJoin.reducem` - Parallel reduction (automatic grain size)
+- `ForkJoin.seqLoop` - Sequential loop with automatic unrolling
+- `ForkJoin.seqReduce` - Sequential reduction with automatic unrolling
 - `ForkJoin.alloc` - Allocate uninitialized array
+
+**Development Guide**:
+- Understanding work-stealing mechanics
+- Adding new parallel primitives
+- Modifying granularity control
+- Debugging parallel programs
+- Performance tuning with heartbeats
+
+**See Also**: Runtime GC ([runtime/gc/README.md](runtime/gc/README.md)), Compiler SSA ([mlton/ssa/README.md](mlton/ssa/README.md))
 
 ## Compiler (mlton/)
 
@@ -443,7 +464,107 @@ Defunctorization eliminates functors, structures, and signatures (~2 source file
 - Substitute type variables for polymorphic pattern instantiation
 - Expansive polymorphic values wrapped in thunks
 
-**See Also**: CoreML ([mlton/core-ml/](mlton/core-ml/)), XML IR ([mlton/xml/](mlton/xml/)), Match Compile ([mlton/match-compile/](mlton/match-compile/))
+**See Also**: CoreML ([mlton/core-ml/](mlton/core-ml/)), XML IR ([mlton/xml/](mlton/xml/)), Match Compile ([mlton/match-compile/README.md](mlton/match-compile/README.md))
+
+### Match Compilation (Pattern Matching)
+
+📂 **[mlton/match-compile/README.md](mlton/match-compile/README.md)** - **Pattern match compilation to decision trees**
+
+Pattern compilation for exhaustiveness checking and efficient code generation (~8 source files):
+
+**Topics**:
+- NestedPat representation (unified pattern structure)
+- Decision tree generation from patterns
+- Exhaustiveness checking with counterexamples
+- Redundancy detection
+- Or-patterns and layered patterns
+- Test selection heuristics
+- Match diagnostics
+
+**Key Files**:
+- `match-compile.fun` (~800 lines) - Main compilation algorithm
+- `nested-pat.fun` (~550 lines) - Unified pattern representation
+
+**Key Features**:
+- Exhaustiveness: Generate counterexamples for non-exhaustive matches
+- Redundancy: Detect unreachable clauses
+- Optimization: Generate efficient decision trees
+- Diagnostics: Clear error messages with source locations
+
+**Pattern Types**:
+- Constructor patterns (Con)
+- Constant patterns (Const with isChar/isInt)
+- Layered patterns (x as pat)
+- Or-patterns (pat1 | pat2 | ...)
+- Record patterns (flexible vs. fixed)
+- Vector patterns
+- Wild patterns
+
+**Development Guide**:
+- Understanding the decision tree algorithm
+- Adding new pattern types
+- Improving exhaustiveness checking
+- Debugging match compilation
+
+**See Also**: AST ([mlton/ast/README.md](mlton/ast/README.md)), Defunctorize ([mlton/defunctorize/README.md](mlton/defunctorize/README.md)), Elaborate ([mlton/elaborate/README.md](mlton/elaborate/README.md))
+
+### AST (Abstract Syntax Tree)
+
+📂 **[mlton/ast/README.md](mlton/ast/README.md)** - **AST structure after parsing, before elaboration**
+
+Abstract syntax tree representation of Standard ML source code (~20 source files):
+
+**Topics**:
+- AST structure (expressions, patterns, declarations, types)
+- FlatApp (unresolved infix applications before precedence parsing)
+- Fixity declarations (infix, infixr, nonfix)
+- Module system (structures, signatures, functors)
+- Primitive operations (_prim declarations)
+- Long identifiers (A.B.C.x)
+- Source location tracking
+
+**Key Files**:
+- `ast.fun` (~600 lines) - Main AST implementation
+- `ast-core.fun` (~400 lines) - Core AST structures
+
+**Expression Forms**:
+- Applications (App, FlatApp for infix)
+- Case expressions and Fn (pattern matching)
+- Primitives (PrimKind: _prim, _address, _build_const, _command_line_const, _const, _import, _export, _symbol, _overload)
+- Let, Record, Seq (sequencing), Andalso, Orelse
+- Constraint (type annotations)
+- Handle, Raise (exceptions)
+
+**Pattern Forms**:
+- Wild, Var, Const, Constructor applications
+- Record patterns (flexible records with ...)
+- Layered patterns (x as pat)
+- Or-patterns (pat1 | pat2)
+- FlatApp (infix constructors before precedence)
+- Constraint (type annotations)
+- List syntax sugar
+
+**Declaration Forms**:
+- Val (pattern bindings)
+- Fun (function declarations with clauses)
+- Type, Datatype (type definitions)
+- Exception (exception declarations)
+- Local, Open (scoping)
+- Structure, Signature, Functor (modules)
+- Infix, Infixr, Nonfix (fixity)
+
+**Fixity Parsing**:
+- FlatApp expressions/patterns initially unresolved
+- Precedence parsing in elaboration (precedence-parse.fun)
+- Associativity rules (left/right)
+
+**Development Guide**:
+- Modifying the AST structure
+- Adding new syntax forms
+- Understanding precedence parsing
+- Source location tracking
+
+**See Also**: Front-end ([mlton/front-end/README.md](mlton/front-end/README.md)), Elaborate ([mlton/elaborate/README.md](mlton/elaborate/README.md)), Match Compile ([mlton/match-compile/README.md](mlton/match-compile/README.md))
 
 ### XML IR (Polymorphic Intermediate Representation)
 
@@ -788,14 +909,25 @@ mlton/
 │   └── ...                   (~81 files)
 │
 ├── front-end/                Parsing and lexing
+│   └── README.md             (front-end documentation)
 ├── elaborate/                Type inference and modules
+│   └── README.md             (elaboration documentation)
 ├── ast/                      Abstract syntax tree
+│   └── README.md             (AST documentation)
+├── match-compile/            Pattern match compilation
+│   └── README.md             (match compilation documentation)
 ├── core-ml/                  CoreML IR
+│   └── README.md             (CoreML documentation)
 ├── defunctorize/             Functor elimination
+│   └── README.md             (defunctorization documentation)
 ├── xml/                      XML IR (polymorphic)
+│   └── README.md             (XML documentation)
 ├── closure-convert/          Closure conversion
+│   └── README.md             (closure conversion documentation)
 ├── backend/                  Backend transformations
+│   └── README.md             (backend documentation)
 ├── codegen/                  Code generation
+│   └── README.md             (codegen documentation)
 └── main/                     Compiler driver
     ├── compile.fun           Main compilation pipeline
     └── main.fun              Entry point, CLI parsing
@@ -1105,8 +1237,9 @@ When adding documentation:
 ## Documentation Maintenance
 
 - **Last updated**: 2025-11-18
-- **Status**: Runtime documentation complete; compiler documentation in progress
-- **Coverage**: ~350 source files documented across runtime modules
+- **Status**: Runtime documentation complete ✅; Compiler documentation complete ✅; Basis library scheduler documentation complete ✅
+- **Coverage**: ~1,300+ source files documented (runtime + compiler + basis library)
+- **Total documentation**: 15 compiler docs + 7 runtime docs + 1 scheduler doc = 23 comprehensive documentation files
 
 ---
 
