@@ -589,15 +589,6 @@ val (a, b) = ForkJoin.par (fn () => ref 1, fn () => ref 2)
 3. Check `invariant.c` for which invariant failed
 4. Report bug with backtrace
 
-## Future Work
-
-Potential areas for enhancement:
-- **Parallel GC**: Multi-threaded collection of shared heaps
-- **Generational GC**: Age-based collection for root heap
-- **Compaction**: Reduce memory fragmentation
-- **Better root GC**: More efficient global collection
-- **Adaptive tuning**: Automatic chunk size, processor count
-
 ## References
 
 See main repository README and academic papers for:

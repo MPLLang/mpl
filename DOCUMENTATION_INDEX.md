@@ -323,6 +323,341 @@ The entry point to the compilation pipeline (~10 source files + generated code):
 
 **See Also**: AST structures ([mlton/ast/](mlton/ast/)), Elaboration ([mlton/elaborate/](mlton/elaborate/))
 
+### Elaboration (Type Inference and Modules)
+
+📂 **[mlton/elaborate/README.md](mlton/elaborate/README.md)** - **Type inference, module elaboration, overload resolution**
+
+The semantic analysis phase that transforms AST into explicitly-typed CoreML (~24 source files):
+
+**Topics**:
+- Hindley-Milner type inference algorithm
+- Module system elaboration (structures, signatures, functors)
+- Overload resolution (polymorphic operators)
+- Type environment and scope management
+- Signature matching and abstraction
+- Pattern match exhaustiveness and redundancy checking
+- Error reporting with source locations
+
+**Key Files**:
+- `elaborate-core.fun` (~5,000 lines) - Core expression/declaration elaboration
+- `type-env.fun` (~3,000 lines) - Type representation, unification, schemes
+- `elaborate-env.fun` (~5,500 lines) - Elaboration environment
+- `elaborate-modules.fun` (~450 lines) - Structure/signature/functor elaboration
+- `elaborate-sigexp.fun` (~900 lines) - Signature expression elaboration
+- `interface.fun` (~2,000 lines) - Module interface implementation
+- `precedence-parse.fun` (~450 lines) - Infix operator precedence parsing
+- `scope.fun` (~500 lines) - Implicit type variable scoping
+
+**Type System**:
+- Unification with occurs check
+- Type generalization and instantiation (polymorphism)
+- Type schemes: `∀α. τ`
+- Value restriction for soundness
+- Equality types and admitsEquality tracking
+
+**Module System**:
+- Opaque vs. transparent signature ascription (`:>` vs. `:`)
+- Functor application and matching
+- Flexible type constructors in signatures
+- Sharing constraints
+
+**Development Guide**:
+- How to modify type inference
+- Adding module system features
+- Debugging elaboration errors
+
+**Output**: CoreML IR with explicit types, ready for defunctorization
+
+**See Also**: Front-end ([mlton/front-end/](mlton/front-end/)), CoreML IR ([mlton/core-ml/](mlton/core-ml/)), Defunctorization ([mlton/defunctorize/](mlton/defunctorize/))
+
+### CoreML IR (Explicitly-Typed Intermediate Representation)
+
+📂 **[mlton/core-ml/README.md](mlton/core-ml/README.md)** - **Typed, module-aware IR from elaboration**
+
+CoreML is produced by elaboration and consumed by defunctorization (~6 source files):
+
+**Topics**:
+- CoreML structure (declarations, expressions, patterns, lambdas)
+- Type representation (fully resolved from elaboration)
+- Pattern matching (full SML syntax with exhaustiveness checking)
+- Dead code elimination
+- Inlining attributes
+- Profiling support (EnterLeave expressions)
+- Layout and pretty-printing
+
+**Key Features**:
+- Every expression/pattern carries explicit type
+- Retains module system (structures, signatures, functors)
+- Pattern matching with diagnostics (non-exhaustive/redundant)
+- Value restriction (isExpansive predicate)
+- Close to source-level SML
+
+**Key Files**:
+- `core-ml.fun` (~700 lines) - CoreML IR implementation
+- `dead-code.fun` (~80 lines) - Dead code elimination pass
+
+**Pattern Matching**:
+- Case expressions with noMatch (Impossible, RaiseMatch, RaiseBind, RaiseAgain)
+- Match diagnostics from elaboration
+- Layered patterns, or patterns, record patterns
+
+**Dead Code Elimination**:
+- Backward analysis to find unused bindings
+- Preserves side effects and datatypes
+- Handles wild/unit pattern bindings
+
+**See Also**: Elaborate ([mlton/elaborate/](mlton/elaborate/)), Defunctorize ([mlton/defunctorize/](mlton/defunctorize/)), XML IR ([mlton/xml/](mlton/xml/))
+
+### Defunctorization (Module Elimination)
+
+📂 **[mlton/defunctorize/README.md](mlton/defunctorize/README.md)** - **CoreML → XML, eliminate module system**
+
+Defunctorization eliminates functors, structures, and signatures (~2 source files):
+
+**Topics**:
+- Functor elimination (inline applications)
+- Module flattening (nested structures → flat names)
+- Signature erasure (opaque/transparent ascription)
+- Pattern compilation (complex patterns → simple cases)
+- Type translation (CoreML types → XML types with explicit passing)
+- Match diagnostics (non-exhaustive, redundant, exception patterns)
+- Polymorphic pattern bindings (expand to multiple bindings)
+
+**Key Files**:
+- `defunctorize.fun` (~1,100 lines) - Main transformation
+
+**Transformations**:
+- Functor applications: Inline functor body with argument substitution
+- Structure paths: `A.B.C.x` → `A_B_C_x` (flattening)
+- Patterns: Nested patterns → decision trees via MatchCompile
+- Polymorphic patterns: `val 'a SOME x = opt` → expand with intermediate bindings
+
+**Match Compilation**:
+- Invokes MatchCompile algorithm for complex patterns
+- Generates decision trees for efficient pattern testing
+- Reports non-exhaustive/redundant patterns
+- Special handling for exception patterns
+
+**Type Variables**:
+- Track scoping carefully (datatype, Fun, PolyVal)
+- Substitute type variables for polymorphic pattern instantiation
+- Expansive polymorphic values wrapped in thunks
+
+**See Also**: CoreML ([mlton/core-ml/](mlton/core-ml/)), XML IR ([mlton/xml/](mlton/xml/)), Match Compile ([mlton/match-compile/](mlton/match-compile/))
+
+### XML IR (Polymorphic Intermediate Representation)
+
+📂 **[mlton/xml/README.md](mlton/xml/README.md)** - **Polymorphic, typed, first-order IR with monomorphisation**
+
+XML sits between CoreML and SSA, produced by defunctorization (~31 source files):
+
+**Topics**:
+- XML vs SXML (polymorphic vs monomorphic)
+- Explicit type passing and type applications
+- Monomorphisation (type specialization)
+- Exception implementation as datatypes
+- Program suffix implementation
+- XML optimization passes (shrink, uncurry, polyvariance)
+- Type checking
+
+**Key Files**:
+- `xml-tree.fun` (~1,400 lines) - XML IR implementation
+- `monomorphise.fun` (~550 lines) - XML → SXML via type specialization
+- `implement-exceptions.fun` (~800 lines) - Exceptions as datatypes
+- `shrink.fun` (~850 lines) - Dead code elimination and simplification
+- `uncurry.fun` (~800 lines) - Curried → multi-argument functions
+- `polyvariance.fun` (~750 lines) - Flow-sensitive specialization
+- `simplify-types.fun` (~400 lines) - Type canonicalization
+
+**XML Structure**:
+- Polymorphic declarations (PolyVal with type variables)
+- First-order (functions as values, not yet closures)
+- VarExp: variables with explicit type arguments `f [int, bool]`
+- Exception and Fun declarations
+
+**Monomorphisation**:
+- Eliminates polymorphism by specialization
+- Creates specialized copy for each type instantiation
+- Cache to avoid duplication
+- XML → SXML (no type variables, all concrete)
+
+**Optimization Passes**:
+- Shrinking (dead code, inlining, constant folding)
+- Uncurrying (multi-argument functions)
+- Type simplification
+- Polyvariance analysis
+
+**Output**: SXML (monomorphic XML) ready for closure conversion
+
+**See Also**: Elaboration ([mlton/elaborate/](mlton/elaborate/)), CoreML ([mlton/core-ml/](mlton/core-ml/)), Defunctorization ([mlton/defunctorize/](mlton/defunctorize/)), Closure Conversion ([mlton/closure-convert/](mlton/closure-convert/))
+
+### Closure Conversion (SXML → SSA)
+
+📂 **[mlton/closure-convert/README.md](mlton/closure-convert/README.md)** - **Transform to explicit closures and SSA form**
+
+Closure conversion converts SXML to SSA with explicit closure data structures (~8 source files):
+
+**Topics**:
+- Closure representation (code pointer + environment record)
+- Globalization (identify variables that don't need closure capture)
+- Free variable analysis (compute free variables for each lambda)
+- Abstract value analysis (track lambda flow through program)
+- Closure environment types (shared environments for mutual recursion)
+- SSA type generation (convert SXML types to SSA types)
+- Variable renaming (single assignment constraint)
+
+**Key Files**:
+- `closure-convert.fun` (~2,000 lines) - Main conversion algorithm
+- `lambda-free.fun` (~200 lines) - Free variable analysis
+- `globalize.fun` (~200 lines) - Globalization analysis
+- `abstract-value.fun` (~500 lines) - Abstract value tracking
+
+**Transformations**:
+- **Lambda lifting**: Nested lambdas → top-level functions with environment parameter
+- **Closure creation**: `closure = (code_pointer, environment_record)`
+- **Free variables**: Captured in environment record
+- **Mutual recursion**: Shared environment with circular references
+- **Globalization**: Eliminate unnecessary captures
+
+**Abstract Value Analysis**:
+- Track which lambdas flow to which variables
+- Build Lambdas sets for function-typed values
+- Enable known-function optimizations
+- Determine closure types for SSA
+
+**Example**:
+```sml
+(* SXML *)
+let val x = 10
+    val f = fn y => x + y
+in f 32 end
+
+(* SSA after closure conversion *)
+fun f_code (env, y) =
+   let val x = #x env
+   in x + y end
+
+let val x = 10
+    val f_env = {x = x}
+    val f = (f_code, f_env)
+    val (code, env) = f
+in code (env, 32) end
+```
+
+**See Also**: XML IR ([mlton/xml/](mlton/xml/)), SSA IR ([mlton/ssa/](mlton/ssa/))
+
+### Backend (SSA2 → RSSA → Machine → C)
+
+📂 **[mlton/backend/README.md](mlton/backend/README.md)** - **Lower to machine representation and generate code**
+
+The backend transforms optimized SSA2 to executable C code (~57 source files):
+
+**Pipeline**:
+1. **SSA2 → RSSA**: Add explicit data representation
+2. **RSSA → Machine**: Lower to machine operations
+3. **Machine → C**: Generate C code
+
+**Topics**:
+- Data representation (object headers, alignment, padding)
+- Stack layout (frame allocation, variable placement)
+- Register allocation (graph coloring, spilling)
+- Machine operands (temporaries, stack offsets, globals)
+- GC interface (allocation, collection triggers)
+- Calling convention (C ABI compatibility)
+- Code chunking (split large functions)
+
+**Key Files**:
+- `ssa2-to-rssa.fun` (~2,500 lines) - SSA2 → RSSA conversion
+- `backend.fun` (~1,500 lines) - RSSA → Machine transformation
+- `packed-representation.fun` (~2,700 lines) - Memory layout computation
+- `allocate-variables.fun` (~700 lines) - Register allocation
+- `rssa-tree.fun` (~900 lines) - RSSA IR implementation
+- `machine.fun` (~1,800 lines) - Machine IR implementation
+
+**Data Representation**:
+- Object headers for GC (type tags, mark bits)
+- Array representation (length + elements)
+- Tuple layout with alignment
+- Datatype constructors with tags
+
+**RSSA (Representational SSA)**:
+- Explicit object headers
+- Stack frame layout
+- Runtime system calls
+- Still in SSA form
+
+**Machine IR**:
+- Low-level operations (Move, PrimApp)
+- Explicit operands (Temporary, StackOffset, Global, Operand types)
+- Basic blocks with transfers (Goto, Call, Return, Raise, Switch)
+- Register allocation decisions
+
+**Register Allocation**:
+- Liveness analysis
+- Interference graph construction
+- Graph coloring with spilling
+- Temporaries vs. stack offsets
+
+**See Also**: SSA IR ([mlton/ssa/](mlton/ssa/)), C Codegen ([mlton/codegen/](mlton/codegen/))
+
+### Code Generation (Machine → C)
+
+📂 **[mlton/codegen/README.md](mlton/codegen/README.md)** - **Generate C code from Machine IR**
+
+Code generation produces C source files from Machine representation (~2 source files for C backend):
+
+**Topics**:
+- C code structure (functions, globals, static heap)
+- Operand translation (Machine → C expressions)
+- Statement generation (Move, PrimApp → C statements)
+- Control flow (labels, gotos, switches)
+- Primitive operations (map to C operations or runtime calls)
+- GC interface (inline allocation, collection triggers)
+- Static heap (compile-time constants)
+- Exception handling (push/pop exception frames)
+
+**Key Files**:
+- `c-codegen/c-codegen.fun` (~2,000 lines) - C code generation
+
+**Generated Files**:
+- `program.c` - Main compiled code
+- `program.h` - Declarations
+- `program-consts.c` - Constants and static data
+
+**C Code Structure**:
+```c
+/* program.h */
+static void Chunk_0 (GC_state gcState);
+static int64_t Global_0;
+...
+
+/* program.c */
+static void Chunk_0 (GC_state gcState) {
+   int64_t tmp0, tmp1;
+L_0:
+   tmp0 = *(int64_t*)(gcState->stackTop + 0);
+   tmp1 = tmp0 + 1;
+   goto L_1;
+...
+}
+```
+
+**Primitive Operations**:
+- Arithmetic: `Word_add → a + b`, `Int_mul → a * b`
+- Memory: `Array_sub → arr[index]`, `Ref_assign → *ref = value`
+- Checked ops: `Int_addCheck` → overflow detection
+- Runtime: `GC_collect`, `GC_allocateArray`, `Thread_switchTo`
+
+**GC Interface**:
+- Inline bump-pointer allocation (fast path)
+- GC calls when out of space (slow path)
+- Save/restore live registers across GC
+- Exception handler stack management
+
+**Note**: MPL only supports C codegen. x86, AMD64, and LLVM backends are not maintained.
+
+**See Also**: Backend ([mlton/backend/](mlton/backend/)), Runtime System ([runtime/](runtime/))
+
 ### Compiler Architecture
 
 The compiler uses a multi-stage pipeline with multiple intermediate representations:
@@ -413,6 +748,25 @@ mlton/
 │   ├── mlb.grm               ML-Yacc grammar (ML Basis)
 │   ├── front-end.fun         ML source parser driver
 │   └── mlb-front-end.fun     MLB parser with path resolution
+│
+├── elaborate/                Type inference and module elaboration
+│   ├── README.md             (elaboration documentation)
+│   ├── elaborate-core.fun    Core expression/declaration elaboration
+│   ├── type-env.fun          Type representation and unification
+│   ├── elaborate-env.fun     Elaboration environment
+│   ├── elaborate-modules.fun Module system elaboration
+│   ├── interface.fun         Module interfaces
+│   ├── precedence-parse.fun  Infix operator parsing
+│   └── scope.fun             Type variable scoping
+│
+├── xml/                      XML IR (polymorphic, typed, first-order)
+│   ├── README.md             (XML documentation)
+│   ├── xml-tree.fun          XML IR implementation
+│   ├── monomorphise.fun      Type specialization (XML → SXML)
+│   ├── implement-exceptions.fun Exceptions as datatypes
+│   ├── shrink.fun            Dead code elimination
+│   ├── uncurry.fun           Multi-argument functions
+│   └── polyvariance.fun      Flow-sensitive specialization
 │
 ├── ssa/                      SSA IR and optimization passes
 │   ├── README.md             (SSA documentation) ⭐
