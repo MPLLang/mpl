@@ -1,0 +1,34 @@
+local
+  $(SML_LIB)/basis/basis.mlb
+  $(SML_LIB)/basis/mlton.mlb
+  $(SML_LIB)/basis/mpl.mlb
+  $(SML_LIB)/basis/unsafe.mlb
+
+  local
+    $(SML_LIB)/basis/build/sources.mlb
+  in
+    signature ARRAY_EXTRA
+    signature ARRAY_SLICE_EXTRA
+    structure ArrayExtra = Array
+    structure ArraySliceExtra = ArraySlice
+
+    structure PrimitiveFFI
+    structure C_Time
+    structure C_SUSeconds
+  end
+
+  SpinLock.sml
+  queue/RingBuffer.sml
+  queue/ConcurrentBinaryHeap.sml
+  FORK_JOIN.sig
+  ../spork/SimpleRandom.sml
+  ann
+    "allowFFI true"
+    "allowPrim true"
+  in
+    ../spork/DequeABP.sml
+  end
+  Scheduler.sml
+in
+  structure ForkJoin
+end

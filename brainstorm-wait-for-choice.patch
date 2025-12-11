@@ -1,0 +1,244 @@
+diff --git a/basis-library/schedulers/hybrid/FORK_JOIN.sig b/basis-library/schedulers/hybrid/FORK_JOIN.sig
+index 1d4f5b98d..c56a567e5 100644
+--- a/basis-library/schedulers/hybrid/FORK_JOIN.sig
++++ b/basis-library/schedulers/hybrid/FORK_JOIN.sig
+@@ -5,6 +5,13 @@ sig
+ 
+   val choice: {prefer_cpu: unit -> 'a, prefer_gpu: int -> 'a} -> 'a
+ 
++  val wait_for_choice:
++    { prefer_cpu: unit -> 'a
++    , prefer_gpu: int -> 'a
++    , ready_for_gpu: int -> bool
++    }
++    -> 'a
++
+   val alloc: int -> 'a array
+ 
+   (* synonym for par *)
+diff --git a/basis-library/schedulers/hybrid/Scheduler.sml b/basis-library/schedulers/hybrid/Scheduler.sml
+index 1f86a9946..915fbec45 100644
+--- a/basis-library/schedulers/hybrid/Scheduler.sml
++++ b/basis-library/schedulers/hybrid/Scheduler.sml
+@@ -92,12 +92,12 @@ struct
+   | GCTask of gctask_data
+ 
+ 
+-  fun cmpContinuationTaskDepth (t1, t2) =
++  fun cmpPendingChoiceDepth (t1, t2) =
+     case (t1, t2) of
+-      (Continuation (_, d1), Continuation (_, d2)) => Int.compare (d1, d2)
++      ((Continuation (_, d1), _), (Continuation (_, d2), _)) => Int.compare (d1, d2)
+     | _ =>
+         die (fn _ =>
+-          "scheduler bug: cmpContinuationTaskDepth: not both continuations")
++          "scheduler bug: cmpPendingChoiceDepth: not both continuations")
+ 
+   structure DE = MLton.Thread.Disentanglement
+ 
+@@ -370,10 +370,14 @@ struct
+    * SCHEDULER LOCAL DATA
+    *)
+ 
++  type ready_for_gpu_fn = int -> bool
++
++  val always_ready: ready_for_gpu_fn = (fn _ => true)
++
+   type worker_local_data =
+     { queue: task Queue.t
+     , sideQueue: task RingBuffer.t
+-    , pendingChoices: task ConcurrentBinaryHeap.t
++    , pendingChoices: (task * ready_for_gpu_fn) ConcurrentBinaryHeap.t
+     , schedThread: Thread.t option ref
+     , gcTask: gctask_data option ref
+     }
+@@ -383,7 +387,7 @@ struct
+     , sideQueue = RingBuffer.new {capacity = 200}
+     , pendingChoices =
+         ConcurrentBinaryHeap.new
+-          {capacity = 200, cmp = cmpContinuationTaskDepth}
++          {capacity = 200, cmp = cmpPendingChoiceDepth}
+     , schedThread = ref NONE
+     , gcTask = ref NONE
+     }
+@@ -942,30 +946,31 @@ struct
+       end
+ 
+ 
+-    fun announceCurrentThreadPendingChoice () =
++    fun announceCurrentThreadPendingChoice (ready_for_gpu_fn: ready_for_gpu_fn) : unit =
+       if queueSize () > 0 then
+         ( moveAllTasksIntoSideQueue ()
+         ; setQueueDepth (myWorkerId ()) (HH.getDepth (Thread.current ()))
+         ; clear ()
+-        ; announceCurrentThreadPendingChoice
+-            () (* this should succeed on second go, now that main deque is empty *)
++
++        (* this should succeed on second go, now that main deque is empty *)
++        ; announceCurrentThreadPendingChoice ready_for_gpu_fn
+         )
+       else
+         let
+           val thread = Thread.current ()
+           val depth = HH.getDepth thread
+           val selfTask = Continuation (thread, depth)
+-          val sendSucceeded = tryPushPendingChoice (myWorkerId ()) selfTask
++          val sendSucceeded = tryPushPendingChoice (myWorkerId ()) (selfTask, ready_for_gpu_fn)
+         (* val sendSucceeded = RingBuffer.pushBot (hybridTaskQueue, selfTask) *)
+         in
+           if sendSucceeded then returnToSched () else ()
+         end
+ 
+ 
+-    fun choice (args as {prefer_cpu = cpuTask, prefer_gpu = gpuTask}) =
++    fun wait_for_choice {prefer_cpu = cpuTask: unit -> 'a, prefer_gpu = gpuTask: int -> 'a, ready_for_gpu: ready_for_gpu_fn} : 'a =
+       let
+         val _ = tryAcquireDeviceIdx ()
+-        val _ = announceCurrentThreadPendingChoice ()
++        val () = announceCurrentThreadPendingChoice ready_for_gpu
+       in
+         (* When we resume here, the gpu manager has already had a chance to
+          * to consider this choice point. Resuming on a cpu means that the
+@@ -1001,6 +1006,14 @@ struct
+               result
+             end
+       end
++
++
++    fun choice {prefer_cpu, prefer_gpu} =
++      wait_for_choice 
++        { prefer_cpu = prefer_cpu
++        , prefer_gpu = prefer_gpu
++        , ready_for_gpu = always_ready
++        }
+   end
+ 
+   (* ========================================================================
+@@ -1045,16 +1058,16 @@ struct
+       val gpuManager_policy_minDepth_dummy = (~1, valOf Int.maxInt, NONE)
+ 
+ 
+-      fun gpuManager_policy_minDepth_check (bestFriend, bestDepth, holding)
++      fun gpuManager_policy_minDepth_check myDeviceIdx (bestFriend, bestDepth, holding)
+         friend =
+         case peekPendingChoice friend of
+-          SOME (Continuation (_, d)) =>
+-            if d >= bestDepth then
++          SOME (Continuation (_, d), check_ready_for_gpu) =>
++            if d >= bestDepth orelse not (check_ready_for_gpu myDeviceIdx) then
+               (bestFriend, bestDepth, holding)
+             else
+               (case tryStealPendingChoice friend of
+-                 SOME (holding' as Continuation (_, d')) =>
+-                   if d' >= bestDepth then
++                 SOME (holding' as (Continuation (_, d'), check_ready_for_gpu)) =>
++                   if d' >= bestDepth orelse not (check_ready_for_gpu myDeviceIdx) then
+                      ( tryPushPendingChoice friend holding'
+                      ; (bestFriend, bestDepth, holding)
+                      )
+@@ -1071,7 +1084,7 @@ struct
+ 
+ 
+       fun gpuManager_tryFindWorkLoop_policy_minDepth'
+-        (bestFriend, bestDepth, holding) =
++        myDeviceIdx (bestFriend, bestDepth, holding) =
+         let
+           fun loop xxx i =
+             (*if i >= 10*P then xxx else*)
+@@ -1079,19 +1092,20 @@ struct
+               xxx
+             else
+               let (*val friend = randomId ()*) val friend = i
+-              in loop (gpuManager_policy_minDepth_check xxx friend) (i + 1)
++              in loop (gpuManager_policy_minDepth_check myDeviceIdx xxx friend) (i + 1)
+               end
+ 
+           val (_, _, holding) = loop (bestFriend, bestDepth, holding) 0
+         in
+           case holding of
+-            SOME t => SOME t
++            SOME (t, _) => SOME t
+           | NONE => NONE
+         end
+ 
+ 
+       fun gpuManager_tryFindWorkLoop_policy_minDepth () =
+         gpuManager_tryFindWorkLoop_policy_minDepth'
++          (Option.valOf (currentWorkerDeviceIdx ()))
+           gpuManager_policy_minDepth_dummy
+ 
+       (*
+@@ -1153,15 +1167,15 @@ struct
+ 
+       fun workerFindWork () =
+         let
+-          fun loopStealAny count (numPendingSeen, bestFriend, bestDepth) =
++          fun loopStealAny count (numPendingSeen, bestFriend, bestDepth) : task =
+             if
+               bestFriend >= 0
+               andalso (numPendingSeen >= 5 orelse count >= P * 100)
+             then
+               case tryKeepPendingChoice bestFriend of
+-                SOME (t as Continuation (_, d)) =>
++                SOME (t as (tt as Continuation (_, d), _)) =>
+                   if d >= bestDepth then
+-                    t
++                    tt
+                   else if tryPushPendingChoice bestFriend t then
+                     loopStealAny count (0, ~1, ~1)
+                   else
+@@ -1194,22 +1208,29 @@ struct
+                         else
+ 
+                           case peekBotPendingChoice friend of
+-                            SOME (Continuation (_, d)) =>
+-                              if Option.isSome (tryAcquireDeviceIdx ()) then
+-                                case
+-                                  gpuManager_tryFindWorkLoop_policy_minDepth'
+-                                    (gpuManager_policy_minDepth_check
+-                                       gpuManager_policy_minDepth_dummy friend)
+-                                of
+-                                  NONE =>
+-                                    (hiccup (); loopStealAny 0 (0, ~1, ~1))
+-                                | SOME task => task
+-                              else if d > bestDepth then
+-                                loopStealAny (count + 1)
+-                                  (numPendingSeen + 1, friend, d)
+-                              else
+-                                loopStealAny (count + 1)
+-                                  (numPendingSeen + 1, bestFriend, bestDepth)
++                            SOME (Continuation (_, d), _) =>
++                              let in
++                                case tryAcquireDeviceIdx () of
++                                  SOME dev_id =>
++                                    (case
++                                      gpuManager_tryFindWorkLoop_policy_minDepth'
++                                        dev_id (gpuManager_policy_minDepth_check
++                                                  dev_id
++                                                  gpuManager_policy_minDepth_dummy
++                                                  friend)
++                                    of
++                                      NONE =>
++                                        (hiccup (); loopStealAny 0 (0, ~1, ~1))
++                                    | SOME task => task)
++                                
++                                  | NONE =>
++                                      if d > bestDepth then
++                                        loopStealAny (count + 1)
++                                          (numPendingSeen + 1, friend, d)
++                                      else
++                                        loopStealAny (count + 1)
++                                          (numPendingSeen + 1, bestFriend, bestDepth)
++                              end
+ 
+                           | _ =>
+                               loopStealAny (count + 1)
+@@ -1240,7 +1261,7 @@ struct
+           | NONE =>
+               (* loopPrioritizeNonChoiceBeforeChoice 0 *)
+               case peekBotPendingChoice myId of
+-                SOME (Continuation (_, d)) => loopStealAny 0 (1, myId, d)
++                SOME (Continuation (_, d), _) => loopStealAny 0 (1, myId, d)
+               | _ => loopStealAny 0 (0, ~1, ~1)
+         end
+ 

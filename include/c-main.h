@@ -104,7 +104,7 @@ void *MLton_threadFunc (void* arg) {                                    \
     /* Trampoline */                                                    \
     MLton_trampoline (s, nextBlock, FALSE);                             \
   }                                                                     \
-  else if (s->numberOfProcs > s->controls->heartbeatRelayerThreshold    \
+  else if (FALSE && s->numberOfProcs > s->controls->heartbeatRelayerThreshold    \
            && s->numberOfProcs >= 2                                     \
            && Proc_processorNumber(s) == s->numberOfProcs-1)            \
   {                                                                     \
