@@ -411,7 +411,7 @@ structure Value =
          andalso Prod.allAreImmutable args
          andalso (case con of
                      ObjectCon.Con _ => false
-                   | ObjectCon.Sequence => false
+                   | ObjectCon.Sequence _ => false
                    | ObjectCon.Tuple => true)
 
       fun objectFields {args, con} =
@@ -423,7 +423,7 @@ structure Value =
                if (case con  of
                       ObjectCon.Con _ => true
                     | ObjectCon.Tuple => true
-                    | ObjectCon.Sequence => false)
+                    | ObjectCon.Sequence _=> false)
                   then Vector.foreach (Prod.dest args, fn {elt, isMutable} =>
                                        if isMutable
                                           then ()
@@ -622,7 +622,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                      (conValue c, fn () =>
                                       makeValue (doit ())))
                          | Tuple => doit ()
-                         | Sequence => doit ()
+                         | Sequence _ => doit ()
                      end
                 | Weak t =>
                      (case makeTypeValue t of

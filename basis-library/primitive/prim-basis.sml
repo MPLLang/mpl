@@ -49,6 +49,17 @@ structure Vector =
       type 'a vector = 'a t
    end
 
+structure ArrayFlat =
+   struct
+      type 'a t = 'a array_flat
+      type 'a array_flat = 'a t
+   end
+structure VectorFlat =
+   struct
+      type 'a t = 'a vector_flat
+      type 'a vector_flat = 'a t
+   end
+
 (* Primitive Basis (Primitive Types) *)
 structure Char8 =
    struct

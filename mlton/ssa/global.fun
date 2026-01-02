@@ -22,9 +22,10 @@ val expEquals =
     | (PrimApp {prim = p, targs = ts, args = xs},
        PrimApp {prim = p', targs = ts', args = xs'}) =>
          (case (p, p') of
-             (Prim.Vector_vector, Prim.Vector_vector) =>
+             (Prim.Vector_vector l, Prim.Vector_vector l') =>
                 Vector.equals (ts, ts', Type.equals)
                 andalso equalss (xs, xs')
+                andalso ArrayLayout.equals (l, l')
            | _ => false)
     | (Tuple xs, Tuple xs') => equalss (xs, xs')
     | _ => false

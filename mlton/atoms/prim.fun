@@ -34,8 +34,8 @@ structure Kind =
    end
 
 datatype 'a t =
-   Array_alloc of {raw: bool} (* to rssa (as runtime C fn) *)
- | Array_array (* to ssa2 *)
+   Array_alloc of {raw: bool, layout: ArrayLayout.t} (* to rssa (as runtime C fn) *)
+ | Array_array of ArrayLayout.t (* to ssa2 *)
  | Array_cas of CType.t option (* codegen *)
  | Array_copyArray (* to rssa (as runtime C fn) *)
  | Array_copyVector (* to rssa (as runtime C fn) *)
@@ -166,7 +166,7 @@ datatype 'a t =
  | TopLevel_setSuffix (* implement suffix *)
  | Vector_length (* to ssa2 *)
  | Vector_sub (* to ssa2 *)
- | Vector_vector (* to ssa2 *)
+ | Vector_vector of ArrayLayout.t (* to ssa2 *)
  | Weak_canGet (* to rssa (as runtime C fn) *)
  | Weak_get (* to rssa (as runtime C fn) *)
  | Weak_new (* to rssa (as runtime C fn) *)
@@ -227,8 +227,24 @@ fun toString (n: 'a t): string =
       fun cpointerSet (ty, s) = concat ["CPointer_set", ty, s]
    in
       case n of
-         Array_alloc {raw} => if raw then "Array_allocRaw" else "Array_alloc"
-       | Array_array => "Array_array"
+         Array_alloc {raw, layout} =>
+           let
+             val name = "Array_alloc"
+             val name = if raw then name ^ "Raw" else name
+             val name =
+               case layout of
+                 ArrayLayout.Default => name
+               | ArrayLayout.Flattened => name ^ "Flattened"
+           in
+             (* Array_alloc
+              * Array_allocRaw
+              * Array_allocFlattened
+              * Array_allocRawFlattened
+              *)
+             name
+           end
+       | Array_array ArrayLayout.Default => "Array_array"
+       | Array_array ArrayLayout.Flattened => "Array_arrayFlattened"
        | Array_cas NONE => "Array_cas"
        | Array_cas (SOME ctype) => concat ["Array", CType.name ctype, "_cas"]
        | Array_copyArray => "Array_copyArray"
@@ -350,7 +366,8 @@ fun toString (n: 'a t): string =
        | TopLevel_setSuffix => "TopLevel_setSuffix"
        | Vector_length => "Vector_length"
        | Vector_sub => "Vector_sub"
-       | Vector_vector => "Vector_vector"
+       | Vector_vector ArrayLayout.Default => "Vector_vector"
+       | Vector_vector ArrayLayout.Flattened => "Vector_vectorFlattened"
        | Weak_canGet => "Weak_canGet"
        | Weak_get => "Weak_get"
        | Weak_new => "Weak_new"
@@ -397,8 +414,11 @@ fun layoutFull (p, layoutX) =
     | p => layout p
 
 val equals: 'a t * 'a t -> bool =
-   fn (Array_alloc {raw = r}, Array_alloc {raw = r'}) => Bool.equals (r, r')
-    | (Array_array, Array_array) => true
+   fn (p1, p2) =>
+   case (p1, p2) of
+      (Array_alloc {raw = r, layout = l}, Array_alloc {raw = r', layout = l'}) =>
+        Bool.equals (r, r') andalso ArrayLayout.equals (l, l')
+    | (Array_array l1, Array_array l2) => ArrayLayout.equals (l1, l2)
     | (Array_cas NONE, Array_cas NONE) => true
     | (Array_cas (SOME ctype1), Array_cas (SOME ctype2)) => CType.equals (ctype1, ctype2)
     | (Array_copyArray, Array_copyArray) => true
@@ -518,7 +538,7 @@ val equals: 'a t * 'a t -> bool =
     | (TopLevel_setSuffix, TopLevel_setSuffix) => true
     | (Vector_length, Vector_length) => true
     | (Vector_sub, Vector_sub) => true
-    | (Vector_vector, Vector_vector) => true
+    | (Vector_vector l1, Vector_vector l2) => ArrayLayout.equals (l1, l2)
     | (Weak_canGet, Weak_canGet) => true
     | (Weak_get, Weak_get) => true
     | (Weak_new, Weak_new) => true
@@ -583,8 +603,8 @@ val equals: 'a t * 'a t -> bool =
 val map: 'a t * ('a -> 'b) -> 'b t =
    fn (p, f) =>
    case p of
-      Array_alloc {raw} => Array_alloc {raw = raw}
-    | Array_array => Array_array
+      Array_alloc {raw, layout} => Array_alloc {raw = raw, layout = layout}
+    | Array_array l => Array_array l
     | Array_cas cty => Array_cas cty
     | Array_copyArray => Array_copyArray
     | Array_copyVector => Array_copyVector
@@ -696,7 +716,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | TopLevel_setSuffix => TopLevel_setSuffix
     | Vector_length => Vector_length
     | Vector_sub => Vector_sub
-    | Vector_vector => Vector_vector
+    | Vector_vector l => Vector_vector l
     | Weak_canGet => Weak_canGet
     | Weak_get => Weak_get
     | Weak_new => Weak_new
@@ -797,7 +817,7 @@ val kind: 'a t -> Kind.t =
    in
       case p of
          Array_alloc _ => Moveable
-       | Array_array => Moveable
+       | Array_array _ => Moveable
        | Array_cas _ => SideEffect
        | Array_copyArray => SideEffect
        | Array_copyVector => SideEffect
@@ -912,7 +932,7 @@ val kind: 'a t -> Kind.t =
        | TopLevel_setSuffix => SideEffect
        | Vector_length => Functional
        | Vector_sub => Functional
-       | Vector_vector => Functional
+       | Vector_vector _ => Functional
        | Weak_canGet => DependsOnState
        | Weak_get => DependsOnState
        | Weak_new => Moveable
@@ -1012,9 +1032,12 @@ local
       @ wordSigns (s, false)
 in
    val all: unit t list =
-      [Array_alloc {raw = false},
-       Array_alloc {raw = true},
-       Array_array,
+      [Array_alloc {raw = false, layout = ArrayLayout.Default},
+       Array_alloc {raw = true, layout = ArrayLayout.Default},
+       Array_alloc {raw = false, layout = ArrayLayout.Flattened},
+       Array_alloc {raw = true, layout = ArrayLayout.Flattened},
+       Array_array ArrayLayout.Default,
+       Array_array ArrayLayout.Flattened,
        Array_cas NONE,
        Array_copyArray,
        Array_copyVector,
@@ -1100,7 +1123,8 @@ in
        TopLevel_setSuffix,
        Vector_length,
        Vector_sub,
-       Vector_vector,
+       Vector_vector ArrayLayout.Default,
+       Vector_vector ArrayLayout.Flattened,
        Weak_canGet,
        Weak_get,
        Weak_new,
@@ -1206,7 +1230,7 @@ fun 'a checkApp (prim: 'a t,
                  {args: 'a vector,
                   result: 'a,
                   targs: 'a vector,
-                  typeOps = {array: 'a -> 'a,
+                  typeOps = {array: ArrayLayout.t -> 'a -> 'a,
                              arrow: 'a * 'a -> 'a,
                              tuple: 'a vector -> 'a,
                              bool: 'a,
@@ -1218,7 +1242,7 @@ fun 'a checkApp (prim: 'a t,
                              reff: 'a -> 'a,
                              thread: 'a,
                              unit: 'a,
-                             vector: 'a -> 'a,
+                             vector: ArrayLayout.t -> 'a -> 'a,
                              weak: 'a -> 'a,
                              word: WordSize.t -> 'a}}): bool =
    let
@@ -1333,30 +1357,54 @@ fun 'a checkApp (prim: 'a t,
          noTargs (fn () => (twoArgs (intInf, csize), intInf))
       fun realTernary s =
          noTargs (fn () => (threeArgs (real s, real s, real s), real s))
-      fun wordArray seqSize = array (word seqSize)
+      fun wordArray seqSize = array ArrayLayout.Default (word seqSize)
       fun wordShift s =
          noTargs (fn () => (twoArgs (word s, shiftArg), word s))
-      val word8Vector = vector word8
-      fun wordVector seqSize = vector (word seqSize)
+      val word8Vector = vector ArrayLayout.Default word8
+      fun wordVector seqSize = vector ArrayLayout.Default (word seqSize)
       val string = word8Vector
+
+      (* For ad-hoc polymorphism over arrays of different memory layouts.
+       * (Many array primitives are overloaded. Notably, CAS is not.)
+       *)
+      fun anyArrayLayout (f: ArrayLayout.t -> bool) : bool =
+        List.exists ([ArrayLayout.Default, ArrayLayout.Flattened], f)
   in
       case prim of
-         Array_alloc _ => oneTarg (fn targ => (oneArg seqIndex, array targ))
-       | Array_array => oneTarg (fn targ => (nArgs (Vector.map (args, fn _ => targ)), array targ))
+         Array_alloc {layout, ...} =>
+           oneTarg (fn targ => (oneArg seqIndex, array layout targ))
+       | Array_array layout =>
+           oneTarg (fn targ => (nArgs (Vector.map (args, fn _ => targ)), array layout targ))
        | Array_cas _ =>
-            oneTarg (fn t => (fourArgs (array t, seqIndex, t, t), t))
-       | Array_copyArray => oneTarg (fn t => (fiveArgs (array t, seqIndex, array t, seqIndex, seqIndex), unit))
-       | Array_copyVector => oneTarg (fn t => (fiveArgs (array t, seqIndex, vector t, seqIndex, seqIndex), unit))
-       | Array_length => oneTarg (fn t => (oneArg (array t), seqIndex))
-       | Array_sub _ => oneTarg (fn t => (twoArgs (array t, seqIndex), t))
-       | Array_toArray => oneTarg (fn t => (oneArg (array t), array t))
-       | Array_toVector => oneTarg (fn t => (oneArg (array t), vector t))
+           (* only valid over default arrays, not flattened *)
+           oneTarg (fn t => (fourArgs (array ArrayLayout.Default t, seqIndex, t, t), t))
+       | Array_copyArray =>
+           anyArrayLayout (fn lay => oneTarg (fn t =>
+             (fiveArgs (array lay t, seqIndex, array lay t, seqIndex, seqIndex), unit)))
+       | Array_copyVector =>
+           anyArrayLayout (fn lay => oneTarg (fn t =>
+             (fiveArgs (array lay t, seqIndex, vector lay t, seqIndex, seqIndex), unit)))
+       | Array_length =>
+           anyArrayLayout (fn lay => oneTarg (fn t =>
+             (oneArg (array lay t), seqIndex)))
+       | Array_sub _ =>
+           anyArrayLayout (fn lay => oneTarg (fn t =>
+             (twoArgs (array lay t, seqIndex), t)))
+       | Array_toArray =>
+           anyArrayLayout (fn lay => oneTarg (fn t =>
+             (oneArg (array lay t), array lay t)))
+       | Array_toVector =>
+           anyArrayLayout (fn lay => oneTarg (fn t =>
+             (oneArg (array lay t), vector lay t)))
        | Array_uninit =>
-            oneTarg (fn t => (twoArgs (array t, seqIndex), unit))
+            anyArrayLayout (fn lay => oneTarg (fn t =>
+              (twoArgs (array lay t, seqIndex), unit)))
        | Array_uninitIsNop =>
-            oneTarg (fn t => (oneArg (array t), bool))
+            anyArrayLayout (fn lay => oneTarg (fn t =>
+              (oneArg (array lay t), bool)))
        | Array_update _ =>
-            oneTarg (fn t => (threeArgs (array t, seqIndex, t), unit))
+            anyArrayLayout (fn lay => oneTarg (fn t =>
+              (threeArgs (array lay t, seqIndex, t), unit)))
        | CFunction f =>
             noTargs (fn () => (nArgs (CFunction.args f), CFunction.return f))
        | CPointer_add =>
@@ -1411,7 +1459,7 @@ fun 'a checkApp (prim: 'a t,
        | IntInf_toString =>
             noTargs (fn () => (threeArgs (intInf, word32, csize), string))
        | IntInf_toVector =>
-            noTargs (fn () => (oneArg intInf, vector bigIntInfWord))
+            noTargs (fn () => (oneArg intInf, vector ArrayLayout.Default bigIntInfWord))
        | IntInf_toWord => noTargs (fn () => (oneArg intInf, smallIntInfWord))
        | IntInf_xorb => intInfBinary ()
        | MLton_bogus => oneTarg (fn t => (noArgs, t))
@@ -1493,9 +1541,14 @@ fun 'a checkApp (prim: 'a t,
             noTargs (fn () => (oneArg (arrow (unit, unit)), unit))
        | String_toWord8Vector =>
             noTargs (fn () => (oneArg string, word8Vector))
-       | Vector_length => oneTarg (fn t => (oneArg (vector t), seqIndex))
-       | Vector_sub => oneTarg (fn t => (twoArgs (vector t, seqIndex), t))
-       | Vector_vector => oneTarg (fn targ => (nArgs (Vector.map (args, fn _ => targ)), vector targ))
+       | Vector_length =>
+           anyArrayLayout (fn lay => oneTarg (fn t =>
+             (oneArg (vector lay t), seqIndex)))
+       | Vector_sub =>
+           anyArrayLayout (fn lay => oneTarg (fn t =>
+             (twoArgs (vector lay t, seqIndex), t)))
+       | Vector_vector layout =>
+           oneTarg (fn targ => (nArgs (Vector.map (args, fn _ => targ)), vector layout targ))
        | Weak_canGet => oneTarg (fn t => (oneArg (weak t), bool))
        | Weak_get => oneTarg (fn t => (oneArg (weak t), t))
        | Weak_new => oneTarg (fn t => (oneArg t, weak t))
@@ -1508,7 +1561,7 @@ fun 'a checkApp (prim: 'a t,
        | Word8Vector_toString =>
             noTargs (fn () => (oneArg (word8Vector), string))
        | WordVector_toIntInf =>
-            noTargs (fn () => (oneArg (vector bigIntInfWord), intInf))
+            noTargs (fn () => (oneArg (vector ArrayLayout.Default bigIntInfWord), intInf))
        | Word_add s => wordBinary s
        | Word_addCheckP (s, _) => wordBinaryP s
        | Word_andb s => wordBinary s
@@ -1560,7 +1613,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
    in
       case prim of
          Array_alloc _ => one (deArray result)
-       | Array_array => one (deArray result)
+       | Array_array _ => one (deArray result)
        | Array_cas _ => one (deArray (arg 0))
        | Array_copyArray => one (deArray (arg 0))
        | Array_copyVector => one (deArray (arg 0))
@@ -1604,7 +1657,7 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | Ref_ref => one (deRef result)
        | Vector_length => one (deVector (arg 0))
        | Vector_sub => one (deVector (arg 0))
-       | Vector_vector => one (deVector result)
+       | Vector_vector _ => one (deVector result)
        | Weak_canGet => one (deWeak (arg 0))
        | Weak_get => one result
        | Weak_new => one (arg 0)
@@ -1850,7 +1903,7 @@ fun ('a, 'b) apply (p: 'a t,
            | (Real_lt _, [Real r1, Real r2]) => boolOpt (RealX.lt (r1, r2))
            | (Real_qequal _, [Real r1, Real r2]) => boolOpt (RealX.qequal (r1, r2))
            | (Real_castToWord _, [Real r]) => wordOpt (RealX.castToWord r)
-           | (Vector_vector, (Word w)::_) =>
+           | (Vector_vector _, (Word w)::_) =>
                 (wordVector o WordXVector.fromList)
                 ({elementSize = WordX.size w},
                  List.map (cs, Const.deWord))

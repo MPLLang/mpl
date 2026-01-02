@@ -1475,7 +1475,7 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                                                   return = SOME l}))
                                               end
                                           end)
-                               | Prim.Array_alloc {raw} =>
+                               | Prim.Array_alloc {raw, ...} =>
                                     let
                                        val allocOpt = fn () =>
                                           let

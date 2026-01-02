@@ -12,9 +12,12 @@ signature PRIM_SEQUENCE =
    sig
       type 'a sequence
       type 'a elt
+      type 'a prim_array
+      type 'a prim_vector
 
       structure Slice: PRIM_SLICE where type 'a sequence = 'a sequence
                                     and type 'a elt = 'a elt
+                                    and type 'a prim_array = 'a prim_array
 
       val maxLen: SeqIndex.int (* Must also be representable as an Int.int *)
       val length: 'a sequence -> SeqIndex.int
@@ -25,8 +28,8 @@ signature PRIM_SEQUENCE =
       val unsafeUninit: 'a sequence * SeqIndex.int -> unit
       val update: 'a sequence * SeqIndex.int * 'a elt -> unit
       val unsafeUpdate: 'a sequence * SeqIndex.int * 'a elt -> unit
-      val copy: {dst: 'a elt array, di: SeqIndex.int, src: 'a sequence} -> unit
-      val unsafeCopy: {dst: 'a elt array, di: SeqIndex.int, src: 'a sequence} -> unit
+      val copy: {dst: 'a elt prim_array, di: SeqIndex.int, src: 'a sequence} -> unit
+      val unsafeCopy: {dst: 'a elt prim_array, di: SeqIndex.int, src: 'a sequence} -> unit
       val tabulate: SeqIndex.int * (SeqIndex.int -> 'a elt) -> 'a sequence
       val appi: (SeqIndex.int * 'a elt -> unit) -> 'a sequence -> unit 
       val app: ('a elt -> unit) -> 'a sequence -> unit 
@@ -59,5 +62,6 @@ signature PRIM_SEQUENCE =
       val unfoldi: SeqIndex.int * 'b * (SeqIndex.int * 'b -> 'a elt * 'b) -> 'a sequence * 'b
       val unfold: SeqIndex.int * 'b * ('b -> 'a elt * 'b) -> 'a sequence * 'b
       val unsafeAlloc: SeqIndex.int -> 'a sequence
-      val unsafeFromArray: 'a elt array -> 'a sequence
+      val unsafeFromArray: 'a elt prim_array -> 'a sequence
+      val unsafeArrayAlloc: SeqIndex.int -> 'a prim_array
   end

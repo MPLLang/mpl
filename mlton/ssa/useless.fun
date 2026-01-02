@@ -284,14 +284,14 @@ structure Value =
                   val loop = fn t => loop (t, es)
                   val value =
                      case Type.dest t of
-                        Type.Array t =>
+                        Type.Array {elem=t, ...} =>
                            Array {useful = useful (),
                                   length = loop (Type.word (WordSize.seqIndex ())),
                                   elt = slot t}
                       | Type.Ref t => Ref {arg = slot t,
                                            useful = useful ()}
                       | Type.Tuple ts => Tuple (Vector.map (ts, slot))
-                      | Type.Vector t =>
+                      | Type.Vector {elem=t, ...} =>
                            Vector {length = loop (Type.word (WordSize.seqIndex ())),
                                    elt = slot t}
                       | Type.Weak t => Weak {arg = slot t,
@@ -437,12 +437,16 @@ structure Value =
              in
                 case value of
                    Array arg =>
-                      (case arrayRep arg of
-                          ArrayRep.Array (ty, u) => (Type.array ty, u)
+                      let
+                        val lay = Type.deArrayLayout ty
+                      in
+                        case arrayRep arg of
+                          ArrayRep.Array (ty, u) => (Type.array lay ty, u)
                         | ArrayRep.Length => (Type.word (WordSize.seqIndex ()), true)
                         | ArrayRep.LengthRef => (Type.reff (Type.word (WordSize.seqIndex ())), true)
                         | ArrayRep.UnitRef => (Type.reff Type.unit, true)
-                        | ArrayRep.Unit => (Type.unit, false))
+                        | ArrayRep.Unit => (Type.unit, false)
+                      end
                  | Ground u => (ty, Useful.isUseful u)
                  | Ref {arg, useful, ...} =>
                       orU (wrap (arg, Type.reff), useful)
@@ -459,10 +463,14 @@ structure Value =
                          (Type.tuple ts, b)
                       end
                  | Vector arg =>
-                      (case vectorRep arg of
-                          VectorRep.Vector (ty, u) => (Type.vector ty, u)
+                      let
+                         val lay = Type.deVectorLayout ty
+                      in
+                        case vectorRep arg of
+                          VectorRep.Vector (ty, u) => (Type.vector lay ty, u)
                         | VectorRep.Length => (Type.word (WordSize.seqIndex ()), true)
-                        | VectorRep.Unit => (Type.unit, false))
+                        | VectorRep.Unit => (Type.unit, false)
+                      end
                  | Weak {arg, useful} =>
                       orU (wrap (arg, Type.weak), useful)
              end)
@@ -696,7 +704,7 @@ fun transform (program: Program.t): Program.t =
                         Exists.whenExists
                         (#2 (arrayEltSlot result), fn () =>
                          Useful.makeUseful (deground (arg 0)))
-                   | Prim.Array_array => seq arrayElt
+                   | Prim.Array_array _ => seq arrayElt
                    (* SAM_NOTE: unification is certainly "correct" but we should
                     * investigate whether coercions are possible. *)
                    | Prim.Array_cas _ => (arg 1 dependsOn (arrayElt (arg 0))
@@ -753,7 +761,7 @@ fun transform (program: Program.t): Program.t =
                                         ; unify (result, deref (arg 0)))
                    | Prim.Vector_length => length vectorLength
                    | Prim.Vector_sub => sub vectorElt
-                   | Prim.Vector_vector => seq vectorElt
+                   | Prim.Vector_vector _ => seq vectorElt
                    | Prim.Weak_canGet =>
                         Useful.whenUseful
                         (deground result, fn () =>
@@ -998,7 +1006,7 @@ fun transform (program: Program.t): Program.t =
                                           targs = Vector.new1 Type.unit,
                                           args = Vector.new1 unitVar})
                     | Value.ArrayRep.Unit => simple (Var unitVar))
-             | Prim.Array_array =>
+             | Prim.Array_array _ =>
                   (case Value.arrayRep (Value.arrayArg resultValue) of
                       Value.ArrayRep.Array (eltTy, _) => makeSeq eltTy
                     | Value.ArrayRep.Length =>
@@ -1150,7 +1158,7 @@ fun transform (program: Program.t): Program.t =
                     | Value.VectorRep.Length => simple (Var (arg 0))
                     | Value.VectorRep.Unit =>
                          Error.bug "Useless.doitPrim: Vector_length/VectorRep.Unit")
-             | Prim.Vector_vector =>
+             | Prim.Vector_vector _ =>
                   (case Value.vectorRep (Value.vectorArg resultValue) of
                       Value.VectorRep.Vector (eltTy, _) => makeSeq eltTy
                     | Value.VectorRep.Length =>
@@ -1201,7 +1209,7 @@ fun transform (program: Program.t): Program.t =
                              Value.VectorRep.Vector (ty, _) =>
                                 if Type.isUnit ty
                                    then simple (PrimApp
-                                                {prim = Prim.Vector_vector,
+                                                {prim = Prim.Vector_vector (Type.deVectorLayout resultType),
                                                  targs = Vector.new1 Type.unit,
                                                  args = WordXVector.toVectorMap (ws, fn _ => unitVar)})
                                    else simple e
