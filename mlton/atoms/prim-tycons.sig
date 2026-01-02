@@ -34,11 +34,12 @@ signature PRIM_TYCONS =
 
       type tycon
 
-      val array: tycon
+      val array: ArrayLayout.t -> tycon
       val arrow: tycon
       val bool: tycon
       val char: CharSize.t -> tycon
       val cpointer: tycon
+      val deArrayLayout: tycon -> ArrayLayout.t
       val deCharX: tycon -> CharSize.t
       val defaultChar: unit -> tycon
       val defaultInt: unit -> tycon
@@ -46,11 +47,14 @@ signature PRIM_TYCONS =
       val defaultWord: unit -> tycon
       val deIntX: tycon -> IntSize.t option
       val deRealX: tycon -> RealSize.t
+      val deVectorLayout: tycon -> ArrayLayout.t
       val deWordX: tycon -> WordSize.t
       val exn: tycon
       val int: IntSize.t -> tycon
       val ints: (tycon * IntSize.t) vector
       val intInf: tycon
+      val isArray: tycon -> bool
+      val isVector: tycon -> bool
       val isBool: tycon -> bool
       val isCharX: tycon -> bool
       val isCPointer: tycon -> bool
@@ -77,7 +81,7 @@ signature PRIM_TYCONS =
       val reff: tycon
       val thread: tycon
       val tuple: tycon
-      val vector: tycon
+      val vector: ArrayLayout.t -> tycon
       val weak: tycon
       val word: WordSize.t -> tycon
       val words: (tycon * WordSize.t) vector

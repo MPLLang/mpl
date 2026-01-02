@@ -37,7 +37,7 @@ structure RedundantTests = RedundantTests (S)
 structure RemoveUnused = RemoveUnused (S)
 structure ShareZeroVec = ShareZeroVec (S)
 structure SimplifyTypes = SimplifyTypes (S)
-structure SplitTypes = SplitTypes (S)
+(* structure SplitTypes = SplitTypes (S) *)
 structure Useless = Useless (S)
 
 type pass = {name: string,
@@ -59,7 +59,7 @@ val ssaPassesDefault =
    (* SAM_NOTE: disabling splitTypes1 because it does not yet support primitive
     * polymorphic CAS. We should update the pass and then re-enable.
     *)
-   {name = "splitTypes1", doit = SplitTypes.transform, execute = false} ::
+   (* {name = "splitTypes1", doit = SplitTypes.transform, execute = false} :: *)
    (* useless should run 
     *   - after constant propagation because constant propagation makes
     *     slots of tuples that are constant useless
@@ -74,7 +74,7 @@ val ssaPassesDefault =
    (* SAM_NOTE: disabling splitTypes2 because it does not yet support primitive
     * polymorphic CAS. We should update the pass and then re-enable.
     *)
-   {name = "splitTypes2", doit = SplitTypes.transform, execute = false} ::
+   (* {name = "splitTypes2", doit = SplitTypes.transform, execute = false} :: *)
    {name = "simplifyTypes", doit = SimplifyTypes.transform, execute = true} ::
    (* polyEqual should run
     *   - after types are simplified so that many equals are turned into eqs
@@ -249,7 +249,7 @@ local
                  ("removeUnused", RemoveUnused.transform),
                  ("shareZeroVec", ShareZeroVec.transform),
                  ("simplifyTypes", SimplifyTypes.transform),
-                 ("splitTypes", SplitTypes.transform),
+                 (* ("splitTypes", SplitTypes.transform), *)
                  ("useless", Useless.transform),
                  ("ssaAddProfile", Profile.addProfile),
                  ("ssaDropSpork", DropSpork.transform),

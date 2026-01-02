@@ -159,21 +159,22 @@ structure Value =
       structure ArrayInit =
          struct
             datatype 'a t =
-               Alloc of {raw: bool}
-             | Array of {args: 'a vector}
+               Alloc of {raw: bool, layout: ArrayLayout.t}
+             | Array of {args: 'a vector, layout: ArrayLayout.t}
 
             fun layout layoutA ai =
                let
                   open Layout
                in
                   case ai of
-                     Alloc {raw} =>
+                     Alloc {raw, layout=lay} =>
                         seq [str "Alloc ",
-                             record [("raw", Bool.layout raw)]]
-                   | Array {args} =>
+                             record [("raw", Bool.layout raw),
+                                     ("layout", ArrayLayout.layout lay)]]
+                   | Array {args, layout=lay} =>
                         seq [str "Array ",
-                             record [("args",
-                                      Vector.layout layoutA args)]]
+                             record [("args", Vector.layout layoutA args),
+                                     ("layout", ArrayLayout.layout lay)]]
                end
          end
       structure ArrayBirth =
@@ -428,7 +429,7 @@ structure Value =
        | Ref of {arg: t,
                  birth: t RefBirth.t}
        | Tuple of t vector
-       | Vector of {sequence: t Sequence.t}
+       | Vector of {sequence: t Sequence.t, layout: ArrayLayout.t}
        | Weak of t
 
       local
@@ -463,9 +464,10 @@ structure Value =
                                   tuple [layout arg,
                                          RefBirth.layout layout birth]]
                         | Tuple vs => Vector.layout layout vs
-                        | Vector {sequence, ...} =>
+                        | Vector {sequence, layout=lay} =>
                              seq [str "vector ",
-                                  tuple [Sequence.layout layout sequence]]
+                                  tuple [Sequence.layout layout sequence,
+                                         ArrayLayout.layout lay]]
                         | Weak v => seq [str "weak ", layout v]
                     end
       in
@@ -582,11 +584,11 @@ structure Value =
                fun loop (t: Type.t): t =
                   new
                   (case Type.dest t of
-                      Type.Array t => Array {birth = arrayBirth (), sequence = sequence loop t}
+                      Type.Array {elem=t, layout=lay} => Array {birth = arrayBirth lay, sequence = sequence loop t}
                     | Type.Datatype _ => Datatype (data ())
                     | Type.Ref t => Ref {arg = loop t, birth = refBirth ()}
                     | Type.Tuple ts => Tuple (Vector.map (ts, loop))
-                    | Type.Vector t => Vector {sequence = sequence loop t}
+                    | Type.Vector {elem=t, layout=lay} => Vector {sequence = sequence loop t, layout = lay}
                     | Type.Weak t => Weak (loop t)
                     | _ => Const (const ()),
                    t)
@@ -595,7 +597,7 @@ structure Value =
       in
          val mkFromType =
             fn {clone, coerce, unify} =>
-            make {arrayBirth = ArrayBirth.undefined,
+            make {arrayBirth = (fn lay => ArrayBirth.undefined ()),
                   const = Const.undefined,
                   data = Data.undefined,
                   refBirth = RefBirth.undefined,
@@ -606,7 +608,7 @@ structure Value =
                                                                  undefined = undefined,
                                                                  unify = unify}}
          val unknown =
-            make {arrayBirth = ArrayBirth.unknown,
+            make {arrayBirth = (fn lay => ArrayBirth.unknown ()),
                   const = Const.unknown,
                   data = Data.unknown,
                   refBirth = RefBirth.unknown,
@@ -698,8 +700,8 @@ structure Value =
                           ; unify (argFrom, argTo))
                     | (Tuple froms, Tuple tos) =>
                          coerces {froms = froms, tos = tos}
-                    | (Vector {sequence = sequenceFrom},
-                       Vector {sequence = sequenceTo}) =>
+                    | (Vector {sequence = sequenceFrom, ...},
+                       Vector {sequence = sequenceTo, ...}) =>
                          sequenceCoerce {from = sequenceFrom, to = sequenceTo}
                     | (Weak from, Weak to) => unify (from, to)
                     | (_, _) => error ()
@@ -761,8 +763,8 @@ structure Value =
                          (RefBirth.unify (birth1, birth2)
                           ; unify (arg1, arg2))
                     | (Tuple vs1, Tuple vs2) => Vector.foreach2 (vs1, vs2, unify)
-                    | (Vector {sequence = sequence1},
-                       Vector {sequence = sequence2}) =>
+                    | (Vector {sequence = sequence1, ...},
+                       Vector {sequence = sequence2, ...}) =>
                          sequenceUnify (sequence1, sequence2)
                     | (Weak v1, Weak v2) => unify (v1, v2)
                     | _ => error ()
@@ -793,7 +795,7 @@ structure Value =
           | Datatype d => Data.makeUnknown d
           | Ref {arg, ...} => makeUnknown arg
           | Tuple vs => Vector.foreach (vs, makeUnknown)
-          | Vector {sequence} => Sequence.makeUnknown makeUnknown sequence
+          | Vector {sequence, ...} => Sequence.makeUnknown makeUnknown sequence
           | Weak v => makeUnknown v
 
       fun sideEffect (v: t): unit =
@@ -887,11 +889,11 @@ structure Value =
             S.Const.WordVector v =>
                let
                   val eltTy = Type.word (WordXVector.elementSize v)
-                  val vecTy = Type.vector eltTy
+                  val vecTy = Type.vector ArrayLayout.Default eltTy
                   val args = WordXVector.toVectorMap (v, const o S.Const.word)
                   val seq = Sequence.make (args, eltTy)
                in
-                  new (Vector {sequence = seq}, vecTy)
+                  new (Vector {sequence = seq, layout = ArrayLayout.Default}, vecTy)
                end
           | _ => const c
 
@@ -984,21 +986,21 @@ structure Value =
                             (birth, fn ab =>
                              if isSmallType ty
                                 then (case ab of
-                                         ArrayInit.Alloc {raw} =>
+                                         ArrayInit.Alloc {raw, layout} =>
                                             (case global length of
                                                 NONE => NONE
                                               | SOME (length, _) =>
                                                    SOME (Exp.PrimApp
                                                          {args = Vector.new1 length,
-                                                          prim = Prim.Array_alloc {raw = raw},
+                                                          prim = Prim.Array_alloc {raw = raw, layout = layout},
                                                           targs = Vector.new1 eltTy}))
-                                       | ArrayInit.Array {args} =>
+                                       | ArrayInit.Array {args, layout} =>
                                             (case globals args of
                                                 NONE => NONE
                                               | SOME args =>
                                                    SOME (Exp.PrimApp
                                                          {args = Vector.map (args, #1),
-                                                          prim = Prim.Array_array,
+                                                          prim = Prim.Array_array layout,
                                                           targs = Vector.new1 eltTy})))
                                 else NONE)
                          end
@@ -1046,11 +1048,23 @@ structure Value =
                                    NONE => No
                                  | SOME xts =>
                                       yes (Exp.Tuple (Vector.map (xts, #1))))
-                          | Vector {sequence} =>
+                          | Vector {sequence, layout=lay} =>
                                (case Sequence.Elts.getElts (Sequence.elts sequence) of
                                    NONE => No
                                  | SOME elts =>
                                       let
+                                         (* presumably, lay should be the same as Type.deVectorLayout ty ?
+                                          * sanity check... *)
+                                         val () =
+                                            if not (ArrayLayout.equals (lay, Type.deVectorLayout ty))
+                                               then
+                                                  Error.bug
+                                                  (concat ["ConstantPropagation.Value.global: vector layout mismatch: ",
+                                                           Layout.toString (ArrayLayout.layout lay),
+                                                           " vs ",
+                                                           Layout.toString (ArrayLayout.layout (Type.deVectorLayout ty))])
+                                               else ()
+
                                          val eltTy = Type.deVector ty
                                          fun vector () =
                                             case globals elts of
@@ -1058,7 +1072,7 @@ structure Value =
                                              | SOME args =>
                                                   yes (Exp.PrimApp
                                                        {args = Vector.map (args, #1),
-                                                        prim = Prim.Vector_vector,
+                                                        prim = Prim.Vector_vector lay,
                                                         targs = Vector.new1 eltTy})
                                          fun wordxvector elementSize =
                                             Exn.withEscape
@@ -1096,11 +1110,15 @@ structure Value =
           | _ => Error.bug "ConstantPropagation.Value.arrayToArray"
 
       fun arrayToVector (v: t): t =
-         case value v of
-            Array {sequence, ...} =>
-               new (Vector {sequence = sequence},
-                    Type.vector (Type.deArray (ty v)))
-          | _ => Error.bug "ConstantPropagation.Value.arrayToVector"
+         let
+            val lay = Type.deArrayLayout (ty v)
+         in
+            case value v of
+               Array {sequence, ...} =>
+                  new (Vector {sequence = sequence, layout = lay},
+                       Type.vector lay (Type.deArray (ty v)))
+             | _ => Error.bug "ConstantPropagation.Value.arrayToVector"
+         end
    end
 
 (* ------------------------------------------------- *)
@@ -1343,17 +1361,17 @@ fun transform (program: Program.t): Program.t =
                    end)
             in
                case prim of
-                  Prim.Array_alloc {raw} =>
+                  Prim.Array_alloc {raw, layout} =>
                      let
-                        val birth = bear (ArrayInit.Alloc {raw = raw})
+                        val birth = bear (ArrayInit.Alloc {raw = raw, layout = layout})
                         val sequence = Sequence.undefined (Type.deArray resultType)
                         val _ = coerce {from = arg 0, to = Sequence.length sequence}
                      in
                         new (Array {birth = birth, sequence = sequence}, resultType)
                      end
-                | Prim.Array_array =>
+                | Prim.Array_array layout =>
                      let
-                        val birth = bear (ArrayInit.Array {args = args})
+                        val birth = bear (ArrayInit.Array {args = args, layout = layout})
                         val sequence = Sequence.make (args, Type.deArray resultType)
                      in
                         new (Array {birth = birth, sequence = sequence}, resultType)
@@ -1394,11 +1412,12 @@ fun transform (program: Program.t): Program.t =
                      end
                 | Prim.Vector_length => vectorLength (arg 0)
                 | Prim.Vector_sub => sequenceSub vectorSequence
-                | Prim.Vector_vector =>
+                | Prim.Vector_vector layout =>
                      let
                         val sequence = Sequence.make (args, Type.deVector resultType)
                      in
-                        new (Vector {sequence = sequence}, resultType)
+                        new (Vector {sequence = sequence, layout = layout},
+                             resultType)
                      end
                 | Prim.Weak_get => weakArg (arg 0)
                 | Prim.Weak_new =>
@@ -1609,13 +1628,13 @@ fun transform (program: Program.t): Program.t =
                                   Property.initRec
                                   (fn (t, dependsOn) =>
                                    case Type.dest t of
-                                      Array t => dependsOn t
+                                      Array {elem=t, ...} => dependsOn t
                                     | Datatype tc =>
                                          (ignore o Graph.addEdge)
                                          (graph, {from = n, to = tyconNode tc})
                                     | Ref t => dependsOn t
                                     | Tuple ts => Vector.foreach (ts, dependsOn)
-                                    | Vector t => dependsOn t
+                                    | Vector {elem=t, ...} => dependsOn t
                                     | _ => ()))
                               val () =
                                  Vector.foreach

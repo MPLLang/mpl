@@ -43,7 +43,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          val hs: (Type.t, Var.t) HashTable.t =
             HashTable.new {hash = Type.hash, equals = Type.equals}
       in
-         fun getZeroArrVar (ty: Type.t): Var.t =
+         fun getZeroArrVar (lay: ArrayLayout.t) (ty: Type.t): Var.t =
             HashTable.lookupOrInsert
             (hs, ty,
              fn () =>
@@ -52,10 +52,10 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                 val statement =
                    Statement.T
                    {var = SOME zeroArrVar,
-                    ty = Type.array ty,
+                    ty = Type.array lay ty,
                     exp = PrimApp
                     {args = Vector.new0 (),
-                     prim = Prim.Array_array,
+                     prim = Prim.Array_array lay,
                      targs = Vector.new1 ty}}
                 val () = List.push (newGlobals, statement)
              in
@@ -76,7 +76,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                case exp of
                   PrimApp ({prim, args, targs}) =>
                      (case (var, prim) of
-                         (SOME var, Prim.Array_alloc {raw = false}) =>
+                         (SOME var, Prim.Array_alloc {raw = false, ...}) =>
                             if List.contains (arrVars, var, Var.equals)
                                then SOME (var, ty,
                                           Vector.first targs,
@@ -100,6 +100,8 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   val ifZeroLab = Label.newString "L_zeroLen"
                   val ifNonZeroLab = Label.newString "L_nonZeroLen"
                   val joinLab = Label.newString "L_join"
+
+                  val arrLayout = Type.deArrayLayout arrTy
 
                   (* new block up to Array_alloc match *)
                   val preBlock =
@@ -134,7 +136,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      let
                         val transfer =
                            Transfer.Goto
-                           {args = Vector.new1 (getZeroArrVar eltTy),
+                           {args = Vector.new1 (getZeroArrVar arrLayout eltTy),
                             dst = joinLab}
                      in
                         Block.T {label = ifZeroLab,
@@ -147,6 +149,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   val ifNonZeroBlock =
                      let
                         val arrVar' = Var.new arrVar
+                        
                         val statements =
                            Vector.new1
                            (Statement.T
@@ -154,7 +157,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                              ty = arrTy,
                              exp = PrimApp
                                    {args = Vector.new1 lenVar,
-                                    prim = Prim.Array_alloc {raw = false},
+                                    prim = Prim.Array_alloc {raw = false, layout = arrLayout},
                                     targs = Vector.new1 eltTy}})
                         val transfer =
                            Transfer.Goto

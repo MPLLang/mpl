@@ -9,8 +9,12 @@ local
   in
     signature ARRAY_EXTRA
     signature ARRAY_SLICE_EXTRA
+    signature ARRAY_FLAT_EXTRA
+    signature ARRAY_FLAT_SLICE_EXTRA
     structure ArrayExtra = Array
     structure ArraySliceExtra = ArraySlice
+    structure ArrayFlatExtra = ArrayFlat
+    structure ArrayFlatSliceExtra = ArrayFlatSlice
     structure Primitive
 
     functor Int_ChooseFromInt

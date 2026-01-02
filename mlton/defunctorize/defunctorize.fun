@@ -1091,7 +1091,7 @@ fun defunctorize (CoreML.Program.T {decs}) =
                                var = var ()}
                 | Vector es =>
                      Xexp.primApp {args = Vector.map (es, #1 o loopExp),
-                                   prim = Prim.Vector_vector,
+                                   prim = Prim.Vector_vector (Xtype.deVectorLayout ty),
                                    targs = Vector.new1 (Xtype.deVector ty),
                                    ty = ty}
          in

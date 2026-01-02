@@ -28,12 +28,13 @@ signature TYPE_OPS =
       type wordSize
       type t
 
-      val array: t -> t
+      val array: ArrayLayout.t -> t -> t
       val arrow: t * t -> t
       val bool: t
       val con: tycon * t vector -> t
       val cpointer: t
       val deArray: t -> t
+      val deArrayLayout: t -> ArrayLayout.t
       val deArrow: t -> t * t
       val deArrowOpt: t -> (t * t) option
       val deConOpt: t -> (tycon * t vector) option
@@ -41,6 +42,7 @@ signature TYPE_OPS =
       val deTuple: t -> t vector
       val deTupleOpt: t -> t vector option
       val deVector: t -> t
+      val deVectorLayout: t -> ArrayLayout.t
       val deWeak: t -> t
       val exn: t
       val intInf: t
@@ -52,7 +54,7 @@ signature TYPE_OPS =
       val tuple: t vector -> t
       val unit: t
       val unitRef: t
-      val vector: t -> t
+      val vector: ArrayLayout.t -> t -> t
       val weak: t -> t
       val word: wordSize -> t
       val word8: t

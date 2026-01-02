@@ -48,13 +48,14 @@ struct
   (* all types can be locally rewritten without any context *)
   fun try_rewrite_type (ty: Type.t) : Type.t option =
     case Type.dest ty of
-      Type.Object {con = ObjectCon.Sequence, args: Type.t Prod.t} =>
+    (* Flattened-layout sequences get their tuples flattened *)
+      Type.Object {con = ObjectCon.Sequence ArrayLayout.Flattened, args: Type.t Prod.t} =>
         if Vector.forall (Prod.dest args, Option.isNone o try_flatten_tuples) then
           if
             Vector.forall
               (Prod.dest args, Option.isNone o try_rewrite_type o #elt)
           then NONE
-          else SOME (Type.sequence (Prod.map (args, rewrite_type)))
+          else SOME (Type.sequence ArrayLayout.Flattened (Prod.map (args, rewrite_type)))
         else
           let
             val flattened =
@@ -64,8 +65,19 @@ struct
                 | SOME elements => elements)))
             val flat_and_rewritten = Prod.map (flattened, rewrite_type)
           in
-            SOME (Type.sequence flat_and_rewritten)
+            SOME (Type.sequence ArrayLayout.Flattened flat_and_rewritten)
           end
+
+    (* Default-layout sequences potentially need their element types rewritten,
+     * but aren't flattened here. Note that deep flattening may still occur,
+     * but isn't mandated. *)
+    | Type.Object {con = ObjectCon.Sequence ArrayLayout.Default, args: Type.t Prod.t} =>
+        if
+          Vector.forall
+            (Prod.dest args, Option.isNone o try_rewrite_type o #elt)
+        then NONE
+        else SOME (Type.sequence ArrayLayout.Default (Prod.map (args, rewrite_type)))
+
     | Type.Object {con, args} =>
         if
           Vector.forall
@@ -98,7 +110,7 @@ struct
 
   fun remap_offset sequence_ty offset =
     case Type.dest sequence_ty of
-      Type.Object {con = ObjectCon.Sequence, args: Type.t Prod.t} =>
+      Type.Object {con = ObjectCon.Sequence ArrayLayout.Flattened, args: Type.t Prod.t} =>
         let
           val lens = Vector.map (Prod.dest args, fn x =>
             case try_flatten_tuples x of
@@ -134,7 +146,7 @@ struct
 
     | _ =>
         Error.bug
-          ("FlattenIntoSequences.remap_offset: expected sequence argument but got "
+          ("FlattenIntoSequences.remap_offset: expected flattened-layout sequence argument, but got "
            ^ Layout.toString (Type.layout sequence_ty))
 
 
@@ -239,7 +251,7 @@ struct
                 Var.newNoname ())
               val ground_tys =
                 case Type.dest new_type of
-                  Type.Object {con = ObjectCon.Sequence, args} =>
+                  Type.Object {con = ObjectCon.Sequence ArrayLayout.Flattened, args} =>
                     let
                       val args = Prod.dest args
                     in
