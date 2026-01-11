@@ -1,7 +1,7 @@
 signature ARRAY_FLAT =
 sig
-  type 'a array = 'a ArrayFlat.t
-  type 'a vector = 'a VectorFlat.vector
+  type 'a array = 'a ArrayAos.t
+  type 'a vector = 'a VectorAos.vector
 
   val all: ('a -> bool) -> 'a array -> bool
   val app: ('a -> unit) -> 'a array -> unit 
@@ -28,11 +28,11 @@ sig
   val vector: 'a array -> 'a vector
 end
 
-signature ARRAY_FLAT_EXTRA =
+signature ARRAY_AOS_EXTRA =
 sig
   include ARRAY_FLAT
 
-  structure ArraySlice: ARRAY_FLAT_SLICE_EXTRA 
+  structure ArraySlice: ARRAY_AOS_SLICE_EXTRA 
 
   val alloc: int -> 'a array
   val uninitIsNop: 'a array -> bool

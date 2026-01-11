@@ -9,9 +9,9 @@ sig
   structure File: MPL_FILE
   structure GC: MPL_GC
 
-  structure ArrayFlat: ARRAY_FLAT_EXTRA
-  structure ArrayFlatSlice: ARRAY_FLAT_SLICE_EXTRA
+  structure ArrayAos: ARRAY_AOS_EXTRA
+  structure ArrayAosSlice: ARRAY_AOS_SLICE_EXTRA
 
-  structure VectorFlat: VECTOR_FLAT_EXTRA
-  structure VectorFlatSlice: VECTOR_FLAT_SLICE_EXTRA
+  structure VectorAos: VECTOR_AOS_EXTRA
+  structure VectorAosSlice: VECTOR_AOS_SLICE_EXTRA
 end

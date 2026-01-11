@@ -569,14 +569,14 @@ fun closureConvert
             val tycons =
                [(Tycon.arrow, fn _ => Error.bug "ClosureConvert.convertType.array"),
                 (Tycon.array ArrayLayout.Default, unary (Type.array ArrayLayout.Default)),
-                (Tycon.array ArrayLayout.Flattened, unary (Type.array ArrayLayout.Flattened)),
+                (Tycon.array ArrayLayout.Aos, unary (Type.array ArrayLayout.Aos)),
                 (Tycon.cpointer, nullary Type.cpointer),
                 (Tycon.intInf, nullary Type.intInf),
                 (Tycon.reff, unary Type.reff),
                 (Tycon.thread, nullary Type.thread),
                 (Tycon.tuple, Type.tuple),
                 (Tycon.vector ArrayLayout.Default, unary (Type.vector ArrayLayout.Default)),
-                (Tycon.vector ArrayLayout.Flattened, unary (Type.vector ArrayLayout.Flattened)),
+                (Tycon.vector ArrayLayout.Aos, unary (Type.vector ArrayLayout.Aos)),
                 (Tycon.weak, unary Type.weak)]
                @ Vector.toListMap (Tycon.reals, fn (t, s) => (t, nullary (Type.real s)))
                @ Vector.toListMap (Tycon.words, fn (t, s) => (t, nullary (Type.word s)))

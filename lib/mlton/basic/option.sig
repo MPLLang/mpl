@@ -21,4 +21,6 @@ signature OPTION =
       val map: 'a t * ('a -> 'b) -> 'b t
       val toString: ('a -> string) -> 'a t -> string
       val valOf: 'a t -> 'a
+
+      val andThen: 'a t * ('a -> 'b t) -> 'b t
    end

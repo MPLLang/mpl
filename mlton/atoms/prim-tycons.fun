@@ -20,11 +20,11 @@ local
    fun make s = (s, fromString s)
 in
    val arrayDefault = make "array"
-   val arrayFlattened = make "array_flat"
+   val arrayAos = make "array_aos"
    val array = fn lay =>
      case lay of
        ArrayLayout.Default => arrayDefault
-     | ArrayLayout.Flattened => arrayFlattened
+     | ArrayLayout.Aos => arrayAos
 
    val arrow = make "arrow"
    val bool = make "bool"
@@ -41,16 +41,16 @@ in
        val name =
          case lay of
            ArrayLayout.Default => "vector"
-         | ArrayLayout.Flattened => "vector_flat"
+         | ArrayLayout.Aos => "vector_aos"
      in
        make name
      end
    val vectorDefault = make "vector"
-   val vectorFlattened = make "vector_flat"
+   val vectorAos = make "vector_aos"
    val vector = fn lay =>
      case lay of
        ArrayLayout.Default => vectorDefault
-     | ArrayLayout.Flattened => vectorFlattened
+     | ArrayLayout.Aos => vectorAos
 
    val weak = make "weak"
 end
@@ -125,7 +125,7 @@ end
 
 val prims =
    List.map ([(array ArrayLayout.Default, Arity 1, Always),
-              (array ArrayLayout.Flattened, Arity 1, Always),
+              (array ArrayLayout.Aos, Arity 1, Always),
               (arrow, Arity 2, Never),
               (bool, Arity 0, Sometimes),
               (cpointer, Arity 0, Always),
@@ -136,7 +136,7 @@ val prims =
               (thread, Arity 0, Never),
               (tuple, Nary, Sometimes),
               (vector ArrayLayout.Default, Arity 1, Sometimes),
-              (vector ArrayLayout.Flattened, Arity 1, Sometimes),
+              (vector ArrayLayout.Aos, Arity 1, Sometimes),
               (weak, Arity 1, Never)],
              fn ((name, tycon), kind, admitsEquality) =>
              {admitsEquality = admitsEquality,
@@ -190,24 +190,24 @@ val deIntX = fn c => if equals (c, intInf) then NONE else SOME (deIntX c)
 
 val isArray = fn c =>
   equals (c, array ArrayLayout.Default)
-  orelse equals (c, array ArrayLayout.Flattened)
+  orelse equals (c, array ArrayLayout.Aos)
 
 val isVector = fn c =>
   equals (c, vector ArrayLayout.Default)
-  orelse equals (c, vector ArrayLayout.Flattened)
+  orelse equals (c, vector ArrayLayout.Aos)
 
 fun deArrayLayout c =
   if equals (c, array ArrayLayout.Default)
     then ArrayLayout.Default
-  else if equals (c, array ArrayLayout.Flattened)
-    then ArrayLayout.Flattened
+  else if equals (c, array ArrayLayout.Aos)
+    then ArrayLayout.Aos
   else Error.bug "PrimTycons.deArrayLayout"
 
 fun deVectorLayout c =
   if equals (c, vector ArrayLayout.Default)
     then ArrayLayout.Default
-  else if equals (c, vector ArrayLayout.Flattened)
-    then ArrayLayout.Flattened
+  else if equals (c, vector ArrayLayout.Aos)
+    then ArrayLayout.Aos
   else Error.bug "PrimTycons.deVectorLayout"
 
 local

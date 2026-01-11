@@ -1117,10 +1117,10 @@ structure Type =
 
       val unary: Tycon.t list =
          [Tycon.array ArrayLayout.Default,
-          Tycon.array ArrayLayout.Flattened,
+          Tycon.array ArrayLayout.Aos,
           Tycon.reff,
           Tycon.vector ArrayLayout.Default,
-          Tycon.vector ArrayLayout.Flattened]
+          Tycon.vector ArrayLayout.Aos]
 
       fun toNullaryCType (t: t): {ctype: CType.t, name: string} option =
          case deConOpt t of

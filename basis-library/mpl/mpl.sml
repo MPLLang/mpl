@@ -9,9 +9,9 @@ struct
   structure File = MPLFile
   structure GC = MPLGC
 
-  structure ArrayFlat = ArrayFlat
-  structure ArrayFlatSlice = ArrayFlatSlice
+  structure ArrayAos = ArrayAos
+  structure ArrayAosSlice = ArrayAosSlice
 
-  structure VectorFlat = VectorFlat
-  structure VectorFlatSlice = VectorFlatSlice
+  structure VectorAos = VectorAos
+  structure VectorAosSlice = VectorAosSlice
 end

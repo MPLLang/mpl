@@ -48,44 +48,39 @@ struct
   (* all types can be locally rewritten without any context *)
   fun try_rewrite_type (ty: Type.t) : Type.t option =
     case Type.dest ty of
-    (* Flattened-layout sequences get their tuples flattened *)
-      Type.Object {con = ObjectCon.Sequence ArrayLayout.Flattened, args: Type.t Prod.t} =>
-        if Vector.forall (Prod.dest args, Option.isNone o try_flatten_tuples) then
-          if
-            Vector.forall
-              (Prod.dest args, Option.isNone o try_rewrite_type o #elt)
-          then NONE
-          else SOME (Type.sequence ArrayLayout.Flattened (Prod.map (args, rewrite_type)))
-        else
-          let
-            val flattened =
-              Prod.make (Vector.concatV (Vector.map (Prod.dest args, fn x =>
-                case try_flatten_tuples x of
-                  NONE => Vector.new1 x
-                | SOME elements => elements)))
-            val flat_and_rewritten = Prod.map (flattened, rewrite_type)
-          in
-            SOME (Type.sequence ArrayLayout.Flattened flat_and_rewritten)
-          end
+    (* Aos-layout sequences get their tuples flattened and unboxed *)
+      Type.Object
+        {con = ObjectCon.Sequence ArrayLayout.Aos, args: Type.t Prod.t} =>
+        if
+          Vector.forall (Prod.dest args, fn {elt, isMutable} =>
+            Option.isNone (Option.andThen (try_rewrite_type elt, fn elt' =>
+              try_flatten_tuples {elt = elt', isMutable = isMutable})))
+        then NONE
+        else SOME (rewrite_sequence_aos_type args)
 
     (* Default-layout sequences potentially need their element types rewritten,
      * but aren't flattened here. Note that deep flattening may still occur,
      * but isn't mandated. *)
-    | Type.Object {con = ObjectCon.Sequence ArrayLayout.Default, args: Type.t Prod.t} =>
+    | Type.Object
+        {con = ObjectCon.Sequence ArrayLayout.Default, args: Type.t Prod.t} =>
         if
-          Vector.forall
-            (Prod.dest args, Option.isNone o try_rewrite_type o #elt)
-        then NONE
-        else SOME (Type.sequence ArrayLayout.Default (Prod.map (args, rewrite_type)))
+          Vector.forall (Prod.dest args, fn {elt, ...} =>
+            Option.isNone (try_rewrite_type elt))
+        then
+          NONE
+        else
+          SOME (Type.sequence ArrayLayout.Default
+            (Prod.map (args, rewrite_type)))
 
     | Type.Object {con, args} =>
         if
-          Vector.forall
-            (Prod.dest args, Option.isNone o try_rewrite_type o #elt)
+          Vector.forall (Prod.dest args, fn {elt, ...} =>
+            Option.isNone (try_rewrite_type elt))
         then
           NONE
         else
           SOME (Type.object {con = con, args = Prod.map (args, rewrite_type)})
+
     | Type.Weak ty' => Option.map (try_rewrite_type ty', Type.weak)
     | Type.CPointer => NONE
     | Type.IntInf => NONE
@@ -93,6 +88,40 @@ struct
     | Type.Datatype tycon => NONE
     | Type.Real real_size => NONE
     | Type.Word word_size => NONE
+
+
+  and rewrite_sequence_aos_type args =
+    let
+      val rewritten = Prod.map (args, rewrite_type)
+      val flat_and_rewritten =
+        Prod.make (Vector.concatV (Vector.map (Prod.dest rewritten, fn x =>
+          case try_flatten_tuples x of
+            NONE => Vector.new1 x
+          | SOME elements => elements)))
+    in
+      Type.sequence ArrayLayout.Default flat_and_rewritten
+    end
+
+
+  and rewrite_sequence_soa_type args =
+    let
+      val rewritten = Prod.map (args, rewrite_type)
+      val flat_and_rewritten =
+        Prod.make (Vector.concatV (Vector.map (Prod.dest rewritten, fn x =>
+          case try_flatten_tuples x of
+            NONE => Vector.new1 x
+          | SOME elements => elements)))
+
+      fun make_one_sequence_component {elt, isMutable} =
+        { elt = Type.sequence ArrayLayout.Default (Prod.make
+            (Vector.new1 {elt = elt, isMutable = isMutable}))
+        , isMutable = false
+        }
+      val soa = Type.tuple (Prod.make
+        (Vector.map (Prod.dest flat_and_rewritten, make_one_sequence_component)))
+    in
+      soa
+    end
 
 
   and rewrite_type ty =
@@ -110,7 +139,7 @@ struct
 
   fun remap_offset sequence_ty offset =
     case Type.dest sequence_ty of
-      Type.Object {con = ObjectCon.Sequence ArrayLayout.Flattened, args: Type.t Prod.t} =>
+      Type.Object {con = ObjectCon.Sequence ArrayLayout.Aos, args: Type.t Prod.t} =>
         let
           val lens = Vector.map (Prod.dest args, fn x =>
             case try_flatten_tuples x of
@@ -251,7 +280,7 @@ struct
                 Var.newNoname ())
               val ground_tys =
                 case Type.dest new_type of
-                  Type.Object {con = ObjectCon.Sequence ArrayLayout.Flattened, args} =>
+                  Type.Object {con = ObjectCon.Sequence ArrayLayout.Aos, args} =>
                     let
                       val args = Prod.dest args
                     in

@@ -1,6 +1,6 @@
 signature VECTOR_FLAT =
 sig
-  type 'a vector = 'a VectorFlat.t
+  type 'a vector = 'a VectorAos.t
 
   val maxLen: int
   val fromList: 'a list -> 'a vector
@@ -24,16 +24,16 @@ sig
   val collate: ('a * 'a -> order) -> 'a vector * 'a vector -> order
 end
 
-signature VECTOR_FLAT_EXTRA =
+signature VECTOR_AOS_EXTRA =
 sig
   include VECTOR_FLAT
-  structure VectorSlice: VECTOR_FLAT_SLICE_EXTRA
+  structure VectorSlice: VECTOR_AOS_SLICE_EXTRA
 
-  val copy: {dst: 'a ArrayFlat.t, di: int, src: 'a vector} -> unit
+  val copy: {dst: 'a ArrayAos.t, di: int, src: 'a vector} -> unit
 
-  val unsafeFromArray: 'a ArrayFlat.t -> 'a vector
+  val unsafeFromArray: 'a ArrayAos.t -> 'a vector
   val unsafeSub: 'a vector * int -> 'a
-  val unsafeCopy: {dst: 'a ArrayFlat.t, di: int, src: 'a vector} -> unit
+  val unsafeCopy: {dst: 'a ArrayAos.t, di: int, src: 'a vector} -> unit
 
   (* Used to implement Substring/String functions *)
   val concatWith: 'a vector -> 'a vector list -> 'a vector

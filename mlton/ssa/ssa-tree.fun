@@ -115,20 +115,20 @@ structure Type =
             end
       in
          val arrayDefault = make (fn t => Array {elem = t, layout = ArrayLayout.Default})
-         val arrayFlattened = make (fn t => Array {elem = t, layout = ArrayLayout.Flattened})
+         val arrayAos = make (fn t => Array {elem = t, layout = ArrayLayout.Aos})
          fun array (layout: ArrayLayout.t) elem =
            case layout of
              ArrayLayout.Default => arrayDefault elem
-           | ArrayLayout.Flattened => arrayFlattened elem
+           | ArrayLayout.Aos => arrayAos elem
 
          val reff = make Ref
 
          val vectorDefault = make (fn t => Vector {elem = t, layout = ArrayLayout.Default})
-         val vectorFlattened = make (fn t => Vector {elem = t, layout = ArrayLayout.Flattened})
+         val vectorAos = make (fn t => Vector {elem = t, layout = ArrayLayout.Aos})
          fun vector (layout: ArrayLayout.t) elem =
            case layout of
              ArrayLayout.Default => vectorDefault elem
-           | ArrayLayout.Flattened => vectorFlattened elem
+           | ArrayLayout.Aos => vectorAos elem
 
          val weak = make Weak
       end
@@ -201,7 +201,7 @@ structure Type =
                      val name =
                        case layout of
                          ArrayLayout.Default => "array"
-                       | ArrayLayout.Flattened => "array_flat"
+                       | ArrayLayout.Aos => "array_aos"
                    in
                      unary (elem, name)
                    end
@@ -223,7 +223,7 @@ structure Type =
                      val name =
                        case layout of
                          ArrayLayout.Default => "vector"
-                       | ArrayLayout.Flattened => "vector_flat"
+                       | ArrayLayout.Aos => "vector_aos"
                    in
                      unary (elem, name)
                    end
@@ -246,11 +246,11 @@ structure Type =
              List.map (RealSize.all, fn rs => ("real" ^ RealSize.toString rs, real rs)))
          val unary =
             [array ArrayLayout.Default <$ P.kw "array",
-             array ArrayLayout.Flattened <$ P.kw "array_flat",
+             array ArrayLayout.Aos <$ P.kw "array_aos",
              reff <$ P.kw "ref",
              (tuple o Vector.new1) <$ P.kw "tuple",
              vector ArrayLayout.Default <$ P.kw "vector",
-             vector ArrayLayout.Flattened <$ P.kw "vector_flat",
+             vector ArrayLayout.Aos <$ P.kw "vector_aos",
              weak <$ P.kw "weak"]
       in
          fun parse () =

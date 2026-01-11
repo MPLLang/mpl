@@ -259,12 +259,12 @@ local
                               then mutable UnaryTycon.Ref
                            else if Tycon.equals (tycon, Tycon.array ArrayLayout.Default)
                                    then mutable (UnaryTycon.Array ArrayLayout.Default)
-                           else if Tycon.equals (tycon, Tycon.array ArrayLayout.Flattened)
-                                   then mutable (UnaryTycon.Array ArrayLayout.Flattened)
+                           else if Tycon.equals (tycon, Tycon.array ArrayLayout.Aos)
+                                   then mutable (UnaryTycon.Array ArrayLayout.Aos)
                            else if Tycon.equals (tycon, Tycon.vector ArrayLayout.Default)
                                    then mutable (UnaryTycon.Vector ArrayLayout.Default)
-                           else if Tycon.equals (tycon, Tycon.vector ArrayLayout.Flattened)
-                                   then mutable (UnaryTycon.Vector ArrayLayout.Flattened)
+                           else if Tycon.equals (tycon, Tycon.vector ArrayLayout.Aos)
+                                   then mutable (UnaryTycon.Vector ArrayLayout.Aos)
                            else if Tycon.equals (tycon, Tycon.weak)
                                    then mutable UnaryTycon.Weak
                            else if Tycon.equals (tycon, Tycon.tuple)

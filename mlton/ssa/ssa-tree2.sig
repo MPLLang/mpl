@@ -66,7 +66,7 @@ signature SSA_TREE2 =
             val plist: t -> PropertyList.t
             val real: RealSize.t -> t
             val reff1: t -> t
-            val sequence: ArrayLayout.t -> t Prod.t -> t  (* ArrayLayout.Default by default *)
+            val sequence: ArrayLayout.t -> t Prod.t -> t
             val thread: t
             val tuple: t Prod.t -> t
             val vector1: ArrayLayout.t -> t -> t

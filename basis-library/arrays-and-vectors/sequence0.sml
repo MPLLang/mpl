@@ -624,31 +624,31 @@ structure Array = MakeArrayPrimSequence(
   end
 )
 
-structure ArrayFlat = MakeArrayPrimSequence(
-  type 'a sequence = 'a ArrayFlat.t
+structure ArrayAos = MakeArrayPrimSequence(
+  type 'a sequence = 'a ArrayAos.t
   type 'a elt = 'a
-  type 'a prim_array = 'a ArrayFlat.t
-  type 'a prim_vector = 'a VectorFlat.t
+  type 'a prim_array = 'a ArrayAos.t
+  type 'a prim_vector = 'a VectorAos.t
   val sameArray = op =
-  val copyUnsafe = Primitive.ArrayFlat.copyArrayUnsafe
+  val copyUnsafe = Primitive.ArrayAos.copyArrayUnsafe
   val fromArray = fn a => a
   val isMutable = true
-  val length = Primitive.ArrayFlat.length
-  val subUnsafe = Primitive.ArrayFlat.subUnsafe
-  val uninitIsNop = Primitive.ArrayFlat.uninitIsNop
-  val uninitUnsafe = Primitive.ArrayFlat.uninitUnsafe
-  val updateUnsafe = Primitive.ArrayFlat.updateUnsafe
+  val length = Primitive.ArrayAos.length
+  val subUnsafe = Primitive.ArrayAos.subUnsafe
+  val uninitIsNop = Primitive.ArrayAos.uninitIsNop
+  val uninitUnsafe = Primitive.ArrayAos.uninitUnsafe
+  val updateUnsafe = Primitive.ArrayAos.updateUnsafe
                                      
-  val primArrayAllocUnsafe = Primitive.ArrayFlat.allocUnsafe
-  val primArraySubUnsafe = Primitive.ArrayFlat.subUnsafe
-  val primArrayUpdateUnsafe = Primitive.ArrayFlat.updateUnsafe
-  val primArrayLength = Primitive.ArrayFlat.length
-  val primVectorFromArrayUnsafe = Primitive.VectorFlat.fromArrayUnsafe
+  val primArrayAllocUnsafe = Primitive.ArrayAos.allocUnsafe
+  val primArraySubUnsafe = Primitive.ArrayAos.subUnsafe
+  val primArrayUpdateUnsafe = Primitive.ArrayAos.updateUnsafe
+  val primArrayLength = Primitive.ArrayAos.length
+  val primVectorFromArrayUnsafe = Primitive.VectorAos.fromArrayUnsafe
   
   structure Raw =
   struct
-    type 'a array = 'a ArrayFlat.t
-    open Primitive.ArrayFlat.Raw
+    type 'a array = 'a ArrayAos.t
+    open Primitive.ArrayAos.Raw
   end
 )
          
@@ -682,32 +682,32 @@ structure Vector = MakeVectorPrimSequence(
 )
 
 
-structure VectorFlat = MakeVectorPrimSequence(
-  exception VectorFlat_uninitIsNop
-  exception VectorFlat_uninitUnsafe
-  exception VectorFlat_updateUnsafe
-  type 'a sequence = 'a VectorFlat.t
+structure VectorAos = MakeVectorPrimSequence(
+  exception VectorAos_uninitIsNop
+  exception VectorAos_uninitUnsafe
+  exception VectorAos_updateUnsafe
+  type 'a sequence = 'a VectorAos.t
   type 'a elt = 'a
-  type 'a prim_array = 'a ArrayFlat.t
-  type 'a prim_vector = 'a VectorFlat.t
-  val copyUnsafe = Primitive.ArrayFlat.copyVectorUnsafe
-  val fromArray = Primitive.VectorFlat.fromArrayUnsafe
+  type 'a prim_array = 'a ArrayAos.t
+  type 'a prim_vector = 'a VectorAos.t
+  val copyUnsafe = Primitive.ArrayAos.copyVectorUnsafe
+  val fromArray = Primitive.VectorAos.fromArrayUnsafe
   val isMutable = false
-  val length = VectorFlat.length
+  val length = VectorAos.length
   val sameArray = fn _ => false
-  val subUnsafe = Primitive.VectorFlat.subUnsafe
+  val subUnsafe = Primitive.VectorAos.subUnsafe
   val uninitIsNop = fn _ =>
-                    raise VectorFlat_uninitIsNop
+                    raise VectorAos_uninitIsNop
   val uninitUnsafe = fn _ =>
-                    raise VectorFlat_uninitUnsafe
+                    raise VectorAos_uninitUnsafe
   val updateUnsafe = fn _ =>
-                    raise VectorFlat_updateUnsafe
+                    raise VectorAos_updateUnsafe
                                                         
-  val primArrayAllocUnsafe = Primitive.ArrayFlat.allocUnsafe
-  val primArraySubUnsafe = Primitive.ArrayFlat.subUnsafe
-  val primArrayUpdateUnsafe = Primitive.ArrayFlat.updateUnsafe
-  val primArrayLength = Primitive.ArrayFlat.length
-  val primVectorFromArrayUnsafe = Primitive.VectorFlat.fromArrayUnsafe
+  val primArrayAllocUnsafe = Primitive.ArrayAos.allocUnsafe
+  val primArraySubUnsafe = Primitive.ArrayAos.subUnsafe
+  val primArrayUpdateUnsafe = Primitive.ArrayAos.updateUnsafe
+  val primArrayLength = Primitive.ArrayAos.length
+  val primVectorFromArrayUnsafe = Primitive.VectorAos.fromArrayUnsafe
 )
 
 end
@@ -721,11 +721,11 @@ structure Vector =
       type 'a vector = 'a vector
    end
 
-structure ArrayFlat =
+structure ArrayAos =
    struct
-      type 'a t = 'a Primitive.ArrayFlat.t
+      type 'a t = 'a Primitive.ArrayAos.t
    end
-structure VectorFlat =
+structure VectorAos =
    struct
-      type 'a t = 'a Primitive.VectorFlat.t
+      type 'a t = 'a Primitive.VectorAos.t
    end

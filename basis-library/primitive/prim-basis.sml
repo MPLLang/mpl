@@ -49,15 +49,15 @@ structure Vector =
       type 'a vector = 'a t
    end
 
-structure ArrayFlat =
+structure ArrayAos =
    struct
-      type 'a t = 'a array_flat
-      type 'a array_flat = 'a t
+      type 'a t = 'a array_aos
+      type 'a array_aos = 'a t
    end
-structure VectorFlat =
+structure VectorAos =
    struct
-      type 'a t = 'a vector_flat
-      type 'a vector_flat = 'a t
+      type 'a t = 'a vector_aos
+      type 'a vector_aos = 'a t
    end
 
 (* Primitive Basis (Primitive Types) *)
