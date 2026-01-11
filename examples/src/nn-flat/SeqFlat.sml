@@ -1,8 +1,8 @@
 structure SeqFlat =
 struct
 
-  structure AF = MPL.ArrayFlat
-  structure AFS = MPL.ArrayFlatSlice
+  structure AF = MPL.ArrayAos
+  structure AFS = MPL.ArrayAosSlice
 
   type 'a seq = 'a AFS.slice
   type 'a t = 'a seq
@@ -15,7 +15,7 @@ struct
 
   fun tabulate f n : 'a seq =
     let
-      val arr = ForkJoin.alloc_flat n
+      val arr = ForkJoin.alloc_aos n
     in
       ForkJoin.parform (0, n) (fn i => AF.update (arr, i, f i));
       AFS.full arr

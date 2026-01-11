@@ -2,7 +2,7 @@ structure NN :
 sig
   type t
   type 'a seq = 'a ArraySlice.slice
-  type 'a seq_flat = 'a MPL.ArrayFlatSlice.slice
+  type 'a seq_flat = 'a MPL.ArrayAosSlice.slice
 
   type point = Geometry2D.point
 
@@ -16,10 +16,10 @@ struct
 
   structure A = Array
   structure AS = ArraySlice
-  structure AFS = MPL.ArrayFlatSlice
+  structure AFS = MPL.ArrayAosSlice
 
   type 'a seq = 'a ArraySlice.slice
-  type 'a seq_flat = 'a MPL.ArrayFlatSlice.slice
+  type 'a seq_flat = 'a MPL.ArrayAosSlice.slice
   structure G = Geometry2D
   type point = G.point
 

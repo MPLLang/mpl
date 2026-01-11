@@ -1,6 +1,6 @@
-structure ArrayFlat: ARRAY_FLAT_EXTRA =
+structure ArrayAos: ARRAY_AOS_EXTRA =
 struct
-  structure A = Sequence (Primitive.ArrayFlat)
+  structure A = Sequence (Primitive.ArrayAos)
   open A
 
   val op < = Int.<
@@ -8,27 +8,27 @@ struct
 
   fun wrap2 f = fn (i, x) => f (SeqIndex.toIntUnsafe i, x)
 
-  type 'a array = 'a ArrayFlat.t
-  type 'a vector = 'a VectorFlat.vector
+  type 'a array = 'a ArrayAos.t
+  type 'a vector = 'a VectorAos.vector
 
   structure ArraySlice =
   struct
     open Slice
-    val vector = Primitive.ArrayFlat.Slice.vector
-    val copyVec = VectorFlat.VectorSlice.copy
-    val unsafeCopyVec = VectorFlat.VectorSlice.unsafeCopy
-    fun modifyi f sl = Primitive.ArrayFlat.Slice.modifyi (wrap2 f) sl
-    val modify = Primitive.ArrayFlat.Slice.modify
+    val vector = Primitive.ArrayAos.Slice.vector
+    val copyVec = VectorAos.VectorSlice.copy
+    val unsafeCopyVec = VectorAos.VectorSlice.unsafeCopy
+    fun modifyi f sl = Primitive.ArrayAos.Slice.modifyi (wrap2 f) sl
+    val modify = Primitive.ArrayAos.Slice.modify
   end
 
   val array = new
   val unsafeArray = unsafeNew
-  val vector = Primitive.ArrayFlat.vector
-  val copyVec = VectorFlat.copy
-  val unsafeCopyVec = VectorFlat.unsafeCopy
-  fun modifyi f sl = Primitive.ArrayFlat.modifyi (wrap2 f) sl
-  val modify = Primitive.ArrayFlat.modify
-  structure Raw = Primitive.ArrayFlat.Raw
+  val vector = Primitive.ArrayAos.vector
+  val copyVec = VectorAos.copy
+  val unsafeCopyVec = VectorAos.unsafeCopy
+  fun modifyi f sl = Primitive.ArrayAos.modifyi (wrap2 f) sl
+  val modify = Primitive.ArrayAos.modify
+  structure Raw = Primitive.ArrayAos.Raw
   structure Raw =
   struct
     type 'a rawarr = 'a Raw.rawarr
@@ -56,8 +56,8 @@ struct
                 end
           else unsafeUninit (a, i)
 
-    val unsafeToArray = Primitive.ArrayFlat.Raw.unsafeToArray
+    val unsafeToArray = Primitive.ArrayAos.Raw.unsafeToArray
   end
 end
 
-structure ArrayFlatSlice: ARRAY_FLAT_SLICE_EXTRA = ArrayFlat.ArraySlice
+structure ArrayAosSlice: ARRAY_AOS_SLICE_EXTRA = ArrayAos.ArraySlice

@@ -42,14 +42,14 @@ structure ObjectCon =
             case oc of
                Con c => Con.layout c
              | Sequence ArrayLayout.Default => str "sequence"
-             | Sequence ArrayLayout.Flattened => str "sequence_flat"
+             | Sequence ArrayLayout.Aos => str "sequence_aos"
              | Tuple => str "tuple"
          end
 
       local
          val conAlts = Vector.fromList
            [("sequence", Sequence ArrayLayout.Default),
-            ("sequence_flat", Sequence ArrayLayout.Flattened),
+            ("sequence_aos", Sequence ArrayLayout.Aos),
             ("tuple", Tuple)]
       in
          val parse = Con.parseAs (conAlts, Con)
@@ -218,7 +218,7 @@ structure Type =
                   case con of
                      Con c => Con.hash c
                    | Sequence ArrayLayout.Default => sequenceDefault
-                   | Sequence ArrayLayout.Flattened => sequenceFlat
+                   | Sequence ArrayLayout.Aos => sequenceFlat
                    | Tuple => tuple
                val hash = hashProd (args, base)
             in
@@ -298,7 +298,7 @@ structure Type =
              List.map (RealSize.all, fn rs => ("real" ^ RealSize.toString rs, real rs)))
          val unary =
             Con.parseAs (Vector.new4 (("sequence", sequence ArrayLayout.Default o Prod.new1Immutable),
-                                      ("sequence_flat", sequence ArrayLayout.Flattened o Prod.new1Immutable),
+                                      ("sequence_aos", sequence ArrayLayout.Aos o Prod.new1Immutable),
                                       ("tuple", tuple o Prod.new1Immutable),
                                       ("weak", weak)),
                          fn con => fn ty =>

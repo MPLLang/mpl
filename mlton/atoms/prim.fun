@@ -234,17 +234,17 @@ fun toString (n: 'a t): string =
              val name =
                case layout of
                  ArrayLayout.Default => name
-               | ArrayLayout.Flattened => name ^ "Flattened"
+               | ArrayLayout.Aos => name ^ "Aos"
            in
              (* Array_alloc
               * Array_allocRaw
-              * Array_allocFlattened
-              * Array_allocRawFlattened
+              * Array_allocAos
+              * Array_allocRawAos
               *)
              name
            end
        | Array_array ArrayLayout.Default => "Array_array"
-       | Array_array ArrayLayout.Flattened => "Array_arrayFlattened"
+       | Array_array ArrayLayout.Aos => "Array_arrayAos"
        | Array_cas NONE => "Array_cas"
        | Array_cas (SOME ctype) => concat ["Array", CType.name ctype, "_cas"]
        | Array_copyArray => "Array_copyArray"
@@ -367,7 +367,7 @@ fun toString (n: 'a t): string =
        | Vector_length => "Vector_length"
        | Vector_sub => "Vector_sub"
        | Vector_vector ArrayLayout.Default => "Vector_vector"
-       | Vector_vector ArrayLayout.Flattened => "Vector_vectorFlattened"
+       | Vector_vector ArrayLayout.Aos => "Vector_vectorAos"
        | Weak_canGet => "Weak_canGet"
        | Weak_get => "Weak_get"
        | Weak_new => "Weak_new"
@@ -1034,10 +1034,10 @@ in
    val all: unit t list =
       [Array_alloc {raw = false, layout = ArrayLayout.Default},
        Array_alloc {raw = true, layout = ArrayLayout.Default},
-       Array_alloc {raw = false, layout = ArrayLayout.Flattened},
-       Array_alloc {raw = true, layout = ArrayLayout.Flattened},
+       Array_alloc {raw = false, layout = ArrayLayout.Aos},
+       Array_alloc {raw = true, layout = ArrayLayout.Aos},
        Array_array ArrayLayout.Default,
-       Array_array ArrayLayout.Flattened,
+       Array_array ArrayLayout.Aos,
        Array_cas NONE,
        Array_copyArray,
        Array_copyVector,
@@ -1124,7 +1124,7 @@ in
        Vector_length,
        Vector_sub,
        Vector_vector ArrayLayout.Default,
-       Vector_vector ArrayLayout.Flattened,
+       Vector_vector ArrayLayout.Aos,
        Weak_canGet,
        Weak_get,
        Weak_new,
@@ -1368,7 +1368,7 @@ fun 'a checkApp (prim: 'a t,
        * (Many array primitives are overloaded. Notably, CAS is not.)
        *)
       fun anyArrayLayout (f: ArrayLayout.t -> bool) : bool =
-        List.exists ([ArrayLayout.Default, ArrayLayout.Flattened], f)
+        List.exists ([ArrayLayout.Default, ArrayLayout.Aos], f)
   in
       case prim of
          Array_alloc {layout, ...} =>
