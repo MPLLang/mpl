@@ -1030,6 +1030,57 @@ struct
       ; Thread.atomicEnd ()
       )
 
+    fun __inline_never__ spork_spwn (spwn: unit -> Universal.t,
+                                     J jp: Universal.t joinpoint) =
+        let
+          val _ = #assertAtomic (sched_package ()) "spork rightside begin" 1
+          val () = DE.decheckSetTid (#tidRight jp)
+
+          val thread = Thread.current ()
+          val depth = HH.getDepth thread
+          val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
+
+          val _ = HH.forceLeftHeap(myWorkerId(), thread)
+          val _ = Heartbeat.addSpare (#spareHeartbeatsGiven jp)
+          val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
+          val _ = Thread.atomicEnd()
+
+          val spwnr = Result.result spwn
+
+          val _ = Thread.atomicBegin ()
+          val depth' = HH.getDepth (Thread.current ())
+          val _ =
+              if depth = depth' then ()
+              else #error (sched_package ()) ("scheduler bug: rightide depth mismatch: " ^ Int.toString depth ^ " vs " ^ Int.toString depth')
+          val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Int.toString depth')
+          val _ = #assertAtomic (sched_package ()) "spork rightside begin synchronize" 1
+        in
+          #rightSideThread jp := SOME thread;
+          #rightSideResult jp := SOME spwnr;
+
+          if decrementHitsZero (#incounter jp) then
+            ( ()
+            ; dbgmsg'' (fn _ => "rightside synchronize: become left")
+            ; #setQueueDepth (sched_package ()) (myWorkerId ()) depth
+            (** Atomic 1 *)
+            ; Thread.atomicBegin ()
+
+            (** Atomic 2 *)
+
+            (** (When sibling is resumed, it needs to be atomic 1.
+             * Switching threads is implicit atomicEnd(), so we need
+             * to be at atomic2
+             *)
+            ; #assertAtomic (sched_package ()) "spork rightside switch-to-left" 2
+            ; threadSwitchEndAtomic (#leftSideThread jp)
+            )
+          else
+            ( dbgmsg'' (fn _ => "rightside synchronize: back to sched")
+            ; #assertAtomic (sched_package ()) "spork rightside before returnToSched" 1
+            ; #returnToSchedEndAtomic (sched_package ()) ()
+            )
+        end
+
     type ('a, 'x) sporkT =
            (unit -> 'a)
          * (unit * Universal.t joinpoint -> unit)
@@ -1052,63 +1103,16 @@ struct
             ((if not (Heartbeat.enoughToSpawn ()) then () else tryPromoteNow {youngestOptimization = true});
              __inline_always__ body ())
 
-        fun spwn' ((), J jp): unit =
-          let
-            val _ = #assertAtomic (sched_package ()) "spork rightside begin" 1
-            val () = DE.decheckSetTid (#tidRight jp)
-
-            val thread = Thread.current ()
-            val depth = HH.getDepth thread
-            val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
-
-            val _ = HH.forceLeftHeap(myWorkerId(), thread)
-            val _ = Heartbeat.addSpare (#spareHeartbeatsGiven jp)
-            val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
-            val _ = Thread.atomicEnd()
-
-            val spwnr = Result.result (inject o spwn)
-
-            val _ = Thread.atomicBegin ()
-            val depth' = HH.getDepth (Thread.current ())
-            val _ =
-              if depth = depth' then ()
-              else #error (sched_package ()) ("scheduler bug: rightide depth mismatch: " ^ Int.toString depth ^ " vs " ^ Int.toString depth')
-            val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Int.toString depth')
-            val _ = #assertAtomic (sched_package ()) "spork rightside begin synchronize" 1
-          in
-            #rightSideThread jp := SOME thread;
-            #rightSideResult jp := SOME spwnr;
-
-            if decrementHitsZero (#incounter jp) then
-              ( ()
-              ; dbgmsg'' (fn _ => "rightside synchronize: become left")
-              ; #setQueueDepth (sched_package ()) (myWorkerId ()) depth
-                (** Atomic 1 *)
-              ; Thread.atomicBegin ()
-
-                (** Atomic 2 *)
-
-                (** (When sibling is resumed, it needs to be atomic 1.
-                  * Switching threads is implicit atomicEnd(), so we need
-                  * to be at atomic2
-                  *)
-              ; #assertAtomic (sched_package ()) "spork rightside switch-to-left" 2
-              ; threadSwitchEndAtomic (#leftSideThread jp)
-              )
-            else
-              ( dbgmsg'' (fn _ => "rightside synchronize: back to sched")
-              ; #assertAtomic (sched_package ()) "spork rightside before returnToSched" 1
-              ; #returnToSchedEndAtomic (sched_package ()) ()
-              )
-          end
+        fun __inline_always__ spwn' ((), jp): unit =
+          spork_spwn (inject o spwn, jp)
 
         fun __inline_always__ unpr' (bodyr: 'a): 'x =
             __inline_always__ unpr bodyr
 
         fun prom' (bodyr: 'a, jp: Universal.t joinpoint): 'x =
           let
-            val promr = Result.result' (fn a => __inline_always__ prom a, bodyr)
             val _ = dbgmsg'' (fn _ => "hello from prom continuation")
+            val promr = Result.result' (fn a => __inline_always__ prom a, bodyr)
             val _ = Thread.atomicBegin ()
             val _ = #assertAtomic (sched_package ()) "prom continuation" 1
             val spwnr = #syncEndAtomic (sched_package ()) jp
