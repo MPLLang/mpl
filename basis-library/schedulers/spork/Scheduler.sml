@@ -675,14 +675,11 @@ struct
       end
 
 
-    fun doSpawnFunc {allowCGC: bool} (g: unit -> 'a) : 'a joinpoint =
+    fun doSpawnFunc (g: unit -> 'a) : 'a joinpoint =
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
         val _ = assertTokenInvariants thread "doSpawnFunc"
-
-        val gcj =
-          if allowCGC then spawnGC thread else NONE
 
         val _ = assertAtomic "spawn after spawnGC" 1
 
@@ -762,19 +759,19 @@ struct
           , tidRight = tidRight
           , spareHeartbeatsGiven = half
           , tokenPolicy = TokenPolicyFair
-          , gcj = gcj
+          , gcj = NONE
           }
       end
 
 
-    fun maybeSpawnFunc {allowCGC: bool} (g: unit -> 'a) : 'a joinpoint option =
+    fun maybeSpawnFunc (g: unit -> 'a) : 'a joinpoint option =
       let
         val depth = HH.getDepth (Thread.current ())
       in
         if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
           NONE
         else
-          SOME (doSpawnFunc {allowCGC=allowCGC} g)
+          SOME (doSpawnFunc g)
       end
 
 
@@ -949,7 +946,7 @@ struct
 
 
     fun simpleParFork (f: unit -> unit, g: unit -> unit) : unit =
-      case maybeSpawnFunc {allowCGC = false} g of
+      case maybeSpawnFunc g of
         NONE => (f (); g ())
       | SOME gj =>
           let
