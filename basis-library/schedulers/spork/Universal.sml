@@ -2,9 +2,11 @@ structure Universal :>
 sig
   type t
   val embed: unit -> ('a -> t) * (t -> 'a option)
+  val UnivDefault: t
 end =
 struct
   type t = exn
+  exception UnivDefault
 
   fun 'a __inline_always__ embed () =
     let

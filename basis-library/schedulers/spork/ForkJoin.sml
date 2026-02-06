@@ -9,9 +9,10 @@ struct
         tokenPolicy = TokenPolicyFair,
         body = f,
         spwn = g,
-        seq  = fn a => (a, g ()),
-        sync = fn ab => ab,
-        unstolen = NONE
+        unpr = fn a => (a, g ()),
+        prom = fn a => a,
+        sync = fn (a, NONE) => (a, g ())
+                | (a, SOME b) => (a, b)
       }
 
   val fork = par
@@ -90,9 +91,10 @@ struct
                               tokenPolicy = TokenPolicyFair,
                               body = fn () => iter b' (LoopIndex.increment i, mid),
                               spwn = fn () => iter z (mid, j),
-                              seq  = fn b' => iter b' (mid, j),
-                              sync = merge,
-                              unstolen = NONE
+                              unpr = fn bl => iter bl (mid, j),
+                              prom = fn bl => bl,
+                              sync = fn (bl, NONE) => iter bl (mid, j)
+                                      | (bl, SOME br) => merge (bl, br)
                           }
                           end
                 in
@@ -100,9 +102,10 @@ struct
                     tokenPolicy = TokenPolicyGive,
                     body = fn () => __inline_always__ step (LoopIndex.toInt i, b),
                     spwn = fn () => spwn z,
-                    seq = fn b' => iter b' (LoopIndex.increment i, j),
-                    sync = merge,
-                    unstolen = SOME spwn
+                    unpr = fn b' => iter b' (LoopIndex.increment i, j),
+                    prom = fn b' => b',
+                    sync = fn (b', NONE) => spwn b'
+                            | (b', SOME blr) => merge (b', blr)
                   }
                 end
       in
@@ -127,9 +130,10 @@ struct
                               tokenPolicy = TokenPolicyFair,
                               body = fn () => iter b' (LoopIndex.increment i, mid),
                               spwn = fn () => iter z (mid, j),
-                              seq = continue (fn b' => iter b' (mid, j)),
-                              sync = merge',
-                              unstolen = NONE
+                              unpr = continue (fn b'' => iter b'' (mid, j)),
+                              prom = fn b'' => b'',
+                              sync = fn (b'', NONE) => merge' (b'', iter z (mid, j))
+                                      | (b'', SOME b''') => merge' (b'', b''')
                           }
                           end
                 in
@@ -137,9 +141,10 @@ struct
                     tokenPolicy = TokenPolicyGive,
                     body = fn () => __inline_always__ step (LoopIndex.toInt i, b),
                     spwn = fn () => spwn z,
-                    seq = continue (fn b' => iter b' (LoopIndex.increment i, j)),
-                    sync = merge',
-                    unstolen = SOME (continue spwn)
+                    unpr = continue (fn b' => iter b' (LoopIndex.increment i, j)),
+                    prom = fn b' => b',
+                    sync = fn (b', NONE) => continue spwn b'
+                            | (b', SOME b'') => merge' (b', b'')
                   }
                 end
           val (result, cont) = __inline_always__ iter z (LoopIndex.fromInt (Int.min (i, j)), LoopIndex.fromInt j)
@@ -215,7 +220,7 @@ sig
   (* synonym for par *)
   val fork: (unit -> 'a) * (unit -> 'b) -> 'a * 'b 
   val par: (unit -> 'a) * (unit -> 'b) -> 'a * 'b
-  val spork: {tokenPolicy: TokenPolicy, body: unit -> 'a, spwn: unit -> 'b, seq: 'a -> 'c, sync: 'a * 'b -> 'c, unstolen: ('a -> 'c) option} -> 'c
+  val spork: {tokenPolicy: TokenPolicy, body: unit -> 'a, spwn: unit -> 'b, unpr: 'a -> 'x, prom: 'a -> 'c, sync: 'c * 'b option -> 'x} -> 'x
 
   val pareduce: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val pareduceBreakExn: (int * int) -> 'a -> (('a -> exn) * int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
