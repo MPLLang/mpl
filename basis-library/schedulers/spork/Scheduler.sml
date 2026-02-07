@@ -1030,7 +1030,7 @@ struct
       ; Thread.atomicEnd ()
       )
 
-    fun __inline_never__ spork_spwn (spwn: unit -> Universal.t,
+    fun __inline_never__ sporkSpwn (spwn: unit -> Universal.t,
                                      J jp: Universal.t joinpoint) =
         let
           val _ = #assertAtomic (sched_package ()) "spork rightside begin" 1
@@ -1051,7 +1051,7 @@ struct
           val depth' = HH.getDepth (Thread.current ())
           val _ =
               if depth = depth' then ()
-              else #error (sched_package ()) ("scheduler bug: rightide depth mismatch: " ^ Int.toString depth ^ " vs " ^ Int.toString depth')
+              else #error (sched_package ()) ("scheduler bug: rightside depth mismatch: " ^ Int.toString depth ^ " vs " ^ Int.toString depth')
           val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Int.toString depth')
           val _ = #assertAtomic (sched_package ()) "spork rightside begin synchronize" 1
         in
@@ -1059,8 +1059,8 @@ struct
           #rightSideResult jp := SOME spwnr;
 
           if decrementHitsZero (#incounter jp) then
-            ( ()
-            ; dbgmsg'' (fn _ => "rightside synchronize: become left")
+            ( (* Left side finished already, so continue it on this processor *)
+              dbgmsg'' (fn _ => "rightside synchronize: become left")
             ; #setQueueDepth (sched_package ()) (myWorkerId ()) depth
             (** Atomic 1 *)
             ; Thread.atomicBegin ()
@@ -1075,11 +1075,32 @@ struct
             ; threadSwitchEndAtomic (#leftSideThread jp)
             )
           else
-            ( dbgmsg'' (fn _ => "rightside synchronize: back to sched")
+            ( (* Left side is still executing, so return to scheduler. *)
+              dbgmsg'' (fn _ => "rightside synchronize: back to sched")
             ; #assertAtomic (sched_package ()) "spork rightside before returnToSched" 1
             ; #returnToSchedEndAtomic (sched_package ()) ()
             )
         end
+
+    fun __inline_never__ sporkSync (jp: Universal.t joinpoint): Universal.t Result.t option =
+        (Thread.atomicBegin ();
+         #assertAtomic (sched_package ()) "prom synchronization" 1;
+         #syncEndAtomic (sched_package ()) jp)
+
+    (* fun __inline_never__ sporkExtractData (bo: 'b option): 'b = *)
+    (*     case bo of *)
+    (*         SOME b => b *)
+    (*       | NONE => (#error (sched_package ()) *)
+    (*                         "scheduler bug: spork sync: failed project right-side result"; *)
+    (*                  raise SchedulerError) *)
+
+    fun __inline_never__ sporkExnUnpr (e: exn): 'x = raise e
+
+    fun __inline_never__ sporkExnProm (e: exn, jp: Universal.t joinpoint): 'x =
+        (Thread.atomicBegin ();
+         #assertAtomic (sched_package ()) "exn prom continuation" 1;
+         #syncEndAtomic (sched_package ()) jp;
+         raise e)
 
     type ('a, 'x) sporkT =
            (unit -> 'a)
@@ -1097,50 +1118,28 @@ struct
                                      prom: 'a -> 'c,
                                      sync: 'c * 'b option -> 'x): 'x =
       let
-        val (inject, project) = Universal.embed ()
+        val (inject, project) = Universal.embedSure ()
 
         fun __inline_always__ body' (): 'a =
             ((if not (Heartbeat.enoughToSpawn ()) then () else tryPromoteNow {youngestOptimization = true});
              __inline_always__ body ())
 
         fun __inline_always__ spwn' ((), jp): unit =
-          spork_spwn (inject o spwn, jp)
+          sporkSpwn (inject o spwn, jp)
 
         fun __inline_always__ unpr' (bodyr: 'a): 'x =
             __inline_always__ unpr bodyr
 
-        fun prom' (bodyr: 'a, jp: Universal.t joinpoint): 'x =
-          let
-            val _ = dbgmsg'' (fn _ => "hello from prom continuation")
-            val promr = Result.result' (fn a => __inline_always__ prom a, bodyr)
-            val _ = Thread.atomicBegin ()
-            val _ = #assertAtomic (sched_package ()) "prom continuation" 1
-            val spwnr = #syncEndAtomic (sched_package ()) jp
-            val promres = Result.extractResult promr
-            val spwnres = case spwnr of
-                              NONE => NONE
-                            | SOME spwnr =>
-                              case project (Result.extractResult spwnr) of
-                                  SOME r => SOME r
-                                | NONE => (#error (sched_package ())
-                                                  "scheduler bug: spork sync: failed project right-side result";
-                                           raise SchedulerError)
-          in
-            __inline_always__ sync (promres, spwnres)
-          end
-
-        fun __inline_always__ exnunpr' (e: exn): 'x = raise e
-
-        fun __inline_always__ exnprom' (e: exn, jp: Universal.t joinpoint): 'x =
-            let val _ = dbgmsg'' (fn _ => "hello from exn prom continuation")
-                val _ = Thread.atomicBegin ()
-                val _ = #assertAtomic (sched_package ()) "exn prom continuation" 1
-                val _ = #syncEndAtomic (sched_package ()) jp
+        fun __inline_always__ prom' (bodyr: 'a, jp: Universal.t joinpoint): 'x =
+            let val promr = Result.result' (fn a => __inline_always__ prom a, bodyr)
+                val spwnr = sporkSync jp
+                val promres = Result.extractResult promr
+                val spwnres = Option.map (project o Result.extractResult) spwnr
             in
-              raise e
+              __inline_always__ sync (promres, spwnres)
             end
       in
-        __inline_always__ primSpork (body', spwn', unpr', prom', exnunpr', exnprom')
+        __inline_always__ primSpork (body', spwn', unpr', prom', sporkExnUnpr, sporkExnProm)
       end
 
     fun __inline_always__ spork
