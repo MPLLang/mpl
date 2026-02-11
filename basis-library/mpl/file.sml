@@ -34,6 +34,20 @@ struct
       (ptr, size, ref true)
     end
 
+  fun openFileWriteable path final_size =
+    let
+      open Posix.FileSys
+      val file = createf (path, O_RDWR, O.append, S.flags [S.irusr, S.iwusr, S.irgrp, S.iroth])
+      val fileSize = Position.toInt (ST.size (fstat file))
+      val size = final_size + fileSize
+      val fd = C_Int.fromInt (SysWord.toInt (fdToWord file))
+      val _ = ftruncate (file, Position.fromInt size)
+      val ptr = mmapFileWriteable (fd, C_Size.fromInt size)
+    in
+      Posix.IO.close file;
+      {file = (ptr, size, ref true), file_size = fileSize}
+    end
+
   fun closeFile (ptr, size, stillOpen) =
     if !stillOpen then
       (release (ptr, C_Size.fromInt size); stillOpen := false)
@@ -87,5 +101,26 @@ struct
       else
         raise Closed
     end
+
+    fun writeChar {file = (ptr, size, stillOpen), file_offset = fileSize, array_slice_offset = i} c =
+      if !stillOpen andalso i >= 0 andalso i < size then
+        MLton.Pointer.setWord8 (ptr, i + fileSize, Primitive.Char8.idToWord8 c)
+      else if i < 0 orelse i >= size then
+        raise Subscript
+      else
+        raise Closed
+
+    fun writeWord8s {file = (ptr, size, stillOpen), file_offset = file_offset, array_slice_offset = i} slice =
+      let
+        val (arr, j, n) = ArraySlice.base slice
+        val start = MLtonPointer.add (ptr, Word.fromInt file_offset)
+      in
+        if !stillOpen andalso i >= 0 andalso file_offset + (n - i) <= size then
+          copyWord8sFromBuffer (start, arr, C_Size.fromInt (i + j), C_Size.fromInt (n - i))
+        else if i < 0 orelse i + n > size then
+          raise Subscript
+        else
+          raise Closed
+      end
 
 end
