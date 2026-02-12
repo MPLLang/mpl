@@ -26,6 +26,7 @@ struct GC_state {
   ptrdiff_t exnStack;
   pointer promoStackTop;
   pointer promoStackBot;
+  objptr schedPackage; // stores closures needed by scheduler
   /* Alphabetized fields follow. */
   size_t alignment; /* */
   volatile bool amInGC;
@@ -183,6 +184,9 @@ PRIVATE void GC_setSignalHandlerThreads (GC_state s, pointer p);
 PRIVATE void GC_registerQueue(uint32_t processor, pointer queuePointer);
 PRIVATE void GC_registerQueueTop(uint32_t processor, pointer topPointer);
 PRIVATE void GC_registerQueueBot(uint32_t processor, pointer botPointer);
+
+PRIVATE void GC_setGlobalSchedPackage(objptr schedPackage);
+PRIVATE objptr GC_getGlobalSchedPackage();
 
 #endif /* (defined (MLTON_GC_INTERNAL_BASIS)) */
 

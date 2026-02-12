@@ -999,18 +999,43 @@ struct
         end
 
   
-    val sched_package_data = ref
+    (* These are all functions used in slow path scheduler code,
+     * yet which depend upon non-static global state.
+     * By default, MLton would pass them around everywhere as closures
+     * (even fast path code!), resulting in a bunch of additional live
+     * variables around spork code.
+     * This seems to put extra pressure on the bounce vars/register allocation
+     * passes and can result in significantly worse performance in some cases.
+     * Consequently, we pack all functions needed by spork scheduler code and
+     * which depend on non-static global state in this structure and have the
+     * runtime system save a pointer to it
+     * (`objptr globalSchedPackage` in runtime/gc/gc_state.c).
+     * This way, SML code can retrieve this pointer from the runtime system
+     * and call any of these functions without needing to 
+     * See note at `HH.setDepth (originalThread, 1)` below for why this
+     * is not garbage collected.
+     *)
+    val sched_package_data =
       { syncEndAtomic = syncEndAtomic maybeParClearSuspectsAtDepth
       , maybeSpawn = maybeSpawn
       , setQueueDepth = setQueueDepth
       , returnToSchedEndAtomic = returnToSchedEndAtomic
-      (* , tryConsumeSpareHeartbeats = Heartbeat.consumeSpare *)
       , addEagerSpawns = addEagerSpawns
       , assertAtomic = assertAtomic
       , error = (fn s => die (fn _ => s)) : string -> unit
+      , intToString = Int.toString (* Int.toString uses a global buffer *)
       }
 
-    fun sched_package () = !sched_package_data
+    (* fun sched_package () = !sched_package_data *)
+
+    val setSchedPackageFFI =
+      _import "GC_setGlobalSchedPackage" runtime private: Universal.t -> unit;
+    val getSchedPackageFFI =
+      _import "GC_getGlobalSchedPackage" runtime private: unit -> Universal.t;
+    (* (sched_package_type -> Universal.t) * (Universal.t -> sched_package_type) *)
+    val (injectSchedPackage, projectSchedPackage) = Universal.embedSure ()
+    val _ = setSchedPackageFFI (injectSchedPackage sched_package_data)
+    fun sched_package () = projectSchedPackage (getSchedPackageFFI ())
 
     exception SchedulerError
 
@@ -1030,29 +1055,34 @@ struct
       ; Thread.atomicEnd ()
       )
 
-    fun __inline_never__ sporkSpwn (spwn: unit -> Universal.t,
-                                     J jp: Universal.t joinpoint) =
+    fun __inline_never__ sporkPreSpwn (J jp: Universal.t joinpoint) =
         let
           val _ = #assertAtomic (sched_package ()) "spork rightside begin" 1
           val () = DE.decheckSetTid (#tidRight jp)
 
           val thread = Thread.current ()
           val depth = HH.getDepth thread
-          val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
+          val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ #intToString (sched_package ()) depth)
 
           val _ = HH.forceLeftHeap(myWorkerId(), thread)
           val _ = Heartbeat.addSpare (#spareHeartbeatsGiven jp)
           val _ = #assertAtomic (sched_package ()) "spork rightSide before execute" 1
           val _ = Thread.atomicEnd()
+        in
+          (thread, depth)
+        end
 
-          val spwnr = Result.result spwn
-
+    fun __inline_never__ sporkPostSpwn (spwnr: Universal.t Result.t,
+                                        J jp: Universal.t joinpoint,
+                                        thread: Thread.t,
+                                        depth: int) =
+        let
           val _ = Thread.atomicBegin ()
           val depth' = HH.getDepth (Thread.current ())
           val _ =
               if depth = depth' then ()
-              else #error (sched_package ()) ("scheduler bug: rightside depth mismatch: " ^ Int.toString depth ^ " vs " ^ Int.toString depth')
-          val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Int.toString depth')
+              else #error (sched_package ()) ("scheduler bug: rightside depth mismatch: " ^ #intToString (sched_package ()) depth ^ " vs " ^ #intToString (sched_package ()) depth')
+          val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ #intToString (sched_package ()) depth')
           val _ = #assertAtomic (sched_package ()) "spork rightside begin synchronize" 1
         in
           #rightSideThread jp := SOME thread;
@@ -1125,7 +1155,12 @@ struct
              __inline_always__ body ())
 
         fun __inline_always__ spwn' ((), jp): unit =
-          sporkSpwn (inject o spwn, jp)
+          let val (thread, depth) = sporkPreSpwn jp
+              val spwnr = Result.result (fn () => inject (__inline_always__ spwn ()))
+              val _ = sporkPostSpwn (spwnr, jp, thread, depth)
+          in
+            ()
+          end
 
         fun __inline_always__ unpr' (bodyr: 'a): 'x =
             __inline_always__ unpr bodyr
@@ -1369,6 +1404,10 @@ struct
   val _ =
     if HH.getDepth originalThread = 0 then ()
     else die (fn _ => "scheduler bug: root depth <> 0")
+
+  (* Note that every allocation above this line happens at heap depth 0
+   * and will never be garbage collected.
+   *)
   val _ = HH.setDepth (originalThread, 1)
 
   (* implicitly attaches worker child heaps *)

@@ -510,3 +510,11 @@ void GC_registerQueueBot(uint32_t processor, pointer botPointer) {
   assert(processor < s->numberOfProcs);
   s->procStates[processor].wsQueueBot = pointerToObjptr(botPointer, NULL);
 }
+
+objptr globalSchedPackage;
+void GC_setGlobalSchedPackage(objptr schedPackage) {
+    globalSchedPackage = schedPackage;
+}
+objptr GC_getGlobalSchedPackage() {
+    return globalSchedPackage;
+}
