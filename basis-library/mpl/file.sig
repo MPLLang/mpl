@@ -22,7 +22,7 @@ sig
 
   val readChars: t -> int -> char ArraySlice.slice -> unit
   val readWord8s: t -> int -> Word8.word ArraySlice.slice -> unit
-  val writeChar : {file: t, file_offset: int, array_slice_offset: int} -> char -> unit
-  val writeWord8s : {file: t, file_offset: int, array_slice_offset: int} -> Word8.word ArraySlice.slice -> unit
+  val writeChar : {file: t, file_offset: int} -> char -> unit
+  val writeWord8s : {file: t, file_offset: int} -> Word8.word ArraySlice.slice -> unit
 
 end

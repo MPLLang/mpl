@@ -28,7 +28,7 @@ struct
   fun openFile path =
     let
       open Posix.FileSys
-      val file = openf (path, O_RDONLY, O.fromWord 0w0)
+      val file = openf (path, O_RDWR, O.fromWord 0w0)
       val size = Position.toInt (ST.size (fstat file))
       val fd = C_Int.fromInt (SysWord.toInt (fdToWord file))
       val ptr = mmapFileReadable (fd, C_Size.fromInt size)
@@ -64,7 +64,7 @@ struct
     Char.chr (Word8.toInt (MLton.Pointer.getWord8 (ptr, i)))
 
   fun readChar (ptr, size, stillOpen) (i: int) =
-    if !stillOpen = OpenRead orelse !stillOpen = OpenReadWrite andalso i >= 0 andalso i < size then
+    if (!stillOpen = OpenRead orelse !stillOpen = OpenReadWrite) andalso i >= 0 andalso i < size then
       unsafeReadChar (ptr, size, stillOpen) i
     else if i < 0 orelse i >= size then
       raise Subscript
@@ -72,7 +72,7 @@ struct
       raise Closed
 
   fun readWord8 (ptr, size, stillOpen) (i: int) =
-    if !stillOpen = OpenRead orelse !stillOpen = OpenReadWrite andalso i >= 0 andalso i < size then
+    if (!stillOpen = OpenRead orelse !stillOpen = OpenReadWrite) andalso i >= 0 andalso i < size then
       unsafeReadWord8 (ptr, size, stillOpen) i
     else if i < 0 orelse i >= size then
       raise Subscript
@@ -84,7 +84,7 @@ struct
       val (arr, j, n) = ArraySlice.base slice
       val start = MLtonPointer.add (ptr, Word.fromInt i)
     in
-      if !stillOpen = OpenRead orelse !stillOpen = OpenReadWrite andalso i >= 0 andalso i+n <= size then
+      if (!stillOpen = OpenRead orelse !stillOpen = OpenReadWrite) andalso i >= 0 andalso i+n <= size then
         copyCharsToBuffer (start, arr, C_Size.fromInt j, C_Size.fromInt n)
       else if i < 0 orelse i+n > size then
         raise Subscript
@@ -97,7 +97,7 @@ struct
       val (arr, j, n) = ArraySlice.base slice
       val start = MLtonPointer.add (ptr, Word.fromInt i)
     in
-      if !stillOpen = OpenRead orelse !stillOpen = OpenReadWrite andalso i >= 0 andalso i+n <= size then
+      if (!stillOpen = OpenRead orelse !stillOpen = OpenReadWrite) andalso i >= 0 andalso i+n <= size then
         copyWord8sToBuffer (start, arr, C_Size.fromInt j, C_Size.fromInt n)
       else if i < 0 orelse i+n > size then
         raise Subscript
@@ -105,29 +105,29 @@ struct
         raise Closed
     end
 
-    fun writeChar {file = (ptr, size, stillOpen), file_offset = file_offset, array_slice_offset = i} c =
-      if !stillOpen = OpenReadWrite andalso i >= 0 andalso i < size then
-        MLton.Pointer.setWord8 (ptr, i + file_offset, Primitive.Char8.idToWord8 c)
-      else if i < 0 orelse i >= size then
+    fun writeChar {file = (ptr, size, stillOpen), file_offset = file_offset} c =
+      if !stillOpen = OpenReadWrite andalso file_offset >= 0 andalso file_offset < size then
+        MLton.Pointer.setWord8 (ptr, file_offset, Primitive.Char8.idToWord8 c)
+      else if file_offset < 0 orelse file_offset >= size then
         raise Subscript
       else if !stillOpen = OpenRead then
            raise WrongFilePermission
         else
           raise Closed
 
-    fun writeWord8s {file = (ptr, size, stillOpen), file_offset = file_offset, array_slice_offset = i} slice =
-      let
-        val (arr, j, n) = ArraySlice.base slice
-        val start = MLtonPointer.add (ptr, Word.fromInt file_offset)
-      in
-        if !stillOpen = OpenReadWrite andalso i >= 0 andalso file_offset + (n - i) <= size then
-          copyWord8sFromBuffer (start, arr, C_Size.fromInt (i + j), C_Size.fromInt (n - i))
-        else if i < 0 orelse i + n > size then
-          raise Subscript
-        else if !stillOpen = OpenRead then
-           raise WrongFilePermission
-        else
-          raise Closed
-      end
+      fun writeWord8s {file = (ptr, size, stillOpen), file_offset} slice =
+        let
+          val (arr, j, n) = ArraySlice.base slice
+          val start = MLtonPointer.add (ptr, Word.fromInt file_offset)
+        in
+          if !stillOpen = OpenReadWrite andalso file_offset >= 0 andalso file_offset + n <= size then
+            copyWord8sFromBuffer (start, arr, C_Size.fromInt j, C_Size.fromInt n)
+          else if file_offset < 0 orelse file_offset + n > size then
+            raise Subscript
+          else if !stillOpen = OpenRead then
+            raise WrongFilePermission
+          else
+            raise Closed
+        end
 
 end

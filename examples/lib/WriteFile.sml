@@ -16,7 +16,7 @@ struct
           val lo = i*k
           val hi = Int.min ((i+1)*k, n)
         in
-          MPL.File.writeWord8s { file = file , file_offset = oldSize + lo, array_slice_offset = 0} (Seq.subseq content (lo, hi-lo))
+          MPL.File.writeWord8s { file = file , file_offset = oldSize + lo} (Seq.subseq content (lo, hi-lo))
         end
         );
       MPL.File.closeFile file
