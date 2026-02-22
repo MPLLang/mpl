@@ -19,6 +19,8 @@ struct
 
   exception Closed
   exception WrongFilePermission
+  exception MappingFailed of string
+  exception OpenFailed of string
 
   open Primitive.MPL.File
 
@@ -28,10 +30,14 @@ struct
   fun openFile path =
     let
       open Posix.FileSys
-      val file = openf (path, O_RDWR, O.fromWord 0w0)
+      val file = openf (path, O_RDONLY, O.fromWord 0w0)
       val size = Position.toInt (ST.size (fstat file))
       val fd = C_Int.fromInt (SysWord.toInt (fdToWord file))
       val ptr = mmapFileReadable (fd, C_Size.fromInt size)
+      val _ = if ptr = Primitive.MLton.Pointer.null orelse ptr = Primitive.MLton.Pointer.fromWord(C_Size.fromInt (~1)) then
+                raise (MappingFailed "Failed to map file readable")
+              else
+                ()
     in
       Posix.IO.close file;
       (ptr, size, ref OpenRead)
@@ -46,6 +52,10 @@ struct
       val fd = C_Int.fromInt (SysWord.toInt (fdToWord file))
       val _ = ftruncate (file, Position.fromInt final_size)
       val ptr = mmapFileWriteable (fd, C_Size.fromInt final_size)
+      val _ = if ptr = Primitive.MLton.Pointer.null orelse ptr = Primitive.MLton.Pointer.fromWord(C_Size.fromInt (~1)) then
+                raise (MappingFailed "Failed to map file writeable")
+              else
+                ()
     in
       Posix.IO.close file;
       {file = (ptr, final_size, ref OpenReadWrite), file_size = original_size}
