@@ -165,11 +165,11 @@ struct
       * affects the GC snapshot, which is already murky.
       *)
 
-  datatype 'a joinpoint =
+  datatype joinpoint =
     J of
       { leftSideThread: Thread.t
       , rightSideThread: Thread.t option ref
-      , rightSideResult: 'a Result.t option ref
+      , rightSideResult: Universal.t Result.t option ref
       , incounter: int ref
       , tidRight: Word64.word
       , spareHeartbeatsGiven: Heartbeat.token_count
@@ -634,7 +634,7 @@ struct
       end
 
 
-    fun doSpawnFunc (g: unit -> Universal.t) : Universal.t joinpoint =
+    fun doSpawnFunc (g: unit -> Universal.t) : joinpoint =
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
@@ -723,7 +723,7 @@ struct
       end
 
 
-    fun maybeSpawnFunc (g: unit -> Universal.t) : Universal.t joinpoint option =
+    fun maybeSpawnFunc (g: unit -> Universal.t) : joinpoint option =
       let
         val depth = HH.getDepth (Thread.current ())
       in
@@ -735,7 +735,7 @@ struct
 
 
     (** Must be called in an atomic section. Implicit atomicEnd() *)
-    fun syncEndAtomic (J jp: Universal.t joinpoint) : Universal.t Result.t option =
+    fun syncEndAtomic (J jp: joinpoint) : Universal.t Result.t option =
       let
         val _ = assertAtomic "syncEndAtomic begin" 1
 
@@ -1036,7 +1036,7 @@ struct
      * spork definition
      *)
 
-    fun __inline_never__ sporkPreSpwn (J jp: Universal.t joinpoint) =
+    fun __inline_never__ sporkPreSpwn (J jp: joinpoint) =
         let
           val _ = #assertAtomic (sched_package ()) "spork rightside begin" 1
           val () = DE.decheckSetTid (#tidRight jp)
@@ -1054,7 +1054,7 @@ struct
         end
 
     fun __inline_never__ sporkPostSpwn (spwnr: Universal.t Result.t,
-                                        J jp: Universal.t joinpoint,
+                                        J jp: joinpoint,
                                         thread: Thread.t,
                                         depth: int) =
         let
@@ -1093,7 +1093,7 @@ struct
             )
         end
 
-    fun __inline_never__ sporkSync (jp: Universal.t joinpoint): Universal.t Result.t option =
+    fun __inline_never__ sporkSync (jp: joinpoint): Universal.t Result.t option =
         (Thread.atomicBegin ();
          #assertAtomic (sched_package ()) "prom synchronization" 1;
          #syncEndAtomic (sched_package ()) jp)
@@ -1115,11 +1115,11 @@ struct
 
     type ('a, 'x) sporkT =
            (unit -> 'a)
-         * (unit * Universal.t joinpoint -> unit)
+         * (unit * joinpoint -> unit)
          * ('a -> 'x)
-         * ('a * Universal.t joinpoint -> 'x)
+         * ('a * joinpoint -> 'x)
          * (exn -> 'x)
-         * (exn * Universal.t joinpoint -> 'x)
+         * (exn * joinpoint -> 'x)
          -> 'x
 
     fun __inline_always__ sporkBase (primSpork: ('a, 'x) sporkT,
@@ -1145,7 +1145,7 @@ struct
         fun __inline_always__ unpr' (bodyr: 'a): 'x =
             __inline_always__ unpr bodyr
 
-        fun __inline_always__ prom' (bodyr: 'a, jp: Universal.t joinpoint): 'x =
+        fun __inline_always__ prom' (bodyr: 'a, jp: joinpoint): 'x =
             let val promr = Result.result' (fn a => __inline_always__ prom a, bodyr)
                 val spwnr = sporkSync jp
                 val promres = Result.extractResult promr
@@ -1156,7 +1156,7 @@ struct
               
         fun __inline_always__ exnunpr' (e: exn): 'x =
             raise e
-        fun __inline_always__ exnprom' (e: exn, jp: Universal.t joinpoint): 'x =
+        fun __inline_always__ exnprom' (e: exn, jp: joinpoint): 'x =
             (sporkSync jp; raise e)
       in
         __inline_always__ primSpork (body', spwn', unpr', prom', exnunpr', exnprom')
