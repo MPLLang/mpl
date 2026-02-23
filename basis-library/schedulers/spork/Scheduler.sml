@@ -548,47 +548,6 @@ struct
           end
       end
 
-
-    fun syncGC doClearSuspects (GCJ {gcTaskData, tidRight}) =
-      let
-        val _ = Thread.atomicBegin ()
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
-        val newDepth = depth-1
-      in
-        if popDiscard() then
-          ( ()
-          ; dbgmsg' (fn _ => "switching to do some GC stuff")
-          ; setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
-          ; push (Continuation (thread, newDepth))
-          ; assertAtomic "syncGC before returnToSched" 1
-          ; returnToSchedEndAtomic ()
-          ; assertAtomic "syncGC after returnToSched" 1
-          ; dbgmsg' (fn _ => "back from GC stuff")
-          )
-        else
-          ( setQueueDepth (myWorkerId ()) newDepth
-          );
-
-        (* This can be reused here... the name isn't appropriate in this
-         * context, but the functionality is the same:
-         *   - promote chunks into parent
-         *   - update depth->newDepth
-         *   - update decheck state by joining tidLeft and tidRight.
-         *)
-        HH.joinIntoParentBeforeFastClone
-          { thread = thread
-          , newDepth = newDepth
-          , tidLeft = DE.decheckGetTid thread
-          , tidRight = tidRight
-          };
-
-        assertAtomic "syncGC done" 1;
-        Thread.atomicEnd ();
-
-        doClearSuspects (thread, newDepth)
-      end
-
     (* runs in signal handler *)
     fun doSpawn {youngestOptimization: bool} (interruptedLeftThread: Thread.t) : unit =
       let
@@ -675,7 +634,7 @@ struct
       end
 
 
-    fun doSpawnFunc (g: unit -> 'a) : 'a joinpoint =
+    fun doSpawnFunc (g: unit -> Universal.t) : Universal.t joinpoint =
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
@@ -692,7 +651,7 @@ struct
          * The thief will convert it into a Thread.t and give it a heap,
          * and then write it into this slot. *)
         val rightSideThreadSlot = ref (NONE: Thread.t option)
-        val rightSideResult = ref (NONE: 'a Result.t option)
+        val rightSideResult = ref (NONE: Universal.t Result.t option)
         val incounter = ref 2
 
         val tidParent = DE.decheckGetTid thread
@@ -764,7 +723,7 @@ struct
       end
 
 
-    fun maybeSpawnFunc (g: unit -> 'a) : 'a joinpoint option =
+    fun maybeSpawnFunc (g: unit -> Universal.t) : Universal.t joinpoint option =
       let
         val depth = HH.getDepth (Thread.current ())
       in
@@ -776,11 +735,7 @@ struct
 
 
     (** Must be called in an atomic section. Implicit atomicEnd() *)
-    fun syncEndAtomic
-        (doClearSuspects: Thread.t * int -> unit)
-        (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, spareHeartbeatsGiven, tokenPolicy, ...} : 'a joinpoint)
-        : 'a Result.t option
-      =
+    fun syncEndAtomic (J jp: Universal.t joinpoint) : Universal.t Result.t option =
       let
         val _ = assertAtomic "syncEndAtomic begin" 1
 
@@ -803,20 +758,20 @@ struct
                  * decheck state by joining tidLeft and tidRight.
                  *)
                 val _ = HH.joinIntoParentBeforeFastClone
-                          {thread=thread, newDepth=newDepth, tidLeft=tidLeft, tidRight=tidRight}
+                          {thread=thread, newDepth=newDepth, tidLeft=tidLeft, tidRight=(#tidRight jp)}
                 val _ = traceSchedJoinFast ()
                 val _ = Thread.atomicEnd ()
-                val _ = doClearSuspects (thread, newDepth)
+                val _ = maybeParClearSuspectsAtDepth (thread, newDepth)
                 val _ = if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
-                val _ = case tokenPolicy of
-                            TokenPolicyGive => Heartbeat.addSpare spareHeartbeatsGiven
+                val _ = case #tokenPolicy jp of
+                            TokenPolicyGive => Heartbeat.addSpare (#spareHeartbeatsGiven jp)
                           | _ => Heartbeat.zero
                 val _ = incrementNumFastJoins ()
             in
               NONE
             end
           else
-            ( if decrementHitsZero incounter then
+            ( if decrementHitsZero (#incounter jp) then
                 ()
               else
                 ( ()
@@ -826,7 +781,7 @@ struct
                 ; assertAtomic "syncEndAtomic after returnToSched" 1
                 )
 
-            ; case HM.refDerefNoBarrier rightSideThread of
+            ; case HM.refDerefNoBarrier (#rightSideThread jp) of
                 NONE => die (fn _ => "scheduler bug: join failed")
               | SOME rightSideThread =>
                   let
@@ -853,7 +808,7 @@ struct
                     val _ = setQueueDepth (myWorkerId ()) newDepth
 
                     val result = 
-                      case HM.refDerefNoBarrier rightSideResult of
+                      case HM.refDerefNoBarrier (#rightSideResult jp) of
                         NONE => die (fn _ => "scheduler bug: join failed: missing result")
                       | SOME gr =>
                           ( ()
@@ -862,17 +817,110 @@ struct
                           ; gr
                           )
                   in
-                    doClearSuspects (thread, newDepth);
+                    maybeParClearSuspectsAtDepth (thread, newDepth);
                     if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
                     SOME result
                   end
             )
-        val _ = case gcj of
-                    NONE => ()
-                  | SOME gcj => syncGC doClearSuspects gcj;
+        val _ = Option.map syncGC (#gcj jp)
       in
         result
       end
+
+    and maybeParClearSuspectsAtDepth (t, d) =
+      if HH.numSuspectsAtDepth (t, d) <= 10000 then
+        HH.clearSuspectsAtDepth (t, d)
+      else
+        let
+          val cs = HH.takeClearSetAtDepth (t, d)
+          val count = HH.numChunksInClearSet cs
+          (* val _ = print ("maybeParClearSuspectsAtDepth: " ^ Int.toString count ^ " chunks\n") *)
+          val grainSize = 20
+          val numGrains = 1 + (count-1) div grainSize
+          val results = ArrayExtra.alloc numGrains
+          fun start i = i*grainSize
+          fun stop i = Int.min (grainSize + start i, count)
+
+          fun processLoop i j =
+            if j-i = 1 then
+              Array.update (results, i, HH.processClearSetGrain (cs, start i, stop i))
+            else
+              let
+                val mid = i + (j-i) div 2
+              in
+                simpleParFork
+                  (fn () => processLoop i mid,
+                   fn () => processLoop mid j)
+              end
+
+          fun commitLoop i =
+            if i >= numGrains then () else
+            ( HH.commitFinishedClearSetGrain (t, Array.sub (results, i))
+            ; commitLoop (i+1)
+            )
+        in
+          processLoop 0 numGrains;
+          commitLoop 0;
+          HH.deleteClearSet cs;
+          maybeParClearSuspectsAtDepth (t, d) (* need to go again, just in case *)
+        end
+
+    and simpleParFork (f: unit -> unit, g: unit -> unit) : unit =
+      case maybeSpawnFunc (fn _ => (g (); Universal.default)) of
+        NONE => (f (); g ())
+      | SOME gj =>
+          let
+            val fr = Result.result f
+            val _ = Thread.atomicBegin ()
+            val gro = syncEndAtomic gj
+          in
+            Result.extractResult fr;
+            case gro of
+                NONE => g ()
+              | SOME gr => ignore (Result.extractResult gr)
+          end
+
+    and syncGC (GCJ {gcTaskData, tidRight}) =
+      let
+        val _ = Thread.atomicBegin ()
+        val thread = Thread.current ()
+        val depth = HH.getDepth thread
+        val newDepth = depth-1
+      in
+        if popDiscard() then
+          ( ()
+          ; dbgmsg' (fn _ => "switching to do some GC stuff")
+          ; setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
+          ; push (Continuation (thread, newDepth))
+          ; assertAtomic "syncGC before returnToSched" 1
+          ; returnToSchedEndAtomic ()
+          ; assertAtomic "syncGC after returnToSched" 1
+          ; dbgmsg' (fn _ => "back from GC stuff")
+          )
+        else
+          ( setQueueDepth (myWorkerId ()) newDepth
+          );
+
+        (* This can be reused here... the name isn't appropriate in this
+         * context, but the functionality is the same:
+         *   - promote chunks into parent
+         *   - update depth->newDepth
+         *   - update decheck state by joining tidLeft and tidRight.
+         *)
+        HH.joinIntoParentBeforeFastClone
+          { thread = thread
+          , newDepth = newDepth
+          , tidLeft = DE.decheckGetTid thread
+          , tidRight = tidRight
+          };
+
+        assertAtomic "syncGC done" 1;
+        Thread.atomicEnd ();
+
+        maybeParClearSuspectsAtDepth (thread, newDepth)
+      end
+
+
 
     (* ===================================================================
      * handler fn definitions
@@ -943,61 +991,6 @@ struct
 
     (* =======================================================================
      *)
-
-
-    fun simpleParFork (f: unit -> unit, g: unit -> unit) : unit =
-      case maybeSpawnFunc g of
-        NONE => (f (); g ())
-      | SOME gj =>
-          let
-            val fr = Result.result f
-            val _ = Thread.atomicBegin ()
-            val gro = syncEndAtomic maybeParClearSuspectsAtDepth gj
-          in
-            Result.extractResult fr;
-            case gro of
-                NONE => g ()
-              | SOME gr => Result.extractResult gr
-          end
-
-    and maybeParClearSuspectsAtDepth (t, d) =
-      if HH.numSuspectsAtDepth (t, d) <= 10000 then
-        HH.clearSuspectsAtDepth (t, d)
-      else
-        let
-          val cs = HH.takeClearSetAtDepth (t, d)
-          val count = HH.numChunksInClearSet cs
-          (* val _ = print ("maybeParClearSuspectsAtDepth: " ^ Int.toString count ^ " chunks\n") *)
-          val grainSize = 20
-          val numGrains = 1 + (count-1) div grainSize
-          val results = ArrayExtra.alloc numGrains
-          fun start i = i*grainSize
-          fun stop i = Int.min (grainSize + start i, count)
-
-          fun processLoop i j =
-            if j-i = 1 then
-              Array.update (results, i, HH.processClearSetGrain (cs, start i, stop i))
-            else
-              let
-                val mid = i + (j-i) div 2
-              in
-                simpleParFork
-                  (fn () => processLoop i mid,
-                   fn () => processLoop mid j)
-              end
-
-          fun commitLoop i =
-            if i >= numGrains then () else
-            ( HH.commitFinishedClearSetGrain (t, Array.sub (results, i))
-            ; commitLoop (i+1)
-            )
-        in
-          processLoop 0 numGrains;
-          commitLoop 0;
-          HH.deleteClearSet cs;
-          maybeParClearSuspectsAtDepth (t, d) (* need to go again, just in case *)
-        end
-
   
     (* These are all functions used in slow path scheduler code,
      * yet which depend upon non-static global state.
@@ -1016,13 +1009,13 @@ struct
      * is not garbage collected.
      *)
     val sched_package_data =
-      { syncEndAtomic = syncEndAtomic maybeParClearSuspectsAtDepth
+      { syncEndAtomic = syncEndAtomic
       , maybeSpawn = maybeSpawn
       , setQueueDepth = setQueueDepth
       , returnToSchedEndAtomic = returnToSchedEndAtomic
       , addEagerSpawns = addEagerSpawns
       , assertAtomic = assertAtomic
-      , error = (fn s => die (fn _ => s)) : string -> unit
+      , die = die : (unit -> string) -> unit
       , intToString = Int.toString (* Int.toString uses a global buffer *)
       }
 
@@ -1042,18 +1035,6 @@ struct
     (* ===================================================================
      * spork definition
      *)
-
-    fun __inline_always__ tryPromoteNow yo =
-      ( Thread.atomicBegin ()
-      ; if
-          Heartbeat.enoughToSpawn () andalso
-          #maybeSpawn (sched_package ()) yo (Thread.current ())
-        then
-          #addEagerSpawns (sched_package ()) 1
-        else
-          ()
-      ; Thread.atomicEnd ()
-      )
 
     fun __inline_never__ sporkPreSpwn (J jp: Universal.t joinpoint) =
         let
@@ -1081,7 +1062,7 @@ struct
           val depth' = HH.getDepth (Thread.current ())
           val _ =
               if depth = depth' then ()
-              else #error (sched_package ()) ("scheduler bug: rightside depth mismatch: " ^ #intToString (sched_package ()) depth ^ " vs " ^ #intToString (sched_package ()) depth')
+              else #die (sched_package ()) (fn () => "scheduler bug: rightside depth mismatch: " ^ #intToString (sched_package ()) depth ^ " vs " ^ #intToString (sched_package ()) depth')
           val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ #intToString (sched_package ()) depth')
           val _ = #assertAtomic (sched_package ()) "spork rightside begin synchronize" 1
         in
@@ -1091,7 +1072,7 @@ struct
           if decrementHitsZero (#incounter jp) then
             ( (* Left side finished already, so continue it on this processor *)
               dbgmsg'' (fn _ => "rightside synchronize: become left")
-            ; #setQueueDepth (sched_package ()) (myWorkerId ()) depth
+            ; #setQueueDepth (sched_package ()) (myWorkerId ()) depth'
             (** Atomic 1 *)
             ; Thread.atomicBegin ()
 
@@ -1117,20 +1098,20 @@ struct
          #assertAtomic (sched_package ()) "prom synchronization" 1;
          #syncEndAtomic (sched_package ()) jp)
 
-    (* fun __inline_never__ sporkExtractData (bo: 'b option): 'b = *)
-    (*     case bo of *)
-    (*         SOME b => b *)
-    (*       | NONE => (#error (sched_package ()) *)
-    (*                         "scheduler bug: spork sync: failed project right-side result"; *)
-    (*                  raise SchedulerError) *)
-
-    fun __inline_never__ sporkExnUnpr (e: exn): 'x = raise e
-
-    fun __inline_never__ sporkExnProm (e: exn, jp: Universal.t joinpoint): 'x =
-        (Thread.atomicBegin ();
-         #assertAtomic (sched_package ()) "exn prom continuation" 1;
-         #syncEndAtomic (sched_package ()) jp;
-         raise e)
+    fun __inline_always__ tryPromoteNow () =
+      if not (Heartbeat.enoughToSpawn ()) then
+        ()
+      else
+        ( Thread.atomicBegin ()
+        ; if
+            Heartbeat.enoughToSpawn () andalso
+            #maybeSpawn (sched_package ()) {youngestOptimization = true} (Thread.current ())
+          then
+            #addEagerSpawns (sched_package ()) 1
+          else
+            ()
+        ; Thread.atomicEnd ()
+        )
 
     type ('a, 'x) sporkT =
            (unit -> 'a)
@@ -1151,8 +1132,7 @@ struct
         val (inject, project) = Universal.embedSure ()
 
         fun __inline_always__ body' (): 'a =
-            ((if not (Heartbeat.enoughToSpawn ()) then () else tryPromoteNow {youngestOptimization = true});
-             __inline_always__ body ())
+            (tryPromoteNow (); __inline_always__ body ())
 
         fun __inline_always__ spwn' ((), jp): unit =
           let val (thread, depth) = sporkPreSpwn jp
@@ -1173,8 +1153,13 @@ struct
             in
               __inline_always__ sync (promres, spwnres)
             end
+              
+        fun __inline_always__ exnunpr' (e: exn): 'x =
+            raise e
+        fun __inline_always__ exnprom' (e: exn, jp: Universal.t joinpoint): 'x =
+            (sporkSync jp; raise e)
       in
-        __inline_always__ primSpork (body', spwn', unpr', prom', sporkExnUnpr, sporkExnProm)
+        __inline_always__ primSpork (body', spwn', unpr', prom', exnunpr', exnprom')
       end
 
     fun __inline_always__ spork

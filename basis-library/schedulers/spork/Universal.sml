@@ -3,11 +3,11 @@ sig
   type t
   val embed: unit -> ('a -> t) * (t -> 'a option)
   val embedSure: unit -> ('a -> t) * (t -> 'a)
-  val UnivDefault: t
+  val default: t
 end =
 struct
   type t = exn
-  exception UnivDefault
+  exception default
 
   fun 'a __inline_always__ embed () =
     let
@@ -26,7 +26,8 @@ struct
       fun __inline_always__ project (e: t): 'a =
         case e of
           UnivTag a => a
-        | _ => raise UnivDefault
+        (* should never happen (unless you forget to inject -- but don't do that) *)
+        | _ => raise default
     in
       (UnivTag, project)
     end
