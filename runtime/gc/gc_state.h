@@ -100,7 +100,7 @@ struct GC_state {
   uint32_t terminationStatus; /** >=2: not allowed to terminate; someone might
                                 *      be sending me a signal.
                                 * 1: okay to terminate
-                                * 0: ready to terminate
+                                * 0: termination in progress
                                 */
   GC_weak weaks; /* Linked list of (live) weak pointers */
   char *worldFile;

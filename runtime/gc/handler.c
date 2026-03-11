@@ -61,7 +61,7 @@ void switchToSignalHandlerThreadIfNonAtomicAndSignalPending (GC_state s) {
     //   (void*)threadObjptrToStruct(s, s->signalHandlerThread));
 
     // SAM_NOTE: synchronizes with loop in switchToThread...
-    atomicStoreS32(&(getThreadCurrent(s)->currentProcNum), -1);
+    atomic_store(&(getThreadCurrent(s)->currentProcNum), -1);
     s->currentThread = BOGUS_OBJPTR;
 
     switchToThread (s, s->signalHandlerThread);
@@ -87,21 +87,19 @@ static inline void relaySignalTo(GC_state s, int id, int signum) {
 
   // first, try to prevent them from terminating
   uint32_t *statusp = &(s->procStates[id].terminationStatus);
-  uint32_t status = atomicLoadU32(statusp);
-  bool success = FALSE;
-  while (status > 0 && !GC_CheckForTerminationRequest(s)) {
-    success = __sync_bool_compare_and_swap(statusp, status, status+1);
-    if (success)
-      break;
-    status = atomicLoadU32(statusp);
-  }
 
-  if (success) {
-    assert(atomicLoadU32(statusp) >= 2);
-    pthread_kill(s->procStates[id].self, signum);
-    assert(atomicLoadU32(statusp) >= 2);
-    __sync_fetch_and_sub(statusp, 1);
-  }
+  uint32_t status = atomic_load_explicit(statusp, memory_order_relaxed);
+  do {
+    if (status == 0 || GC_CheckForTerminationRequest(s))
+      return;
+    
+  } while (!atomic_compare_exchange_weak_explicit(statusp, &status, status + 1,
+                                                  memory_order_acquire, // entering critical section
+                                                  memory_order_relaxed));
+  // assert(atomic_load(statusp) >= 2);
+  pthread_kill(s->procStates[id].self, signum);
+  // assert(atomic_load(statusp) >= 2);
+  atomic_fetch_sub_explicit(statusp, 1, memory_order_release); // exiting critical section
 }
 
 
