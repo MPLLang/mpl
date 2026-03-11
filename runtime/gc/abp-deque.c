@@ -55,8 +55,8 @@ objptr ABP_deque_try_pop_bot(
   }
 
   local_bot--;
-  __atomic_store_n(bot, local_bot, __ATOMIC_RELEASE);
-  __atomic_thread_fence(__ATOMIC_SEQ_CST);
+  atomic_store_explicit(bot, local_bot, memory_order_release);
+  atomic_thread_fence(memory_order_seq_cst);
   objptr elem = __atomic_load_n(data + local_bot, __ATOMIC_ACQUIRE);
   uint64_t local_top = __atomic_load_n(top, __ATOMIC_ACQUIRE);
   uint32_t local_top_idx = UNPACK_IDX(local_top);

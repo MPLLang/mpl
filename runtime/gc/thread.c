@@ -85,7 +85,7 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   GC_thread child = threadObjptrToStruct(s, childop);
 
   size_t terminateCheckCounter = 0;
-  while (atomicLoadS32(&(child->currentProcNum)) >= 0) {
+  while (atomic_load(&(child->currentProcNum)) >= 0) {
     /* Spin while someone else is currently executing this thread. The
      * termination checks happen rarely, and reset terminateCheckCounter to 0
      * when they do. */
@@ -300,14 +300,14 @@ void GC_HH_joinIntoParent(
   /* ======================================================================== */
 
   size_t terminateCheckCounter = 0;
-  while (atomicLoadS32(&(child->currentProcNum)) >= 0) {
+  while (atomic_load(&(child->currentProcNum)) >= 0) {
     /* Spin while someone else is currently executing this thread. The
      * termination checks happen rarely, and reset terminateCheckCounter to 0
      * when they do. */
     GC_MayTerminateThreadRarely(s, &terminateCheckCounter);
     if (terminateCheckCounter == 0) sched_yield();
   }
-  __atomic_thread_fence(__ATOMIC_SEQ_CST);
+  atomic_thread_fence(memory_order_seq_cst);
 
 #if ASSERT
   assert(threadop != BOGUS_OBJPTR);

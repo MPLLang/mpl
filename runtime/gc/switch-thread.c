@@ -12,7 +12,7 @@ void switchToThread(GC_state s, objptr op) {
   assert(thread->hierarchicalHeap != NULL);
 
   size_t terminateCheckCounter = 0;
-  int otherProcNum = atomicLoadS32(&(thread->currentProcNum));
+  int otherProcNum = atomic_load(&(thread->currentProcNum));
   while (otherProcNum >= 0) {
     /* Spin while someone else is currently executing this thread. The
      * termination checks happen rarely, and reset terminateCheckCounter to 0
@@ -21,10 +21,10 @@ void switchToThread(GC_state s, objptr op) {
     if (terminateCheckCounter == 0) sched_yield();
     // Sanity check: don't get deadlocked by self
     assert(otherProcNum != s->procNumber);
-    otherProcNum = atomicLoadS32(&(thread->currentProcNum));
+    otherProcNum = atomic_load(&(thread->currentProcNum));
   }
-  __atomic_thread_fence(__ATOMIC_SEQ_CST);
-  atomicStoreS32(&(thread->currentProcNum), s->procNumber);
+  atomic_thread_fence(memory_order_seq_cst);
+  atomic_store(&(thread->currentProcNum), s->procNumber);
 
   if (DEBUG_THREADS) {
     // GC_thread thread;
@@ -80,7 +80,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
   s->currentThread = BOGUS_OBJPTR;
   /* SAM_NOTE: This write synchronizes with the spinloop in switchToThread (above) */
   __atomic_thread_fence(__ATOMIC_SEQ_CST);
-  atomicStoreS32(&(oldCurrentThread->currentProcNum), -1);
+  atomic_store(&(oldCurrentThread->currentProcNum), -1);
 
   // printf("[%d] switchToThread\n  from %p\n    to %p\n",
   //   s->procNumber,
