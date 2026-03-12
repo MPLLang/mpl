@@ -90,8 +90,6 @@ struct HM_chunkList {
   HM_chunk lastChunk;
 
   /** usedSize = sum of used (frontier-start) space of chunks in this list.
-    * size = total size of chunks in this list.
-    *
     * So, for example, the fraction of "wasted" space in the list is
     *   (size-usedSize)/size
     */
@@ -100,8 +98,8 @@ struct HM_chunkList {
 
 } __attribute__((aligned(8)));
 
-COMPILE_TIME_ASSERT(HM_chunk__aligned,
-                    (sizeof(struct HM_chunk) % 8) == 0);
+STATIC_ASSERT((sizeof(struct HM_chunk) % 8) == 0,
+              "sizeof(struct HM_chunk) is 8-byte aligned");
 
 #endif /* MLTON_GC_INTERNAL_TYPES */
 
