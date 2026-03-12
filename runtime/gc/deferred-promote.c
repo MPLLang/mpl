@@ -184,7 +184,7 @@ bool checkValid(objptr dst, objptr* field, objptr src) {
   return TRUE;
 }
 
-void bucketIfValidAtList(__attribute__((unused)) GC_state s,
+void bucketIfValidAtList([[maybe_unused]] GC_state s,
                    objptr dst,
                    objptr* field,
                    objptr src,
@@ -195,7 +195,7 @@ void bucketIfValidAtList(__attribute__((unused)) GC_state s,
   }
 }
 
-void bucketIfValid(__attribute__((unused)) GC_state s,
+void bucketIfValid([[maybe_unused]] GC_state s,
                    objptr dst,
                    objptr* field,
                    objptr src,
@@ -211,7 +211,7 @@ void bucketIfValid(__attribute__((unused)) GC_state s,
   // }
 }
 
-void promoteDownPtr(__attribute__((unused)) GC_state s,
+void promoteDownPtr([[maybe_unused]] GC_state s,
                     objptr dst,
                     objptr* field,
                     objptr src,

@@ -55,9 +55,9 @@ void forwardFromObjsOfRemembered(
     void *rawArgs);
 
 void unmarkWrapper(
-  __attribute__((unused)) GC_state s,
+  [[maybe_unused]] GC_state s,
   HM_remembered remElem,
-  __attribute__((unused)) void *rawArgs);
+  [[maybe_unused]] void *rawArgs);
 void addEntangledToRemSet(GC_state s, objptr op, uint32_t opDepth, struct ForwardHHObjptrArgs *args);
 
 static inline HM_HierarchicalHeap toSpaceHH (GC_state s, struct ForwardHHObjptrArgs *args, uint32_t depth) {
@@ -95,7 +95,7 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, GC_header header,
                                              size_t *metaDataSize);
 
 objptr copyNonStackObject(
-  pointer p,  // pointer to beginning of metadata
+  pointer metadata,
   size_t metadataSize,
   size_t objectSizeIncludingMetadata,
   size_t copySize,
@@ -103,7 +103,7 @@ objptr copyNonStackObject(
 
 objptr copyStackObject(
   GC_state s,
-  pointer p,  // pointer to beginning of metadata
+  pointer metadata,
   size_t objectSizeIncludingMetadata,
   HM_HierarchicalHeap tgtHeap);
 
@@ -135,17 +135,18 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 
 enum LGC_freedChunkType
 {
-  LGC_FREED_REMSET_CHUNK,
-  LGC_FREED_STACK_CHUNK,
-  LGC_FREED_NORMAL_CHUNK,
-  LGC_FREED_SUSPECT_CHUNK
+  LGC_FREED_REMSET_CHUNK = 0,
+  LGC_FREED_STACK_CHUNK = 1,
+  LGC_FREED_NORMAL_CHUNK = 2,
+  LGC_FREED_SUSPECT_CHUNK = 3
 };
 
 static const char *LGC_freedChunkTypeToString[] = {
-    "LGC_FREED_REMSET_CHUNK",
-    "LGC_FREED_STACK_CHUNK",
-    "LGC_FREED_NORMAL_CHUNK",
-    "LGC_FREED_SUSPECT_CHUNK"};
+  "LGC_FREED_REMSET_CHUNK",
+  "LGC_FREED_STACK_CHUNK",
+  "LGC_FREED_NORMAL_CHUNK",
+  "LGC_FREED_SUSPECT_CHUNK"
+};
 
 struct LGC_chunkInfo
 {
@@ -156,7 +157,7 @@ struct LGC_chunkInfo
 };
 
 void LGC_writeFreeChunkInfo(
-    __attribute__((unused)) GC_state s,
+    [[maybe_unused]] GC_state s,
     char *infoBuffer,
     size_t bufferLen,
     void *env)
@@ -171,14 +172,18 @@ void LGC_writeFreeChunkInfo(
            info->collectionNumber);
 }
 
+/**
+ * Compute the min depth that can be locally collected.
+ * Traverse *upwards* until the ancestor requires concurrent collection (or no more ancestors)
+ */
 uint32_t minDepthWithoutCC(GC_thread thread)
 {
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
   HM_HierarchicalHeap cursor = thread->hierarchicalHeap;
 
-  if (cursor->subHeapForCC != NULL)
-    return thread->currentDepth + 1;
+  if (cursor->subHeapForCC != NULL) // I myself need concurrent collection
+    return HM_HH_getDepth(cursor) + 1;
 
   while (cursor->nextAncestor != NULL &&
          cursor->nextAncestor->subHeapForCC == NULL)
@@ -196,6 +201,12 @@ uint32_t minDepthWithoutCC(GC_thread thread)
   return HM_HH_getDepth(cursor);
 }
 
+/**
+ * Seong-Heon NOTE: This interacts intricately with the deque.
+ * When traversing up the computation graph, it "masks" tasks in the deque
+ * with tryClaimLocalScope.
+ * Can we decouple this?
+ */
 void HM_HHC_collectLocal(uint32_t desiredScope)
 {
   GC_state s = pthread_getspecific(gcstate_key);
@@ -207,18 +218,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   struct timespec stopTime;
   uint64_t oldObjectCopied;
 
-  if (NONE == s->controls->collectionType)
-  {
-    /* collection disabled */
+  if (NONE == s->controls->collectionType) // collection disabled
     return;
-  }
-
-  // if (NULL != hh->subHeapForCC) {
-  //   LOG(LM_HH_COLLECTION, LL_INFO,
-  //     "Skipping local collection at depth %u due to outstanding CC",
-  //     HM_HH_getDepth(hh));
-  //   return;
-  // }
 
   if (s->wsQueueTop == BOGUS_OBJPTR || s->wsQueueBot == BOGUS_OBJPTR)
   {
@@ -230,6 +231,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   uint32_t potentialLocalScope = UNPACK_IDX(topval);
   uint32_t originalLocalScope = pollCurrentLocalScope(s);
 
+  // why?
   if (thread->currentDepth != originalLocalScope)
   {
     LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -243,8 +245,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     return;
   }
 
-  /** Compute the min depth for local collection. We claim as many levels
-   * as we can without interfering with CC, but only so far as desired.
+  /* Claim as many levels as we can without interfering with CC,
+   * but only so far as desired.
    *
    * Note that we could permit local collection at the same level as a
    * registered (but not yet stolen) CC, as long as we update the rootsets
@@ -252,8 +254,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
    * levels entirely.
    */
   uint32_t minNoCC = minDepthWithoutCC(thread);
-  uint32_t minOkay = desiredScope;
-  minOkay = max(minOkay, thread->minLocalCollectionDepth);
+  uint32_t minOkay = max(desiredScope, thread->minLocalCollectionDepth);
   minOkay = max(minOkay, minNoCC);
   uint32_t minDepth = originalLocalScope;
   while (minDepth > minOkay && tryClaimLocalScope(s))
@@ -285,10 +286,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   }
 
   uint32_t maxDepth = thread->currentDepth;
-
-  LOG(LM_HH_COLLECTION, LL_DEBUG,
-      "START");
-
+  LOG(LM_HH_COLLECTION, LL_DEBUG, "START");
   Trace0(EVENT_LGC_ENTER);
 
   s->cumulativeStatistics->numHHLocalGCs++;
@@ -1156,7 +1154,7 @@ objptr relocateObject(
 /* ========================================================================= */
 void copySuspect(
   GC_state s,
-  __attribute__((unused)) objptr *opp,
+  [[maybe_unused]] objptr *opp,
   objptr op,
   void *rawArghh)
 {
@@ -1292,7 +1290,7 @@ void markAndAdd(
 #if 0
 void unmarkAndAdd(
     GC_state s,
-    __attribute__((unused)) objptr *opp,
+    [[maybe_unused]] objptr *opp,
     objptr op,
     void *rawArgs)
 {
@@ -1319,7 +1317,7 @@ void unmarkAndAdd(
 
 void unmark(
     GC_state s,
-    __attribute__((unused)) objptr *opp,
+    [[maybe_unused]] objptr *opp,
     objptr op,
     void *rawArgs)
 {
@@ -1496,9 +1494,9 @@ void LGC_markAndScan(
 // }
 
 void unmarkWrapper(
-  __attribute__((unused)) GC_state s,
+  [[maybe_unused]] GC_state s,
   HM_remembered remElem,
-  __attribute__((unused)) void *rawArgs)
+  [[maybe_unused]] void *rawArgs)
 {
   objptr op = remElem->object;
   pointer p = objptrToPointer (op, NULL);
@@ -2071,7 +2069,7 @@ bool skipStackAndThreadObjptrPredicate(GC_state s,
 #if ASSERT
 
 void checkRememberedEntry(
-    __attribute__((unused)) GC_state s,
+    [[maybe_unused]] GC_state s,
     HM_remembered remElem,
     void *args)
 {

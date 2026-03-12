@@ -17,10 +17,10 @@ bool tryClaimLocalScope(GC_state s) {
 
 void releaseLocalScope(GC_state s, uint32_t originalBot) {
   uint32_t *bot = (uint32_t*)objptrToPointer(s->wsQueueBot, NULL);
-  __atomic_store_n(bot, originalBot, __ATOMIC_SEQ_CST);
+  atomic_store_explicit(bot, originalBot, memory_order_seq_cst);
 }
 
 uint32_t pollCurrentLocalScope(GC_state s) {
   uint32_t *bot = (uint32_t*)objptrToPointer(s->wsQueueBot, NULL);
-  return __atomic_load_n(bot, __ATOMIC_SEQ_CST);
+  return atomic_load_explicit(bot, memory_order_seq_cst);
 }

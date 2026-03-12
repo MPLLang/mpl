@@ -6,8 +6,8 @@
 
 
 Bool ABP_deque_push_bot(
-  __attribute__ ((unused)) GC_state s,
-  __attribute__ ((unused)) objptr top_op,
+  [[maybe_unused]] GC_state s,
+  [[maybe_unused]] objptr top_op,
   objptr bot_op,
   objptr data_op,
   objptr elem_to_push_op)
@@ -15,14 +15,14 @@ Bool ABP_deque_push_bot(
   uint32_t* bot = (uint32_t*)objptrToPointer(bot_op, NULL);
   objptr* data = (objptr*)objptrToPointer(data_op, NULL);
 
-  uint32_t local_bot = __atomic_load_n(bot, __ATOMIC_ACQUIRE);
+  uint32_t local_bot = atomic_load_explicit(bot, memory_order_acquire);
 
   if (local_bot == getSequenceLength(objptrToPointer(data_op, NULL))) {
     return (Bool)FALSE;
   }
 
-  __atomic_store_n(data + local_bot, elem_to_push_op, __ATOMIC_RELEASE);
-  __atomic_store_n(bot, local_bot+1, __ATOMIC_SEQ_CST);
+  atomic_store_explicit(data + local_bot, elem_to_push_op, memory_order_release);
+  atomic_store_explicit(bot, local_bot+1, memory_order_seq_cst);
 
   return (Bool)TRUE;
 }
@@ -39,7 +39,7 @@ ABP_deque_check_successful_pop(objptr result, objptr fail_value) {
 
 
 objptr ABP_deque_try_pop_bot(
-  __attribute__ ((unused)) GC_state s,
+  [[maybe_unused]] GC_state s,
   objptr top_op,
   objptr bot_op,
   objptr data_op,
@@ -49,7 +49,7 @@ objptr ABP_deque_try_pop_bot(
   uint32_t* bot = (uint32_t*)objptrToPointer(bot_op, NULL);
   objptr* data = (objptr*)objptrToPointer(data_op, NULL);
 
-  uint32_t local_bot = __atomic_load_n(bot, __ATOMIC_ACQUIRE);
+  uint32_t local_bot = atomic_load_explicit(bot, memory_order_acquire);
   if (local_bot == 0) {
     return fail_value;
   }
@@ -57,8 +57,8 @@ objptr ABP_deque_try_pop_bot(
   local_bot--;
   atomic_store_explicit(bot, local_bot, memory_order_release);
   atomic_thread_fence(memory_order_seq_cst);
-  objptr elem = __atomic_load_n(data + local_bot, __ATOMIC_ACQUIRE);
-  uint64_t local_top = __atomic_load_n(top, __ATOMIC_ACQUIRE);
+  objptr elem = atomic_load_explicit(data + local_bot, memory_order_acquire);
+  uint64_t local_top = atomic_load_explicit(top, memory_order_acquire);
   uint32_t local_top_idx = UNPACK_IDX(local_top);
 
   if (local_bot > local_top_idx) {
@@ -75,8 +75,8 @@ objptr ABP_deque_try_pop_bot(
   if (local_bot < local_top_idx) {
     // We are racing with a concurrent pop_top, but we already lost the race.
     // Revert the bot index to match the top, to indicate an empty deque.
-    __atomic_store_n(bot, local_top_idx, __ATOMIC_RELEASE);
-    __atomic_store_n(top, desired_top, __ATOMIC_SEQ_CST);
+    atomic_store_explicit(bot, local_top_idx, memory_order_release);
+    atomic_store_explicit(top, desired_top, memory_order_seq_cst);
     return fail_value;
   }
   else {
@@ -99,8 +99,8 @@ objptr ABP_deque_try_pop_bot(
       }
 
       uint64_t new_top = PACK_TAGIDX(local_top_tag+1, local_bot+1);
-      __atomic_store_n(bot, local_bot+1, __ATOMIC_RELEASE);
-      __atomic_store_n(top, new_top, __ATOMIC_SEQ_CST);
+      atomic_store_explicit(bot, local_bot+1, memory_order_release);
+      atomic_store_explicit(top, new_top, memory_order_seq_cst);
       return fail_value;
     }
   }
@@ -108,7 +108,7 @@ objptr ABP_deque_try_pop_bot(
 
 
 objptr ABP_deque_try_pop_top(
-  __attribute__ ((unused)) GC_state s,
+  [[maybe_unused]] GC_state s,
   objptr top_op,
   objptr bot_op,
   objptr data_op,
@@ -118,9 +118,9 @@ objptr ABP_deque_try_pop_top(
   uint32_t* bot = (uint32_t*)objptrToPointer(bot_op, NULL);
   objptr* data = (objptr*)objptrToPointer(data_op, NULL);
 
-  uint64_t local_top = __atomic_load_n(top, __ATOMIC_ACQUIRE);
-  __atomic_thread_fence(__ATOMIC_SEQ_CST);
-  uint32_t local_bot = __atomic_load_n(bot, __ATOMIC_ACQUIRE);
+  uint64_t local_top = atomic_load_explicit(top, memory_order_acquire);
+  atomic_thread_fence(memory_order_seq_cst);
+  uint32_t local_bot = atomic_load_explicit(bot, memory_order_acquire);
 
   uint32_t local_top_idx = UNPACK_IDX(local_top);
 
@@ -128,7 +128,7 @@ objptr ABP_deque_try_pop_top(
     return fail_value;
   }
 
-  objptr elem = __atomic_load_n(data + local_top_idx, __ATOMIC_ACQUIRE);
+  objptr elem = atomic_load_explicit(data + local_top_idx, memory_order_acquire);
   uint64_t local_top_tag = UNPACK_TAG(local_top);
   uint64_t desired_top = PACK_TAGIDX(local_top_tag, local_top_idx+1);
 
@@ -143,17 +143,17 @@ objptr ABP_deque_try_pop_top(
 
 
 PRIVATE void ABP_deque_set_depth(
-  __attribute__ ((unused)) GC_state s,
+  [[maybe_unused]] GC_state s,
   objptr top_op,
   objptr bot_op,
-  __attribute__ ((unused)) objptr data_op,
+  [[maybe_unused]] objptr data_op,
   uint32_t desired_depth)
 {
   uint64_t* top = (uint64_t*)objptrToPointer(top_op, NULL);
   uint32_t* bot = (uint32_t*)objptrToPointer(bot_op, NULL);
 
-  uint64_t local_top = __atomic_load_n(top, __ATOMIC_ACQUIRE);
-  uint32_t local_bot = __atomic_load_n(bot, __ATOMIC_ACQUIRE);
+  uint64_t local_top = atomic_load_explicit(top, memory_order_acquire);
+  uint32_t local_bot = atomic_load_explicit(bot, memory_order_acquire);
 
   uint32_t local_top_idx = UNPACK_IDX(local_top);
   uint32_t local_top_tag = UNPACK_TAG(local_top);
@@ -179,11 +179,12 @@ PRIVATE void ABP_deque_set_depth(
     return;
   }
   else if (desired_depth < local_bot) {
-    __atomic_store_n(bot, desired_depth, __ATOMIC_SEQ_CST);
-    __atomic_store_n(top, desired_top, __ATOMIC_SEQ_CST);
+    atomic_store_explicit(bot, desired_depth, memory_order_seq_cst);
+    atomic_store_explicit(top, desired_top, memory_order_seq_cst);
   }
   else {
-    __atomic_store_n(top, desired_top, __ATOMIC_SEQ_CST);
-    __atomic_store_n(bot, desired_depth, __ATOMIC_SEQ_CST);
+
+    atomic_store_explicit(top, desired_top, memory_order_seq_cst);
+    atomic_store_explicit(bot, desired_depth, memory_order_seq_cst);
   }
 }

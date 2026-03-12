@@ -51,6 +51,8 @@ typedef struct GC_thread {
    * Fresh chunks are placed at this level. */
   uint32_t currentDepth;
 
+  // 1 == scheduler thread (see Scheduler.sml)
+  // >1 == user thread
   uint32_t minLocalCollectionDepth;
 
 #ifdef DETECT_ENTANGLEMENT

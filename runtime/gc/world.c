@@ -7,9 +7,9 @@
  * See the file MLton-LICENSE for details.
  */
 
-__attribute__((noreturn))
-void GC_saveWorld (__attribute__((unused)) GC_state s,
-                   __attribute__((unused)) NullString8_t fileName)
+[[noreturn]]
+void GC_saveWorld ([[maybe_unused]] GC_state s,
+                   [[maybe_unused]] NullString8_t fileName)
 {
   DIE("GC_saveWorld is unsupported");
 }
