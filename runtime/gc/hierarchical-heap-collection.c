@@ -176,7 +176,7 @@ void LGC_writeFreeChunkInfo(
  * Compute the min depth that can be locally collected.
  * Traverse *upwards* until the ancestor requires concurrent collection (or no more ancestors)
  */
-uint32_t minDepthWithoutCC(GC_thread thread)
+uint32_t furthestAncestorWithoutCC(GC_thread thread)
 {
   assert(thread != NULL);
   assert(thread->hierarchicalHeap != NULL);
@@ -206,6 +206,13 @@ uint32_t minDepthWithoutCC(GC_thread thread)
  * When traversing up the computation graph, it "masks" tasks in the deque
  * with tryClaimLocalScope.
  * Can we decouple this?
+ *
+ * Claim as many levels as we can without interfering with CC.
+ *
+ * Note that we could permit local collection at the same level as a
+ * registered (but not yet stolen) CC, as long as we update the rootsets
+ * stored for the CC. But this is tricky. Much simpler to just avoid CC'ed
+ * levels entirely.
  */
 void HM_HHC_collectLocal(uint32_t desiredScope)
 {
@@ -245,27 +252,27 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     return;
   }
 
-  /* Claim as many levels as we can without interfering with CC,
-   * but only so far as desired.
-   *
-   * Note that we could permit local collection at the same level as a
-   * registered (but not yet stolen) CC, as long as we update the rootsets
-   * stored for the CC. But this is tricky. Much simpler to just avoid CC'ed
-   * levels entirely.
+  // claim no further ancestor than stopAt
+  uint32_t ancNoCC = furthestAncestorWithoutCC(thread);
+  uint32_t stopAt = max(desiredScope, ancNoCC);
+  stopAt = max(stopAt, thread->minLocalCollectionDepth);
+
+  /* Claim tasks in the Deque to prevent them from being stolen.
+   * Instead of actually taking the tasks, this internally hacks the top and bottom indices
+   * of the deque to fool theives.
+   * At the end of GC, the original indices are restored
    */
-  uint32_t minNoCC = minDepthWithoutCC(thread);
-  uint32_t minOkay = max(desiredScope, thread->minLocalCollectionDepth);
-  minOkay = max(minOkay, minNoCC);
-  uint32_t minDepth = originalLocalScope;
-  while (minDepth > minOkay && tryClaimLocalScope(s))
+  uint32_t minDepth = thread->currentDepth;
+  while (minDepth > stopAt && tryClaimLocalScope(s))
   {
     minDepth--;
     assert(minDepth == pollCurrentLocalScope(s));
   }
   assert(minDepth == pollCurrentLocalScope(s));
 
+  // Why??
   if (minDepth == 0 ||
-      minOkay > minDepth ||
+      stopAt > minDepth ||
       minDepth > thread->currentDepth)
   {
     LOG(LM_HH_COLLECTION, LL_DEBUG,
@@ -277,7 +284,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
         "  potentialLocalScope %u\n",
         minDepth,
         thread->currentDepth,
-        minNoCC,
+        ancNoCC,
         desiredScope,
         potentialLocalScope);
 
@@ -340,8 +347,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       s->procNumber,
       s->cumulativeStatistics->numHHLocalGCs,
       thread->minLocalCollectionDepth,
-      minNoCC,
-      minOkay,
+      ancNoCC,
+      stopAt,
       desiredScope,
       potentialLocalScope,
       thread->currentDepth,
