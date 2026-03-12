@@ -57,8 +57,8 @@ typedef GC_HEADER_TYPE GC_header;
 #define PRIxHDR PRIxHDR_(GC_MODEL_HEADER_SIZE)
 #define FMTHDR "%08"PRIxHDR
 
-COMPILE_TIME_ASSERT(sizeof_objptr__eq__sizeof_header,
-                    sizeof(objptr) == sizeof(GC_header));
+STATIC_ASSERT(sizeof(objptr) == sizeof(GC_header),
+              "sizeof(objptr) equals sizeof(GC_header)");
 
 /* SAM_NOTE: mlton/backend/packed-representation.fun relies
  * on TYPE_INDEX_BITS = 19 in order to mask headers in case expressions.

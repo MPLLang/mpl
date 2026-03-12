@@ -24,35 +24,33 @@ typedef struct GC_intInf {
   struct GC_intInf_obj obj;
 } __attribute__ ((packed)) *GC_intInf;
 
-COMPILE_TIME_ASSERT(GC_intInf__obj_packed,
-                    offsetof(struct GC_intInf, obj) ==
-                    sizeof(GC_sequenceCounter)
-                    + sizeof(GC_sequenceLength)
-                    + sizeof(GC_header)
-                    /*+ sizeof(objptr)*/);
-COMPILE_TIME_ASSERT(GC_intInf_obj__isneg_packed,
-                    offsetof(struct GC_intInf_obj, isneg) ==
-                    0);
-COMPILE_TIME_ASSERT(GC_intInf_obj__limbs_packed,
-                    offsetof(struct GC_intInf_obj, limbs) ==
-                    0 + sizeof(mp_limb_t));
+STATIC_ASSERT(offsetof(struct GC_intInf, obj) ==
+              sizeof(GC_sequenceCounter)
+              + sizeof(GC_sequenceLength)
+              + sizeof(GC_header)
+              /*+ sizeof(objptr)*/,
+              "offsetof(struct GC_intInf, obj) equals sequenceCounter+sequenceLength+header size");
+STATIC_ASSERT(offsetof(struct GC_intInf_obj, isneg) == 0,
+              "offsetof(struct GC_intInf_obj, isneg) is 0");
+STATIC_ASSERT(offsetof(struct GC_intInf_obj, limbs) == 0 + sizeof(mp_limb_t),
+              "offsetof(struct GC_intInf_obj, limbs) equals sizeof(mp_limb_t)");
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-COMPILE_TIME_ASSERT(sizeof_mp_limb_t__is_four_or_eight,
-                    (sizeof(mp_limb_t) == 4 || sizeof(mp_limb_t) == 8));
+STATIC_ASSERT((sizeof(mp_limb_t) == 4 || sizeof(mp_limb_t) == 8),
+              "sizeof(mp_limb_t) is 4 or 8");
 #define GC_INTINF_HEADER ( \
         CHAR_BIT * sizeof(mp_limb_t) == 32 ? \
         GC_WORD32_VECTOR_HEADER : ( \
         CHAR_BIT * sizeof(mp_limb_t) == 64 ? \
         GC_WORD64_VECTOR_HEADER : ( 0 ) ) )
 
-COMPILE_TIME_ASSERT(sizeof_mp_limb_t__compat__sizeof_objptr,
-                    sizeof(objptr) <= sizeof(mp_limb_t) ?
-                    sizeof(mp_limb_t) % sizeof(objptr) == 0 :
-                    sizeof(objptr) % sizeof(mp_limb_t) == 0);
+STATIC_ASSERT(sizeof(objptr) <= sizeof(mp_limb_t) ?
+              sizeof(mp_limb_t) % sizeof(objptr) == 0 :
+              sizeof(objptr) % sizeof(mp_limb_t) == 0,
+              "mp_limb_t size is compatible with objptr size");
 
 #define LIMBS_PER_OBJPTR ( \
         sizeof(mp_limb_t) >= sizeof(objptr) ? \

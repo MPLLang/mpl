@@ -70,38 +70,37 @@ typedef struct GC_thread {
 } __attribute__ ((packed)) *GC_thread;
 
 #ifdef DETECT_ENTANGLEMENT
-
-COMPILE_TIME_ASSERT(GC_thread__packed,
-                    sizeof(struct GC_thread) ==
-                    sizeof(uint32_t) + // spareHeartbeatTokens
-                    sizeof(int32_t) +  // currentProcNum
-                    sizeof(size_t) +  // bytesNeeded
-                    sizeof(ptrdiff_t) +  // exnStack
-                    sizeof(uint32_t) + // currentDepth
-                    sizeof(uint32_t) + // minLocalCollectionDepth
-                    sizeof(decheck_tid_t) + // disentanglement checker state
-                    DECHECK_DEPTHS_LEN * sizeof(uint32_t) + // disentanglement checker state
-                    sizeof(size_t) +  // bytesAllocatedSinceLastCollection
-                    sizeof(size_t) +  // bytesSurvivedLastCollection
-                    sizeof(void*) +   // hierarchicalHeap
-                    sizeof(void*) +   // currentCheck
-                    sizeof(objptr));  // stack
+static_assert(sizeof(struct GC_thread) ==
+              sizeof(uint32_t) + // spareHeartbeatTokens
+              sizeof(int32_t) +  // currentProcNum
+              sizeof(size_t) +  // bytesNeeded
+              sizeof(ptrdiff_t) +  // exnStack
+              sizeof(uint32_t) + // currentDepth
+              sizeof(uint32_t) + // minLocalCollectionDepth
+              sizeof(decheck_tid_t) + // disentanglement checker state
+              DECHECK_DEPTHS_LEN * sizeof(uint32_t) + // disentanglement checker state
+              sizeof(size_t) +  // bytesAllocatedSinceLastCollection
+              sizeof(size_t) +  // bytesSurvivedLastCollection
+              sizeof(void*) +   // hierarchicalHeap
+              sizeof(void*) +   // currentCheck
+              sizeof(objptr),  // stack
+              "GC_thread packed");
 
 #else
 
-COMPILE_TIME_ASSERT(GC_thread__packed,
-                    sizeof(struct GC_thread) ==
-                    sizeof(uint32_t) + // spareHeartbeatTokens
-                    sizeof(int32_t) +  // currentProcNum
-                    sizeof(size_t) +  // bytesNeeded
-                    sizeof(ptrdiff_t) +  // exnStack
-                    sizeof(uint32_t) + // currentDepth
-                    sizeof(uint32_t) + // minLocalCollectionDepth
-                    sizeof(size_t) +  // bytesAllocatedSinceLastCollection
-                    sizeof(size_t) +  // bytesSurvivedLastCollection
-                    sizeof(void*) +   // hierarchicalHeap
-                    sizeof(void*) +   // currentCheck
-                    sizeof(objptr));  // stack
+static_assert(sizeof(struct GC_thread) ==
+              sizeof(uint32_t) + // spareHeartbeatTokens
+              sizeof(int32_t) +  // currentProcNum
+              sizeof(size_t) +  // bytesNeeded
+              sizeof(ptrdiff_t) +  // exnStack
+              sizeof(uint32_t) + // currentDepth
+              sizeof(uint32_t) + // minLocalCollectionDepth
+              sizeof(size_t) +  // bytesAllocatedSinceLastCollection
+              sizeof(size_t) +  // bytesSurvivedLastCollection
+              sizeof(void*) +   // hierarchicalHeap
+              sizeof(void*) +   // currentCheck
+              sizeof(objptr),  // stack
+              "GC_thread packed");
 
 #endif // DETECT_ENTANGLEMENT
 

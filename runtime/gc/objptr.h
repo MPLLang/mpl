@@ -17,8 +17,8 @@ typedef OBJPTR_TYPE objptr;
 #define PRIxOBJPTR PRIxOBJPTR_(GC_MODEL_OBJPTR_SIZE)
 #define FMTOBJPTR "0x%016"PRIxOBJPTR
 
-COMPILE_TIME_ASSERT(sizeof_voidStar__gte__sizeof_objptr,
-                    sizeof(void*) >= sizeof(objptr));
+STATIC_ASSERT(sizeof(void*) >= sizeof(objptr),
+              "sizeof(void *) is greater than or equal to sizeof(objptr)");
 
 #define BOGUS_OBJPTR (objptr)0x1
 

@@ -59,7 +59,7 @@ CPPFLAGS :=
 CFLAGS :=
 LDFLAGS :=
 
-XCCFLAGS := -std=gnu11
+XCCFLAGS := -std=c2x
 XMFLAGS :=
 XCPPFLAGS :=
 XCFLAGS := -fno-common -pedantic -Wall -Wextra

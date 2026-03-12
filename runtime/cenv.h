@@ -24,6 +24,18 @@
 #define NDEBUG
 #endif
 
+#if !defined(__STDC_VERSION__)
+  #error "unknown stdc version"
+#endif
+
+#if __STDC_VERSION__ < 201112L
+  #error "Requires C11 or newer to use <stdatomic.h>."
+#endif
+
+#ifdef __STDC_NO_ATOMICS__
+  #error "Compiler does not support <stdatomic.h>"
+#endif
+
 /****************/
 /* Header Files */
 /****************/
@@ -46,12 +58,19 @@
 #include <time.h>
 #include <gmp.h>
 
+#ifndef STATIC_ASSERT
+  #if __STDC_VERSION__ >= 202311L
+    #define STATIC_ASSERT(expr, msg) static_assert(expr, msg)
+  #elif __STDC_VERSION__ >= 201112L
+    #include <assert.h>
+    #define STATIC_ASSERT(expr, msg) _Static_assert(expr, msg)
+  #endif
+#endif
+
 /* Various compile-time sanity checks */
-#define COMPILE_TIME_ASSERT(name, x) \
-        typedef int _COMPILE_TIME_ASSERT___##name[(x) ? 1 : -1]
-COMPILE_TIME_ASSERT(CHAR_BIT__is_eight, CHAR_BIT == 8);
-COMPILE_TIME_ASSERT(sizeof_float__is_four, sizeof(float) == 4);
-COMPILE_TIME_ASSERT(sizeof_double__is_eight, sizeof(double) == 8);
+STATIC_ASSERT(CHAR_BIT == 8, "CHAR_BIT is eight");
+STATIC_ASSERT(sizeof(float) == 4, "sizeof(float) is four");
+STATIC_ASSERT(sizeof(double) == 8, "sizeof(double) is eight");
 
 /**********************************/
 /* Platform-Specific Header Files */
@@ -64,18 +83,6 @@ COMPILE_TIME_ASSERT(sizeof_double__is_eight, sizeof(double) == 8);
   do {                                                                  \
     _Pragma ("message \"set_cpu_affinity() not implemented for this platform!\""); \
   } while (0)
-
-/**
- * This platform switch sets platform-specific includes for fenv.h, inttypes.h,
- * stdint.h, and more
- */
-#if (defined (__GNUC__))
-#if ((__GNUC__ >= 4) && (__GNUC_MINOR__ >= 8))
-#include "platform/atomics-gcc-gte48.h"
-#else
-#include "platform/atomics-gcc-lt48.h"
-#endif
-#endif
 
 #if (defined (_AIX))
 #include "platform/aix.h"
@@ -158,16 +165,16 @@ COMPILE_TIME_ASSERT(sizeof_double__is_eight, sizeof(double) == 8);
 #endif
 
 /* More compile-time sanity checks */
-COMPILE_TIME_ASSERT(sizeof_uintptr_t__is__sizeof_voidStar,
-                    sizeof(uintptr_t) == sizeof(void*));
-COMPILE_TIME_ASSERT(sizeof_uintptr_t__is__sizeof_size_t,
-                    sizeof(uintptr_t) == sizeof(size_t));
-COMPILE_TIME_ASSERT(sizeof_uintptr_t__is__sizeof_ptrdiff_t,
-                    sizeof(uintptr_t) == sizeof(ptrdiff_t));
-COMPILE_TIME_ASSERT(sizeof_voidStar__is__pointer_bits,
-                    sizeof(void*)*CHAR_BIT == POINTER_BITS);
-COMPILE_TIME_ASSERT(address_bits__lte__pointer_bits,
-                    ADDRESS_BITS <= POINTER_BITS);
+STATIC_ASSERT(sizeof(uintptr_t) == sizeof(void*),
+              "sizeof(uintptr_t) equals sizeof(void *)");
+STATIC_ASSERT(sizeof(uintptr_t) == sizeof(size_t),
+              "sizeof(uintptr_t) equals sizeof(size_t)");
+STATIC_ASSERT(sizeof(uintptr_t) == sizeof(ptrdiff_t),
+              "sizeof(uintptr_t) equals sizeof(ptrdiff_t)");
+STATIC_ASSERT(sizeof(void*) * CHAR_BIT == POINTER_BITS,
+              "sizeof(void *) * CHAR_BIT equals POINTER_BITS");
+STATIC_ASSERT(ADDRESS_BITS <= POINTER_BITS,
+              "ADDRESS_BITS is less than or equal to POINTER_BITS");
 
 /* Defines EXTERNAL, PRIVATE, PUBLIC for MLton FFI systems */
 #include "export.h"

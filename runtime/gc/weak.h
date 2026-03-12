@@ -38,10 +38,10 @@ typedef struct GC_weak {
   objptr objptr;
 } __attribute__ ((packed)) *GC_weak;
 
-COMPILE_TIME_ASSERT(GC_weak__packed,
-                    sizeof(struct GC_weak) ==
-                    sizeof(struct GC_weak*)
-                    + sizeof(objptr));
+STATIC_ASSERT(sizeof(struct GC_weak) ==
+              sizeof(struct GC_weak*)
+              + sizeof(objptr),
+              "sizeof(struct GC_weak) equals sizeof(struct GC_weak*) + sizeof(objptr)");
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 

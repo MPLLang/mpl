@@ -23,15 +23,14 @@ typedef struct GC_string8 {
   struct GC_string8_obj obj;
 } __attribute__ ((packed)) *GC_string8;
 
-COMPILE_TIME_ASSERT(GC_string8__obj_packed,
-                    offsetof(struct GC_string8, obj) ==
-                    sizeof(GC_sequenceCounter)
-                    + sizeof(GC_sequenceLength)
-                    + sizeof(GC_header)
-                    /*+ sizeof(objptr)*/);
-COMPILE_TIME_ASSERT(GC_string8_obj__chars_packed,
-                    offsetof(struct GC_string8_obj, chars) ==
-                    0);
+STATIC_ASSERT(offsetof(struct GC_string8, obj) ==
+              sizeof(GC_sequenceCounter)
+              + sizeof(GC_sequenceLength)
+              + sizeof(GC_header)
+              /*+ sizeof(objptr)*/,
+              "offsetof(struct GC_string8, obj) equals sequenceCounter+sequenceLength+header size");
+STATIC_ASSERT(offsetof(struct GC_string8_obj, chars) == 0,
+              "offsetof(struct GC_string8_obj, chars) is 0");
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 

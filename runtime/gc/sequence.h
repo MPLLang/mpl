@@ -37,10 +37,10 @@ typedef GC_sequenceLength GC_sequenceCounter;
 #define FMTSEQCTR "%"PRIxSEQCTR
 #define GC_SEQUENCE_METADATA_SIZE (GC_SEQUENCE_COUNTER_SIZE + GC_SEQUENCE_LENGTH_SIZE + GC_HEADER_SIZE)
 
-COMPILE_TIME_ASSERT(sizeof_header__le__sizeof_seqlen,
-                    sizeof(GC_header) <= sizeof(GC_sequenceLength));
-COMPILE_TIME_ASSERT(sizeof_seqlen__eq__sizeof_seqctr,
-                    sizeof(GC_sequenceLength) == sizeof(GC_sequenceCounter));
+STATIC_ASSERT(sizeof(GC_header) <= sizeof(GC_sequenceLength),
+              "sizeof(GC_header) is less than or equal to sizeof(GC_sequenceLength)");
+STATIC_ASSERT(sizeof(GC_sequenceLength) == sizeof(GC_sequenceCounter),
+              "sizeof(GC_sequenceLength) equals sizeof(GC_sequenceCounter)");
 
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
