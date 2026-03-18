@@ -72,6 +72,7 @@ end
 functor ManagedLoops (LoopIndex: LOOP_INDEX) :>
 sig
   val pareduce: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
+  val pareduce2: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val pareduceBreakExn: (int * int) -> 'a -> (('a -> exn) * int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val reducem: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
   val parform: (int * int) -> (int -> unit) -> unit
@@ -81,31 +82,90 @@ struct
 
   open ForkJoin0
 
+  fun reduceSplit (reduce: (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a -> 'a -> idx -> idx -> 'a)
+                  (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a) (z: 'a)
+                  (b: 'a) (i: idx) (j: idx): 'a =
+    if LoopIndex.equal (i, j) then b else
+      spork {
+        body = fn () => reduce step merge z b i (LoopIndex.midpoint (i, j)),
+        unpr = fn bl => reduce step merge z bl (LoopIndex.midpoint (i, j)) j,
+        spwn = fn () => reduce step merge z z  (LoopIndex.midpoint (i, j)) j,
+        tokenPolicy = TokenPolicyFair,
+        prom = fn bl => bl,
+        sync = fn (bl, NONE) => reduce step merge z bl (LoopIndex.midpoint (i, j)) j
+                | (bl, SOME br) => __inline_always__ merge (bl, br)
+      }
+
+  fun reduce2 (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a) (z: 'a)
+              (b: 'a) (i: idx) (j: idx): 'a =
+    if LoopIndex.equal (i, j) then b else
+      spork {
+        body = fn () => __inline_always__ step (LoopIndex.toInt i, b),
+        unpr = fn b' => reduce2 step merge z b' (LoopIndex.increment i) j,
+        tokenPolicy = TokenPolicyGive,
+        spwn = fn () => reduceSplit reduceI step merge z z (LoopIndex.increment i) j,
+        prom = fn b' => b',
+        sync = fn (b', NONE) => reduceSplit reduceI step merge z b' (LoopIndex.increment i) j
+                | (b', SOME blr) => __inline_always__ merge (b', blr)
+      }
+  and reduceI (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a) (z: 'a)
+              (b: 'a) (i: idx) (j: idx): 'a =
+      __inline_always__ reduce2 step merge z b i j
+
+  (* fun reduce2 (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a) (z: 'a) (b: 'a) (i: idx) (j: idx): 'a = *)
+  (*   if LoopIndex.equal (i, j) then b else *)
+  (*     spork { *)
+  (*       body = fn () => __inline_always__ step (LoopIndex.toInt i, b), *)
+  (*       unpr = fn b' => reduce2 step merge z b' (LoopIndex.increment i) j, *)
+  (*       tokenPolicy = TokenPolicyGive, *)
+  (*       spwn = fn () => __inline_never__ reduceSplit step merge z z (LoopIndex.increment i) j, *)
+  (*       prom = fn b' => b', *)
+  (*       sync = fn (b', NONE) => __inline_never__ reduceSplit step merge z b' (LoopIndex.increment i) j *)
+  (*               | (b', SOME blr) => __inline_always__ merge (b', blr) *)
+  (*     } *)
+  (* and reduceSplit (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a) (z: 'a) (b: 'a) (i: idx) (j: idx): 'a = *)
+  (*     if LoopIndex.equal (i, j) then b else *)
+  (*       spork { *)
+  (*         body = fn () => reduce2 step merge z b i (LoopIndex.midpoint (i, j)), *)
+  (*         unpr = fn bl => reduce2 step merge z bl (LoopIndex.midpoint (i, j)) j, *)
+  (*         spwn = fn () => reduce2 step merge z z  (LoopIndex.midpoint (i, j)) j, *)
+  (*         tokenPolicy = TokenPolicyFair, *)
+  (*         prom = fn bl => bl, *)
+  (*         sync = fn (bl, NONE) => reduce2 step merge z bl (LoopIndex.midpoint (i, j)) j *)
+  (*                 | (bl, SOME br) => __inline_always__ merge (bl, br) *)
+  (*       } *)
+
+  fun __inline_always__ pareduce2 (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
+      if i >= j then
+        z
+      else
+        __inline_always__ reduce2 step merge z z (LoopIndex.fromInt i) (LoopIndex.fromInt j)
+
   fun __inline_always__ pareduce (i: int, j: int) (z: 'a) (step: int * 'a -> 'a) (merge: 'a * 'a -> 'a): 'a =
       let fun iter (b: 'a) (i: idx, j: idx): 'a =
               if LoopIndex.equal (i, j) then b else
-                let fun __inline_never__ spwn b' =
-                        if LoopIndex.equal (LoopIndex.increment i, j) then b' else
-                          let val mid = LoopIndex.midpoint (LoopIndex.increment i, j) in
+                let fun __inline_never__ spwn b' (i, j) =
+                        if LoopIndex.equal (i, j) then b' else
+                          let val mid = LoopIndex.midpoint (i, j) in
                             spork {
                               tokenPolicy = TokenPolicyFair,
-                              body = fn () => iter b' (LoopIndex.increment i, mid),
+                              body = fn () => iter b' (i, mid),
                               spwn = fn () => iter z (mid, j),
                               unpr = fn bl => iter bl (mid, j),
                               prom = fn bl => bl,
                               sync = fn (bl, NONE) => iter bl (mid, j)
-                                      | (bl, SOME br) => merge (bl, br)
+                                      | (bl, SOME br) => __inline_always__ merge (bl, br)
                           }
                           end
                 in
                   spork {
                     tokenPolicy = TokenPolicyGive,
                     body = fn () => __inline_always__ step (LoopIndex.toInt i, b),
-                    spwn = fn () => spwn z,
+                    spwn = fn () => spwn z (LoopIndex.increment i, j),
                     unpr = fn b' => iter b' (LoopIndex.increment i, j),
                     prom = fn b' => b',
-                    sync = fn (b', NONE) => spwn b'
-                            | (b', SOME blr) => merge (b', blr)
+                    sync = fn (b', NONE) => spwn b' (LoopIndex.increment i, j)
+                            | (b', SOME blr) => __inline_always__ merge (b', blr)
                   }
                 end
       in
@@ -162,11 +222,70 @@ struct
   fun __inline_always__ reducem g z (lo, hi) f =
     pareduce (lo, hi) z (fn (i, a) => __inline_always__ g (a, __inline_always__ f i)) g
 
-
   fun __inline_always__ parform (lo: int, hi: int) (f: int -> unit) : unit =
     reducem (fn _ => ()) () (lo, hi) f
 end
 
+structure LoopIndexInt :> LOOP_INDEX =
+struct
+  type idx = int
+  type t = idx
+             
+  fun __inline_always__ toInt (i: idx): int = i
+  fun __inline_always__ fromInt (i: int): idx = i
+
+  local
+    structure PrimIntQuot =
+    Int_ChooseInt
+      (type 'a t = 'a * 'a -> 'a
+       val fInt8 = Primitive.Int8.quotUnsafe
+       val fInt16 = Primitive.Int16.quotUnsafe
+       val fInt32 = Primitive.Int32.quotUnsafe
+       val fInt64 = Primitive.Int64.quotUnsafe
+       val fIntInf = IntInf.quot)
+    structure PrimIntAdd =
+    Int_ChooseInt
+      (type 'a t = 'a * 'a -> 'a
+       val fInt8 = Primitive.Int8.+!
+       val fInt16 = Primitive.Int16.+!
+       val fInt32 = Primitive.Int32.+!
+       val fInt64 = Primitive.Int64.+!
+       val fIntInf = IntInf.+ )
+    structure PrimIntSub =
+    Int_ChooseInt
+      (type 'a t = 'a * 'a -> 'a
+       val fInt8 = Primitive.Int8.-!
+       val fInt16 = Primitive.Int16.-!
+       val fInt32 = Primitive.Int32.-!
+       val fInt64 = Primitive.Int64.-!
+       val fIntInf = IntInf.- )
+    structure PrimIntMul =
+    Int_ChooseInt
+      (type 'a t = 'a * 'a -> 'a
+       val fInt8 = Primitive.Int8.*!
+       val fInt16 = Primitive.Int16.*!
+       val fInt32 = Primitive.Int32.*!
+       val fInt64 = Primitive.Int64.*!
+       val fIntInf = IntInf.* )
+  in
+  fun __inline_always__ quotUnsafe (a: int, b: int): int =
+      PrimIntQuot.f (a, b)
+  fun __inline_always__ addUnsafe (a: int, b: int): int =
+      PrimIntAdd.f (a, b)
+  fun __inline_always__ subUnsafe (a: int, b: int): int =
+      PrimIntSub.f (a, b)
+  fun __inline_always__ mulUnsafe (a: int, b: int): int =
+      PrimIntMul.f (a, b)
+  end
+
+  fun __inline_always__ midpoint (i: idx, j: idx): idx =
+      addUnsafe (i, quotUnsafe (subUnsafe (j, i), 2))
+
+  fun __inline_always__ increment (i: idx): idx =
+      addUnsafe (i, 1)
+
+  fun __inline_always__ equal (i: idx, j: idx) = (i = j)
+end
 
 functor LoopIndexFromWord(WordImpl: WORD) :> LOOP_INDEX =
 struct
@@ -181,8 +300,8 @@ struct
       (* This way is broken! *)
       (* val mid = WordImpl.~>> (WordImpl.+ (i, j), 0w1) *)
 
-      val range_size = WordImpl.+ (j, WordImpl.~ i)
-      val mid = WordImpl.+ (i, WordImpl.div (range_size, WordImpl.fromInt 2))
+      val range_size = WordImpl.- (j, i)
+      val mid = WordImpl.+ (i, WordImpl.>> (range_size, 0w1))
     in
       (* If using a different midpoint calculation, consider uncommenting
        * the following for debugging/testing.
@@ -223,6 +342,7 @@ sig
   val spork: {tokenPolicy: TokenPolicy, body: unit -> 'a, spwn: unit -> 'b, unpr: 'a -> 'x, prom: 'a -> 'c, sync: 'c * 'b option -> 'x} -> 'x
 
   val pareduce: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
+  val pareduce2: (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
   val pareduceBreakExn: (int * int) -> 'a -> (('a -> exn) * int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
 
   val reducem: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
@@ -269,6 +389,16 @@ struct
       val fIntInf = LoopsInt.pareduce
     end)
 
+  structure Pareduce2 =
+    Int_ChooseFromInt (struct
+      type 'a t = (int * int) -> 'a -> (int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
+      val fInt8 = Loops8.pareduce2
+      val fInt16 = Loops16.pareduce2
+      val fInt32 = Loops32.pareduce2
+      val fInt64 = Loops64.pareduce2
+      val fIntInf = LoopsInt.pareduce2
+    end)
+
   structure PareduceBreakExn =
     Int_ChooseFromInt (struct
       type 'a t = (int * int) -> 'a -> (('a -> exn) * int * 'a -> 'a) -> ('a * 'a -> 'a) -> 'a
@@ -300,7 +430,14 @@ struct
     end)
 
   val pareduce = Pareduce.f
+  val pareduce2 = Pareduce2.f
   val pareduceBreakExn = PareduceBreakExn.f
   val reducem = Reducem.f
   val parform = Parform.f
+  (* structure LoopsInt' = ManagedLoops(LoopIndexInt) *)
+  (* val pareduce = LoopsInt'.pareduce *)
+  (* val pareduce2 = LoopsInt'.pareduce2 *)
+  (* val pareduceBreakExn = LoopsInt'.pareduceBreakExn *)
+  (* val reducem = LoopsInt'.reducem *)
+  (* val parform = LoopsInt'.parform *)
 end

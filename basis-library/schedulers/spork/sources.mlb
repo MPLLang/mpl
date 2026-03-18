@@ -12,8 +12,11 @@ local
     structure ArrayExtra = Array
     structure ArraySliceExtra = ArraySlice
     structure Primitive
+    structure MLtonFFI
 
     functor Int_ChooseFromInt
+    functor Int_ChooseInt
+    functor Word_ChooseWordN
   end
 
   CumulativePerProcTimer.sml

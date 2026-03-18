@@ -511,10 +511,14 @@ void GC_registerQueueBot(uint32_t processor, pointer botPointer) {
   s->procStates[processor].wsQueueBot = pointerToObjptr(botPointer, NULL);
 }
 
-objptr globalSchedPackage;
+/* pointer GC_globalSchedPackage; */
+/* objptr GC_castToObjptr(pointer p) { return x; } */
+/* pointer GC_castFmObjptr(objptr o) { return x; } */
+
+objptr GC_globalSchedPackage;
 void GC_setGlobalSchedPackage(objptr schedPackage) {
-    globalSchedPackage = schedPackage;
+    GC_globalSchedPackage = schedPackage;
 }
 objptr GC_getGlobalSchedPackage() {
-    return globalSchedPackage;
+    return GC_globalSchedPackage;
 }

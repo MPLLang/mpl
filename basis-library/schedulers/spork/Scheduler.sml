@@ -1008,7 +1008,17 @@ struct
      * See note at `HH.setDepth (originalThread, 1)` below for why this
      * is not garbage collected.
      *)
-    val sched_package_data =
+    type sched_package_type =
+      { syncEndAtomic: joinpoint -> Universal.t Result.t option
+      , maybeSpawn: {youngestOptimization: bool} -> Thread.t -> bool
+      , setQueueDepth: int -> int -> unit
+      , returnToSchedEndAtomic: unit -> unit
+      , addEagerSpawns: int -> unit
+      , assertAtomic: string -> int -> unit
+      , die: (unit -> string) -> unit
+      , intToString: int -> string
+      }
+    val sched_package_data: sched_package_type =
       { syncEndAtomic = syncEndAtomic
       , maybeSpawn = maybeSpawn
       , setQueueDepth = setQueueDepth
@@ -1021,14 +1031,27 @@ struct
 
     (* fun sched_package () = !sched_package_data *)
 
-    val setSchedPackageFFI =
-      _import "GC_setGlobalSchedPackage" runtime private: Universal.t -> unit;
+    val (injectSchedPackage, projectSchedPackage) = Universal.embedSure ()
     val getSchedPackageFFI =
       _import "GC_getGlobalSchedPackage" runtime private: unit -> Universal.t;
-    (* (sched_package_type -> Universal.t) * (Universal.t -> sched_package_type) *)
-    val (injectSchedPackage, projectSchedPackage) = Universal.embedSure ()
+    val setSchedPackageFFI =
+      _import "GC_setGlobalSchedPackage" runtime private: Universal.t -> unit;
     val _ = setSchedPackageFFI (injectSchedPackage sched_package_data)
-    fun sched_package () = projectSchedPackage (getSchedPackageFFI ())
+    fun sched_package (): sched_package_type =
+        projectSchedPackage (getSchedPackageFFI ())
+
+    (* val GC_globalSchedPackage = *)
+    (*     _address "GC_globalSchedPackage" private: MLton.Pointer.t; *)
+    (* val GC_getsetGlobalSchedPackage = *)
+    (*     _symbol "GC_globalSchedPackage": (unit -> Universal.t ref) * (Universal.t ref -> unit); *)
+    (* val (getSchedPackageFFI, setSchedPackageFFI) = *)
+    (*     GC_getsetGlobalSchedPackage *)
+    (* val (getSchedPackageFFI, setSchedPackageFFI) = *)
+    (*     _symbol  private : (unit -> Universal.t ref) * (Universal.t ref -> unit); *)
+    (* (sched_package_type -> Universal.t) * (Universal.t -> sched_package_type) *)
+
+    (* val _ = MLtonFFI.setObjptr (GC_globalSchedPackage, 0, injectSchedPackage sched_package_data) *)
+    (* fun sched_package (): sched_package_type = projectSchedPackage (MLtonFFI.getObjptr (GC_globalSchedPackage, 0)) *)
 
     exception SchedulerError
 
@@ -1128,38 +1151,41 @@ struct
                                      unpr: 'a -> 'x,
                                      prom: 'a -> 'c,
                                      sync: 'c * 'b option -> 'x): 'x =
-      let
-        val (inject, project) = Universal.embedSure ()
+      let val (inject, project) = Universal.embedSure () in
+        __inline_always__ primSpork (
+          (* body *)
+          fn __inline_always__ () =>
+             (tryPromoteNow (); __inline_always__ body ()),
 
-        fun __inline_always__ body' (): 'a =
-            (tryPromoteNow (); __inline_always__ body ())
+          (* spwn *)
+          fn __inline_always__ ((), jp: joinpoint) =>
+             let val (thread, depth) = sporkPreSpwn jp
+                 val spwnr = Result.result (fn () => inject (__inline_always__ spwn ()))
+                 val _ = sporkPostSpwn (spwnr, jp, thread, depth)
+             in () end,
 
-        fun __inline_always__ spwn' ((), jp): unit =
-          let val (thread, depth) = sporkPreSpwn jp
-              val spwnr = Result.result (fn () => inject (__inline_always__ spwn ()))
-              val _ = sporkPostSpwn (spwnr, jp, thread, depth)
-          in
-            ()
-          end
+          (* unpr *)
+          fn __inline_always__ (bodyr: 'a) =>
+             __inline_always__ unpr bodyr,
 
-        fun __inline_always__ unpr' (bodyr: 'a): 'x =
-            __inline_always__ unpr bodyr
+          (* prom *)
+          fn __inline_always__ (bodyr: 'a, jp: joinpoint) =>
+             let val promr = Result.result' (fn a => __inline_always__ prom a, bodyr)
+                 val spwnr = sporkSync jp
+                 val promres = Result.extractResult promr
+                 val spwnres = Option.map (project o Result.extractResult) spwnr
+             in
+               __inline_always__ sync (promres, spwnres)
+             end,
 
-        fun __inline_always__ prom' (bodyr: 'a, jp: joinpoint): 'x =
-            let val promr = Result.result' (fn a => __inline_always__ prom a, bodyr)
-                val spwnr = sporkSync jp
-                val promres = Result.extractResult promr
-                val spwnres = Option.map (project o Result.extractResult) spwnr
-            in
-              __inline_always__ sync (promres, spwnres)
-            end
-              
-        fun __inline_always__ exnunpr' (e: exn): 'x =
-            raise e
-        fun __inline_always__ exnprom' (e: exn, jp: joinpoint): 'x =
-            (sporkSync jp; raise e)
-      in
-        __inline_always__ primSpork (body', spwn', unpr', prom', exnunpr', exnprom')
+          (* exn unpr *)
+          fn __inline_always__ (e: exn) =>
+             raise e,
+
+          (* exn prom *)
+          fn __inline_always__ (e: exn, jp: joinpoint) =>
+             (sporkSync jp; raise e)
+        )
       end
 
     fun __inline_always__ spork
