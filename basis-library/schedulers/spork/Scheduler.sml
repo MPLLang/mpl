@@ -231,15 +231,15 @@ struct
 
   fun assertTokenInvariants thread msg =
     let
-      val depth = HH.getDepth (Thread.current ())
+      val depth = Depth.get (Thread.current ())
       val notOkay =
-        depth < Queue.capacity
+        depth < Word32.fromInt (Queue.capacity)
         andalso depthOkayForDECheck depth
         andalso Heartbeat.enoughToSpawn ()
         andalso HH.canForkThread thread
     in
       if notOkay then
-        die (fn _ => "scheduler bug: " ^ msg ^ ": assertTokenInvariants: thread at depth " ^ Int.toString depth ^ " can fork but has tokens")
+        die (fn _ => "scheduler bug: " ^ msg ^ ": assertTokenInvariants: thread at depth " ^ Depth.toString depth ^ " can fork but has tokens")
       else
         ()
     end
@@ -252,9 +252,9 @@ struct
    * we should use for the chunks allocated for these tasks.
    *)
   datatype task =
-    NormalTask of (unit -> unit) * Word64.word * int
-  | NewThread of Thread.p * Word64.word * int
-  | Continuation of Thread.t * int
+    NormalTask of (unit -> unit) * Word64.word * Depth.t
+  | NewThread of Thread.p * Word64.word * Depth.t
+  | Continuation of Thread.t * Depth.t
   | GCTask of gctask_data
 
   (* ========================================================================
@@ -359,10 +359,10 @@ struct
     * MAXIMUM FORK DEPTHS
     *)
 
-  val maxForkDepths = Array.array (P, 0)
+  val maxForkDepths = Array.array (P, (0w0 : Word32.word))
 
   fun maxForkDepthSoFar () =
-    Array.foldl Int.max 0 maxForkDepths
+    Array.foldl Word32.max (0w0 : Word32.word) maxForkDepths
 
   fun recordForkDepth d =
     let
@@ -510,7 +510,7 @@ struct
     fun spawnGC interruptedThread : gc_joinpoint option =
       let
         val thread = Thread.current ()
-        val depth = HH.getDepth thread
+        val depth = Depth.get thread
       in
         if depth > maxCCDepth then
           NONE
@@ -538,11 +538,11 @@ struct
             else
               let
                 val (tidLeft, tidRight) = DE.decheckFork ()
-                val _ = push gcTask
-                val _ = HH.setDepth (thread, depth + 1)
-                val _ = DE.decheckSetTid tidLeft
-                val _ = HH.forceLeftHeap(myWorkerId(), thread)
               in
+                push gcTask;
+                Depth.set (thread, Depth.childOf depth);
+                DE.decheckSetTid tidLeft;
+                HH.forceLeftHeap(myWorkerId(), thread);
                 SOME (GCJ {gcTaskData = gcTaskData, tidRight = tidRight})
               end
           end
@@ -553,8 +553,8 @@ struct
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
-        val depth = HH.getDepth thread
-        val newDepth = depth-1
+        val depth = Depth.get thread
+        val newDepth = Depth.parentOf depth
       in
         if popDiscard() then
           ( ()
@@ -567,8 +567,8 @@ struct
           ; dbgmsg' (fn _ => "back from GC stuff")
           )
         else
-          ( setQueueDepth (myWorkerId ()) newDepth
-          );
+          (* I have completed both subtasks *)
+          setQueueDepth (myWorkerId ()) newDepth;
 
         (* This can be reused here... the name isn't appropriate in this
          * context, but the functionality is the same:
@@ -598,7 +598,7 @@ struct
         val thread = Thread.current ()
         val depth = HH.getDepth thread
 
-        val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Int.toString depth)
+        val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Depth.toString depth)
 
         (* We use a ref here instead of using rightSideThread directly.
          * The rightSideThread is a Thread.p (it doesn't have a heap yet).
@@ -644,7 +644,7 @@ struct
 
         (* double check... hopefully correct, not off by one? *)
         val _ = push (NewThread (rightSideThread, tidParent, depth))
-        val _ = HH.setDepth (thread, depth + 1)
+        val _ = Depth.set (thread, Depth.childOf depth)
 
         (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
         val _ = recordForkDepth depth
@@ -664,7 +664,7 @@ struct
       let
         val depth = HH.getDepth (Thread.current ())
       in
-        if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
+        if Word32.toInt depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
           false
         else if not (findNextPromotableFrame (youngestOptimization, interruptedLeftThread)) then
           false
@@ -688,7 +688,7 @@ struct
 
         val depth = HH.getDepth thread
 
-        val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Int.toString depth)
+        val _ = dbgmsg'' (fn _ => "spawning at depth " ^ Depth.toString depth)
 
         (* We use a ref here instead of using rightSideThread directly.
          * The rightSideThread is a Thread.p (it doesn't have a heap yet).
@@ -706,7 +706,7 @@ struct
 
         fun g' () =
           let
-            val () = DE.copySyncDepthsFromThread (thread, Thread.current (), depth+1)
+            val () = DE.copySyncDepthsFromThread (thread, Thread.current (), Depth.childOf depth)
             val () = DE.decheckSetTid tidRight
             val () = HH.forceLeftHeap(myWorkerId(), Thread.current ())
             val _ = Heartbeat.addSpare half
@@ -743,7 +743,7 @@ struct
 
         (* double check... hopefully correct, not off by one? *)
         val _ = push (NormalTask (g', tidParent, depth))
-        val _ = HH.setDepth (thread, depth + 1)
+        val _ = Depth.set (thread, Depth.childOf depth)
 
         (* NOTE: off-by-one on purpose. Runtime depths start at 1. *)
         val _ = recordForkDepth depth
@@ -769,9 +769,9 @@ struct
 
     fun maybeSpawnFunc {allowCGC: bool} (g: unit -> 'a) : 'a joinpoint option =
       let
-        val depth = HH.getDepth (Thread.current ())
+        val depth = Depth.get (Thread.current ())
       in
-        if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
+        if Word32.toInt depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
           NONE
         else
           SOME (doSpawnFunc {allowCGC=allowCGC} g)
@@ -780,7 +780,7 @@ struct
 
     (** Must be called in an atomic section. Implicit atomicEnd() *)
     fun syncEndAtomic
-        (doClearSuspects: Thread.t * int -> unit)
+        (doClearSuspects: Thread.t * Depth.t -> unit)
         (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, spareHeartbeatsGiven, tokenPolicy, ...} : 'a joinpoint)
         : 'a Result.t option
       =
@@ -788,8 +788,8 @@ struct
         val _ = assertAtomic "syncEndAtomic begin" 1
 
         val thread = Thread.current ()
-        val depth = HH.getDepth thread
-        val newDepth = depth-1
+        val depth = Depth.get thread
+        val newDepth = Depth.parentOf depth
         val tidLeft = DE.decheckGetTid thread
 
         val result =
@@ -801,7 +801,7 @@ struct
            * appropriately.)
            *)
           if popDiscard () then
-            let val _ = dbgmsg'' (fn _ => "popDiscard success at depth " ^ Int.toString depth)
+            let val _ = dbgmsg'' (fn _ => "popDiscard success at depth " ^ Depth.toString depth)
                 (* promote chunks into parent, update depth->newDepth, update
                  * decheck state by joining tidLeft and tidRight.
                  *)
@@ -810,7 +810,8 @@ struct
                 val _ = traceSchedJoinFast ()
                 val _ = Thread.atomicEnd ()
                 val _ = doClearSuspects (thread, newDepth)
-                val _ = if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
+                val _ = if newDepth <> Depth.scheduler then ()
+                        else HH.updateBytesPinnedEntangledWatermark ()
                 val _ = case tokenPolicy of
                             TokenPolicyGive => Heartbeat.addSpare spareHeartbeatsGiven
                           | _ => Heartbeat.zero
@@ -866,7 +867,8 @@ struct
                           )
                   in
                     doClearSuspects (thread, newDepth);
-                    if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ();
+                    if newDepth <> Depth.scheduler then ()
+                    else HH.updateBytesPinnedEntangledWatermark ();
                     SOME result
                   end
             )
@@ -1061,8 +1063,8 @@ struct
             val () = DE.decheckSetTid (#tidRight jp)
 
             val thread = Thread.current ()
-            val depth = HH.getDepth thread
-            val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Int.toString depth)
+            val depth = Depth.get thread
+            val _ = dbgmsg'' (fn _ => "rightside begin at depth " ^ Depth.toString depth)
 
             val _ = HH.forceLeftHeap(myWorkerId(), thread)
             val _ = Heartbeat.addSpare (#spareHeartbeatsGiven jp)
@@ -1072,11 +1074,11 @@ struct
             val spwnr = Result.result (inject o spwn)
 
             val _ = Thread.atomicBegin ()
-            val depth' = HH.getDepth (Thread.current ())
+            val depth' = Depth.get (Thread.current ())
             val _ =
               if depth = depth' then ()
-              else #error (sched_package ()) ("scheduler bug: rightide depth mismatch: " ^ Int.toString depth ^ " vs " ^ Int.toString depth')
-            val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Int.toString depth')
+              else #error (sched_package ()) ("scheduler bug: rightide depth mismatch: " ^ Depth.toString depth ^ " vs " ^ Depth.toString depth')
+            val _ = dbgmsg'' (fn _ => "rightside done! at depth " ^ Depth.toString depth')
             val _ = #assertAtomic (sched_package ()) "spork rightside begin synchronize" 1
           in
             #rightSideThread jp := SOME thread;
@@ -1173,8 +1175,8 @@ struct
   fun setupSchedLoop () =
     let
       val mySchedThread = Thread.current ()
-      val _ = HH.setDepth (mySchedThread, 1)
-      val _ = HH.setMinLocalCollectionDepth (mySchedThread, 1)
+      val _ = Depth.set (mySchedThread, Depth.scheduler)
+      val _ = HH.setMinLocalCollectionDepth (mySchedThread, Depth.scheduler)
 
       val myId = myWorkerId ()
       val myRand = SimpleRandom.rand myId
@@ -1182,7 +1184,7 @@ struct
         vectorSub (workerLocalData, myId)
       val _ = schedThread := SOME mySchedThread
 
-      val _ = Queue.setDepth myQueue 1
+      val _ = Queue.setDepth myQueue Depth.scheduler
       val _ = Queue.register myQueue myId
 
       (* ------------------------------------------------------------------- *)
@@ -1276,7 +1278,7 @@ struct
               )
           | Continuation (thread, depth) =>
               ( ()
-              ; dbgmsg'' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
+              ; dbgmsg'' (fn _ => "stole continuation (" ^ Depth.toString depth ^ ")")
               (* ; dbgmsg' (fn _ => "resume task thread") *)
               ; Queue.setDepth myQueue depth
               ; traceSchedIdleLeave ()
@@ -1292,18 +1294,19 @@ struct
               ; traceSchedWorkLeave ()
               ; traceSchedIdleEnter ()
               ; afterReturnToSched ()
-              ; Queue.setDepth myQueue 1
+              ; Queue.setDepth myQueue Depth.scheduler
               ; acquireWork ()
               )
           | NormalTask (taskFn, tidParent, depth) =>
               let
                 val taskThread = Thread.copy prototypeThread
               in
-                if depth >= 1 then () else
-                  die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth);
-                Queue.setDepth myQueue (depth+1);
+                if depth <> Depth.kernel then ()
+                else
+                  die (fn _ => "scheduler bug: acquired with depth " ^ Depth.toString depth);
+                Queue.setDepth myQueue (Depth.childOf depth);
                 HH.moveNewThreadToDepth (taskThread, tidParent, depth);
-                HH.setDepth (taskThread, depth+1);
+                Depth.set (taskThread, Depth.childOf depth);
                 setTaskBox myId taskFn;
                 traceSchedIdleLeave ();
                 traceSchedWorkEnter ();
@@ -1318,18 +1321,18 @@ struct
                 traceSchedWorkLeave ();
                 traceSchedIdleEnter ();
                 afterReturnToSched ();
-                Queue.setDepth myQueue 1;
+                Queue.setDepth myQueue Depth.scheduler;
                 acquireWork ()
               end
           | NewThread (thread, tidParent, depth) =>
               let
                 val taskThread = Thread.copy thread
               in
-                if depth >= 1 then () else
-                  die (fn _ => "scheduler bug: acquired with depth " ^ Int.toString depth);
-                Queue.setDepth myQueue (depth+1);
+                if depth <> Depth.kernel then () else
+                  die (fn _ => "scheduler bug: acquired with depth " ^ Depth.toString depth);
+                Queue.setDepth myQueue (Depth.childOf depth);
                 HH.moveNewThreadToDepth (taskThread, tidParent, depth);
-                HH.setDepth (taskThread, depth+1);
+                Depth.set (taskThread, Depth.childOf depth);
                 (* setTaskBox myId t; *)
                 traceSchedIdleLeave ();
                 traceSchedWorkEnter ();
@@ -1344,7 +1347,7 @@ struct
                 traceSchedWorkLeave ();
                 traceSchedIdleEnter ();
                 afterReturnToSched ();
-                Queue.setDepth myQueue 1;
+                Queue.setDepth myQueue Depth.scheduler;
                 acquireWork ()
               end
         end
@@ -1370,9 +1373,9 @@ struct
 
   val originalThread = Thread.current ()
   val _ =
-    if HH.getDepth originalThread = 0 then ()
+    if Depth.get originalThread = Depth.kernel then ()
     else die (fn _ => "scheduler bug: root depth <> 0")
-  val _ = HH.setDepth (originalThread, 1)
+  val _ = Depth.set (originalThread, Depth.scheduler)
 
   (* implicitly attaches worker child heaps *)
   val _ = MLton.Parallel.initializeProcessors ()
@@ -1391,7 +1394,7 @@ struct
         (* val schedHeap = HH.newHeap () *)
       in
         amOriginal := false;
-        setQueueDepth (myWorkerId ()) 1;
+        setQueueDepth (myWorkerId ()) Depth.scheduler;
         Thread.atomicBegin ();
         threadSwitchEndAtomic schedThread
       end
@@ -1408,7 +1411,7 @@ struct
         traceSchedWorkLeave ();
         traceSchedIdleEnter ();
         afterReturnToSched ();
-        setQueueDepth (myWorkerId ()) 1;
+        setQueueDepth (myWorkerId ()) Depth.scheduler;
         acquireWork ();
         die (fn _ => "scheduler bug: scheduler exited acquire-work loop")
       end

@@ -27,7 +27,7 @@ sig
   val bytesPinnedEntangled: unit -> IntInf.int
   val bytesPinnedEntangledWatermark: unit -> IntInf.int
 
-  val getControlMaxCCDepth: unit -> int
+  val getControlMaxCCDepth: unit -> Word32.word
 
   val maxStackSizeForHeartbeat: unit -> IntInf.int
   val maxStackFramesWalkedForHeartbeat: unit -> IntInf.int

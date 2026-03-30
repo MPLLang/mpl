@@ -46,9 +46,9 @@ signature MLTON_THREAD =
           type finished_clear_set_grain
 
           (* The level (depth) of a thread's heap in the hierarchy. *)
-          val getDepth : thread -> int
-          val setDepth : thread * int -> unit
-          val setMinLocalCollectionDepth : thread * int -> unit
+          val getDepth : thread -> Word32.word
+          val setDepth : thread * Word32.word -> unit
+          val setMinLocalCollectionDepth : thread * Word32.word -> unit
 
           (*force the runtime to create a hh for the left child*)
           val forceLeftHeap : int * thread -> unit
@@ -71,9 +71,9 @@ signature MLTON_THREAD =
           (* Move all chunks at the current depth up one level. *)
           val promoteChunks : thread -> unit
 
-          val clearSuspectsAtDepth: thread * int -> unit
-          val numSuspectsAtDepth: thread * int -> int
-          val takeClearSetAtDepth: thread * int -> clear_set
+          val clearSuspectsAtDepth: thread * Word32.word -> unit
+          val numSuspectsAtDepth: thread * Word32.word -> int
+          val takeClearSetAtDepth: thread * Word32.word -> clear_set
           val numChunksInClearSet: clear_set -> int
           val processClearSetGrain: clear_set * int * int -> finished_clear_set_grain
           val commitFinishedClearSetGrain: thread * finished_clear_set_grain -> unit
@@ -82,7 +82,7 @@ signature MLTON_THREAD =
           val updateBytesPinnedEntangledWatermark: unit -> unit
 
           (* "put a new thread in the hierarchy *)
-          val moveNewThreadToDepth : thread * Word64.word * int -> unit
+          val moveNewThreadToDepth : thread * Word64.word * Word32.word -> unit
 
           val checkFinishedCCReadyToJoin: unit -> bool
 
@@ -93,7 +93,7 @@ signature MLTON_THREAD =
 
           val joinIntoParentBeforeFastClone:
             { thread: thread
-            , newDepth: int
+            , newDepth: Word32.word
             , tidLeft: Word64.word
             , tidRight: Word64.word
             }
@@ -102,7 +102,7 @@ signature MLTON_THREAD =
           val joinIntoParent:
             { thread: thread
             , rightSideThread: thread
-            , newDepth: int
+            , newDepth: Word32.word
             , tidLeft: Word64.word
             , tidRight: Word64.word
             }
@@ -114,7 +114,7 @@ signature MLTON_THREAD =
         sig
           type thread = Basic.t
 
-          val decheckMaxDepth: unit -> int option
+          val decheckMaxDepth: unit -> Word32.word option
 
           (* fork the current thread ID, returning the two child IDs *)
           val decheckFork : unit -> Word64.word * Word64.word
@@ -129,7 +129,7 @@ signature MLTON_THREAD =
           val decheckGetTid : thread -> Word64.word
 
           (* arguments are (victim thread, steal depth) *)
-          val copySyncDepthsFromThread : thread * thread * int -> unit
+          val copySyncDepthsFromThread : thread * thread * Word32.word -> unit
         end
 
       type 'a t

@@ -13,10 +13,7 @@ sig
   (* register this deque with the specified worker id *)
   val register : 'a t -> int -> unit
 
-  (* set the minimum depth of this deque, i.e. the fork depth of the
-   * MLton thread that is currently using this deque. This is used to
-   * interface with the runtime, to coordinate local garbage collections. *)
-  val setDepth : 'a t -> int -> unit
+  val setDepth: 'a t -> Depth.t -> unit
 
   (* raises Full if at capacity *)
   val pushBot : 'a t -> 'a -> unit
@@ -29,7 +26,6 @@ sig
   val numResets : 'a t -> int
 end =
 struct
-
   (* capacity is configurable, but should be small. We need to be able to
    * tag indices and pack them into 64-bit words.
    * We also subtract 1 so that we can use index ranges of the form
@@ -127,7 +123,7 @@ struct
     )
 
   fun setDepth (q as {top, bot, data}) d =
-    ABP_deque_set_depth (gcstate (), top, bot, data, Word32.fromInt d)
+    ABP_deque_set_depth (gcstate (), top, bot, data, d)
 
   fun clear ({data, ...} : 'a t) =
     for (0, Array.length data) (fn i => arrayUpdate (data, i, NONE))

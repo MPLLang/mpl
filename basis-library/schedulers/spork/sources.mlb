@@ -18,6 +18,7 @@ local
 
   CumulativePerProcTimer.sml
   SimpleRandom.sml
+  Depth.sml
   ann
     "allowFFI true"
     "allowPrim true"

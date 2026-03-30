@@ -91,23 +91,23 @@ struct
   fun collectThreadRoot (t, hh) = Prim.collectThreadRoot (t, hh)
   fun getRoot t = Prim.getRoot t
 
-  fun getDepth t = Word32.toInt (Prim.getDepth t)
-  fun setDepth (t, d) = Prim.setDepth (t, Word32.fromInt d)
+  fun getDepth t = Prim.getDepth t
+  fun setDepth t = Prim.setDepth t
   fun setMinLocalCollectionDepth (t, d) =
-    Prim.setMinLocalCollectionDepth (t, Word32.fromInt d)
+    Prim.setMinLocalCollectionDepth (t, d)
   fun moveNewThreadToDepth (t, tid, d) =
-    Prim.moveNewThreadToDepth (t, tid, Word32.fromInt d)
+    Prim.moveNewThreadToDepth (t, tid, d)
   fun checkFinishedCCReadyToJoin () =
     Prim.checkFinishedCCReadyToJoin (gcState ())
 
   fun clearSuspectsAtDepth (t, d) =
-    Prim.clearSuspectsAtDepth (gcState (), t, Word32.fromInt d)
+    Prim.clearSuspectsAtDepth (gcState (), t, d)
   
   fun numSuspectsAtDepth (t, d) =
-    Word64.toInt (Prim.numSuspectsAtDepth (gcState (), t, Word32.fromInt d))
+    Word64.toInt (Prim.numSuspectsAtDepth (gcState (), t, d))
 
   fun takeClearSetAtDepth (t, d) =
-    Prim.takeClearSetAtDepth (gcState (), t, Word32.fromInt d)
+    Prim.takeClearSetAtDepth (gcState (), t, d)
 
   fun numChunksInClearSet c =
     Word64.toInt (Prim.numChunksInClearSet (gcState (), c))
@@ -131,10 +131,10 @@ struct
     Prim.forkThread (gcState (), t, jp) *)
 
   fun joinIntoParentBeforeFastClone {thread, newDepth, tidLeft, tidRight} =
-    Prim.joinIntoParentBeforeFastClone (gcState (), thread, Word32.fromInt newDepth, tidLeft, tidRight)
+    Prim.joinIntoParentBeforeFastClone (gcState (), thread, newDepth, tidLeft, tidRight)
 
   fun joinIntoParent {thread, rightSideThread, newDepth, tidLeft, tidRight} =
-    Prim.joinIntoParent (gcState (), thread, rightSideThread, Word32.fromInt newDepth, tidLeft, tidRight)
+    Prim.joinIntoParent (gcState (), thread, rightSideThread, newDepth, tidLeft, tidRight)
 end
 
 structure Disentanglement =
@@ -146,7 +146,7 @@ struct
       val r = ref 0w0
     in
       if Prim.decheckMaxDepth r then
-        SOME (Word32.toIntX (!r))
+        SOME (!r)
       else
         NONE
     end
@@ -168,7 +168,7 @@ struct
   fun decheckGetTid thread = Prim.decheckGetTid (gcState (), thread)
 
   fun copySyncDepthsFromThread (from, to, stealDepth) =
-    Prim.copySyncDepthsFromThread (gcState (), from, to, Word32.fromInt stealDepth)
+    Prim.copySyncDepthsFromThread (gcState (), from, to, stealDepth)
 end
 
 (*

@@ -228,7 +228,7 @@ sig
 
   val idleTimeSoFar: unit -> Time.time
   val workTimeSoFar: unit -> Time.time
-  val maxForkDepthSoFar: unit -> int
+  val maxForkDepthSoFar: unit -> Word32.word
 
   val numSpawnsSoFar: unit -> int
   val numEagerSpawnsSoFar: unit -> int
