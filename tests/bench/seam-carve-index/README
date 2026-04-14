@@ -1,0 +1,7 @@
+This benchmark computes a seam-carving index, which is the order in which
+pixels are removed. This allows us to efficiently generate any intermediate
+image.
+
+So, whereas the "seam-carve" benchmark really only removes one seam
+(and this can be iterated to remove many seams), this benchmark is designed
+to carve out many seams.
