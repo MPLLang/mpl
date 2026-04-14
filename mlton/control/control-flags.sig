@@ -69,6 +69,7 @@ signature CONTROL_FLAGS =
 
       val closureConvertGlobalize: bool ref
       val closureConvertShrink: bool ref
+      val sporkChooseThreshold: int ref
 
       structure Codegen:
          sig

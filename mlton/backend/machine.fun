@@ -613,6 +613,7 @@ structure Transfer =
                   return: {return: Label.t,
                            handler: Label.t option,
                            size: Bytes.t} option}
+         (* TODO: isLoop? *)
        | Spork of {spid: Spid.t,
                    data: StackOffset.t,
                    cont: Label.t,

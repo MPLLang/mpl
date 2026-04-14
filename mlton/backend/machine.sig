@@ -185,6 +185,7 @@ signature MACHINE =
                                  handler: Label.t option (* must be kind Handler*),
                                  size: Bytes.t} option}
              | Goto of Label.t (* must be kind Jump *)
+             (* TODO: isLoopy stuff? *)
              | Spork of {spid: Spid.t,
                          data: StackOffset.t,
                          cont: Label.t,

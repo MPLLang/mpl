@@ -290,6 +290,12 @@ fun makeOptions {usage} =
        (Expert, "closure-convert-shrink", " {true|false}",
         "whether to shrink during closure conversion",
         Bool (fn b => (closureConvertShrink := b))),
+       (Expert, "spork-choose-threshold", " <n>",
+        "threshold for spork_choose loop body size decision, default = 100",
+        Int (fn n =>
+             if n < 0
+                then usage "spork-choose-threshold must be non-negative"
+             else sporkChooseThreshold := n)),
        (Normal, "codegen",
         concat [" {",
                 String.concatWith
