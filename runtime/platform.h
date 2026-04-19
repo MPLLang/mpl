@@ -127,6 +127,7 @@ PRIVATE __attribute__ ((noreturn)) void MLton_heapCheckTooLarge (void);
 PRIVATE void GC_displayMem (void);
 
 PRIVATE void GC_memcpyToBuffer(pointer src, pointer buffer, size_t offset, size_t length);
+PRIVATE void GC_memcpyFromBuffer(pointer des, pointer buffer, size_t offset, size_t length);
 
 PRIVATE void *GC_mmapFileReadable (int fd, size_t size);
 PRIVATE void *GC_mmapAnon (void *start, size_t length);
