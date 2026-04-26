@@ -9,24 +9,38 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor PrimSequence (S: sig
-                            type 'a sequence
-                            type 'a elt
-                            val copyUnsafe: 'a elt array * SeqIndex.int * 'a sequence * SeqIndex.int * SeqIndex.int -> unit
-                            (* fromArray should be constant time. *)
-                            val fromArray: 'a elt array -> 'a sequence
-                            val isMutable: bool
-                            val length: 'a sequence -> SeqIndex.int
-                            val sameArray: 'a elt array * 'a sequence -> bool
-                            val subUnsafe: 'a sequence * SeqIndex.int -> 'a elt
-                            val uninitIsNop: 'a sequence -> bool
-                            val uninitUnsafe: 'a sequence * SeqIndex.int -> unit
-                            val updateUnsafe: 'a sequence * SeqIndex.int * 'a elt -> unit
-                         end) :> PRIM_SEQUENCE where type 'a sequence = 'a S.sequence
-                                               where type 'a elt = 'a S.elt =
-   struct
-      structure Array = Primitive.Array
 
+signature PRIM_SEQUENCE_PARAMS =
+sig
+  type 'a sequence
+  type 'a elt
+  type 'a prim_array
+  type 'a prim_vector
+  val copyUnsafe: 'a elt prim_array * SeqIndex.int * 'a sequence * SeqIndex.int * SeqIndex.int -> unit
+  (* fromArray should be constant time. *)
+  val fromArray: 'a elt prim_array -> 'a sequence
+  val isMutable: bool
+  val length: 'a sequence -> SeqIndex.int
+  val sameArray: 'a elt prim_array * 'a sequence -> bool
+  val subUnsafe: 'a sequence * SeqIndex.int -> 'a elt
+  val uninitIsNop: 'a sequence -> bool
+  val uninitUnsafe: 'a sequence * SeqIndex.int -> unit
+  val updateUnsafe: 'a sequence * SeqIndex.int * 'a elt -> unit
+
+  val primArrayAllocUnsafe: SeqIndex.int -> 'a prim_array
+  val primArraySubUnsafe: 'a prim_array * SeqIndex.int -> 'a
+  val primArrayUpdateUnsafe: 'a prim_array * SeqIndex.int * 'a -> unit
+  val primArrayLength: 'a prim_array -> SeqIndex.int
+  val primVectorFromArrayUnsafe: 'a prim_array -> 'a prim_vector
+end
+
+
+functor PrimSequence (S: PRIM_SEQUENCE_PARAMS)
+  :> PRIM_SEQUENCE where type 'a sequence = 'a S.sequence
+                   where type 'a elt = 'a S.elt
+                   where type 'a prim_array = 'a S.prim_array
+                   where type 'a prim_vector = 'a S.prim_vector =
+   struct
       val op +! = SeqIndex.+!
       val op + = SeqIndex.+
       val op -! = SeqIndex.-!
@@ -42,6 +56,8 @@ functor PrimSequence (S: sig
 
       type 'a sequence = 'a S.sequence
       type 'a elt = 'a S.elt
+      type 'a prim_array = 'a S.prim_array
+      type 'a prim_vector = 'a S.prim_vector
 
       local
          fun valOf x: Primitive.Int32.int = case x of SOME y => y | NONE => 0
@@ -71,7 +87,7 @@ functor PrimSequence (S: sig
 
       fun length s = S.length s
 
-      fun unsafeArrayAlloc n = Array.allocUnsafe n
+      fun unsafeArrayAlloc n = S.primArrayAllocUnsafe n
       fun arrayAlloc n =
          if Primitive.Controls.safe
             andalso gtu (n, maxLen)
@@ -90,18 +106,18 @@ functor PrimSequence (S: sig
               if Primitive.Controls.safe andalso geu (i, !subLim) then
                  raise Subscript
               else
-                 Array.subUnsafe (a, i)
+                 S.primArraySubUnsafe (a, i)
            val updateLim : SeqIndex.t ref = ref 0
            fun update (i, x) =
               if Primitive.Controls.safe andalso geu (i, !updateLim) then
                  if i = !updateLim andalso i < n then
-                    (Array.updateUnsafe (a, i, x);
+                    (S.primArrayUpdateUnsafe (a, i, x);
                      subLim := i + 1;
                      updateLim := i + 1)
                  else
                     raise Subscript
               else
-                 Array.updateUnsafe (a, i, x)
+                 S.primArrayUpdateUnsafe (a, i, x)
            val gotIt = ref false
            fun done () =
               if !gotIt then
@@ -128,7 +144,7 @@ functor PrimSequence (S: sig
                else
                   let
                      val (x, b) = f (i, b)
-                     val () = Array.updateUnsafe (a, i, x)
+                     val () = S.primArrayUpdateUnsafe (a, i, x)
                   in
                      loop (i +! 1, b)
                   end
@@ -148,6 +164,7 @@ functor PrimSequence (S: sig
          struct
             type 'a sequence = 'a sequence
             type 'a elt = 'a elt
+            type 'a prim_array = 'a prim_array
             datatype 'a t = T of {seq: 'a sequence, 
                                   start: SeqIndex.int, len: SeqIndex.int}
             type 'a slice = 'a t
@@ -174,12 +191,12 @@ functor PrimSequence (S: sig
                   then raise Subscript
                else unsafeUninit (sl, i)
             local
-               fun smallCopy {dst: 'a elt array, di: SeqIndex.int,
+               fun smallCopy {dst: 'a elt prim_array, di: SeqIndex.int,
                               src: 'a sequence, si: SeqIndex.int,
                               len: SeqIndex.int,
                               overlap: unit -> bool} =
                   let
-                     fun move i = Array.updateUnsafe (dst, di +! i, S.subUnsafe (src, si +! i))
+                     fun move i = S.primArrayUpdateUnsafe (dst, di +! i, S.subUnsafe (src, si +! i))
                      val len = len -! 1
                   in
                      if overlap ()
@@ -201,7 +218,7 @@ functor PrimSequence (S: sig
                              end
                   end
                val smallCopyLimit = 5
-               fun maybeSmallCopy {dst: 'a elt array, di: SeqIndex.int,
+               fun maybeSmallCopy {dst: 'a elt prim_array, di: SeqIndex.int,
                                    src: 'a sequence, si: SeqIndex.int,
                                    len: SeqIndex.int,
                                    overlap: unit -> bool} =
@@ -212,17 +229,17 @@ functor PrimSequence (S: sig
                                      overlap = overlap}
                      else S.copyUnsafe (dst, di, src, si, len)
             in
-               fun unsafeCopy {dst: 'a elt array, di: SeqIndex.int,
+               fun unsafeCopy {dst: 'a elt prim_array, di: SeqIndex.int,
                                src = T {seq = src, start = si, len}} =
                   maybeSmallCopy {dst = dst, di = di,
                                   src = src, si = si,
                                   len = len,
                                   overlap = fn () => false}
-               fun copy {dst: 'a elt array, di: SeqIndex.int,
+               fun copy {dst: 'a elt prim_array, di: SeqIndex.int,
                          src =  T {seq = src, start = si, len}} =
                   if Primitive.Controls.safe
-                     andalso (gtu (di, Array.length dst)
-                              orelse gtu (di +! len, Array.length dst))
+                     andalso (gtu (di, S.primArrayLength dst)
+                              orelse gtu (di +! len, S.primArrayLength dst))
                      then raise Subscript
                      else let
                              fun overlap () =
@@ -474,104 +491,224 @@ functor PrimSequence (S: sig
 
    end
 
+
+signature PRIM_RAW_ARRAY =
+sig
+  type 'a array
+  type 'a rawarr
+  val allocUnsafe: SeqIndex.int -> 'a rawarr
+  val length: 'a rawarr -> SeqIndex.int
+  val toArrayUnsafe: 'a rawarr -> 'a array
+  val uninitIsNop: 'a rawarr -> bool
+  val uninitUnsafe: 'a rawarr * SeqIndex.int -> unit
+end
+
+
+functor WrapRawArray(S: sig
+                          include PRIM_RAW_ARRAY
+                          val maxLen: SeqIndex.int
+                        end) =
+struct
+  type 'a rawarr = 'a S.rawarr
+
+  val length = S.length
+
+  val unsafeAlloc = S.allocUnsafe
+  fun alloc n =
+      if Primitive.Controls.safe
+        andalso SeqIndex.gtu (n, S.maxLen)
+        then raise Size
+        else unsafeAlloc n
+
+  val unsafeToArray = S.toArrayUnsafe
+
+  val uninitIsNop = S.uninitIsNop
+  val unsafeUninit = S.uninitUnsafe
+  fun uninit (a, i) =
+      if Primitive.Controls.safe andalso SeqIndex.geu (i, length a)
+        then raise Subscript
+        else unsafeUninit (a, i)
+end
+
+
+functor MakeArrayPrimSequence (S: sig
+                                    include PRIM_SEQUENCE_PARAMS
+                                    structure Raw: PRIM_RAW_ARRAY
+                                      where type 'a array = 'a prim_array
+                                  end) =
+struct
+
+  local
+    structure P = PrimSequence(S)
+  in
+    open P
+    type 'a array = 'a prim_array
+    type 'a t = 'a prim_array
+    type 'a vector = 'a prim_vector
+    structure Slice = 
+      struct
+          open Slice
+          fun vector sl = 
+            let
+                val a = unsafeArrayAlloc (length sl)
+                val () = unsafeCopy {dst = a, di = 0, src = sl}
+            in
+                S.primVectorFromArrayUnsafe a
+            end
+          fun modifyi f sl =
+            appi (fn (i, x) => unsafeUpdate (sl, i, f (i, x))) sl
+          fun modify f sl = modifyi (fn (_, x) => f x) sl
+      end
+    fun vector s = Slice.vector (Slice.full s)
+    fun modifyi f s = Slice.modifyi f (Slice.full s)
+    fun modify f s = Slice.modify f (Slice.full s) 
+  end
+
+  structure Raw = WrapRawArray(open S.Raw val maxLen = maxLen)
+
+end
+
+
+
+functor MakeVectorPrimSequence (S: PRIM_SEQUENCE_PARAMS) =
+struct
+  local
+    structure P = PrimSequence(S)
+  in
+    open P
+    type 'a vector = 'a prim_vector
+    type 'a t = 'a prim_vector
+    type 'a array = 'a prim_array
+    fun updateVector (v, i, x) =
+      if Primitive.Controls.safe andalso SeqIndex.geu (i, length v)
+          then raise Subscript
+      else let
+              val a = S.primArrayAllocUnsafe (length v)
+              val () = copy {dst = a, di = 0, src = v}
+              val () = S.primArrayUpdateUnsafe (a, i, x)
+            in
+              S.primVectorFromArrayUnsafe a
+            end
+  end
+end
+
+
 structure Primitive = struct
 open Primitive
 
-structure Array = 
-   struct 
-      local 
-         structure P = PrimSequence (type 'a sequence = 'a array
-                                     type 'a elt = 'a
-                                     val sameArray = op =
-                                     val copyUnsafe = Primitive.Array.copyArrayUnsafe
-                                     val fromArray = fn a => a
-                                     val isMutable = true
-                                     val length = Primitive.Array.length
-                                     val subUnsafe = Primitive.Array.subUnsafe
-                                     val uninitIsNop = Primitive.Array.uninitIsNop
-                                     val uninitUnsafe = Primitive.Array.uninitUnsafe
-                                     val updateUnsafe = Primitive.Array.updateUnsafe)
-      in
-         open P
-         type 'a array = 'a array
-         structure Slice = 
-            struct
-               open Slice
-               fun vector sl = 
-                  let
-                     val a = unsafeAlloc (length sl)
-                     val () = unsafeCopy {dst = a, di = 0, src = sl}
-                  in
-                     Vector.fromArrayUnsafe a
-                  end
-               fun modifyi f sl =
-                  appi (fn (i, x) => unsafeUpdate (sl, i, f (i, x))) sl
-               fun modify f sl = modifyi (fn (_, x) => f x) sl
-            end
-         fun vector s = Slice.vector (Slice.full s)
-         fun modifyi f s = Slice.modifyi f (Slice.full s)
-         fun modify f s = Slice.modify f (Slice.full s) 
-      end
-      structure Raw =
-         struct
-            type 'a rawarr = 'a Primitive.Array.Raw.rawarr
+structure Array = MakeArrayPrimSequence(
+  type 'a sequence = 'a array
+  type 'a elt = 'a
+  type 'a prim_array = 'a array
+  type 'a prim_vector = 'a vector
+  val sameArray = op =
+  val copyUnsafe = Primitive.Array.copyArrayUnsafe
+  val fromArray = fn a => a
+  val isMutable = true
+  val length = Primitive.Array.length
+  val subUnsafe = Primitive.Array.subUnsafe
+  val uninitIsNop = Primitive.Array.uninitIsNop
+  val uninitUnsafe = Primitive.Array.uninitUnsafe
+  val updateUnsafe = Primitive.Array.updateUnsafe
+                                     
+  val primArrayAllocUnsafe = Primitive.Array.allocUnsafe
+  val primArraySubUnsafe = Primitive.Array.subUnsafe
+  val primArrayUpdateUnsafe = Primitive.Array.updateUnsafe
+  val primArrayLength = Primitive.Array.length
+  val primVectorFromArrayUnsafe = Primitive.Vector.fromArrayUnsafe
+  
+  structure Raw =
+  struct
+    type 'a array = 'a array
+    open Primitive.Array.Raw
+  end
+)
 
-            val length = Primitive.Array.Raw.length
+structure ArrayAos = MakeArrayPrimSequence(
+  type 'a sequence = 'a ArrayAos.t
+  type 'a elt = 'a
+  type 'a prim_array = 'a ArrayAos.t
+  type 'a prim_vector = 'a VectorAos.t
+  val sameArray = op =
+  val copyUnsafe = Primitive.ArrayAos.copyArrayUnsafe
+  val fromArray = fn a => a
+  val isMutable = true
+  val length = Primitive.ArrayAos.length
+  val subUnsafe = Primitive.ArrayAos.subUnsafe
+  val uninitIsNop = Primitive.ArrayAos.uninitIsNop
+  val uninitUnsafe = Primitive.ArrayAos.uninitUnsafe
+  val updateUnsafe = Primitive.ArrayAos.updateUnsafe
+                                     
+  val primArrayAllocUnsafe = Primitive.ArrayAos.allocUnsafe
+  val primArraySubUnsafe = Primitive.ArrayAos.subUnsafe
+  val primArrayUpdateUnsafe = Primitive.ArrayAos.updateUnsafe
+  val primArrayLength = Primitive.ArrayAos.length
+  val primVectorFromArrayUnsafe = Primitive.VectorAos.fromArrayUnsafe
+  
+  structure Raw =
+  struct
+    type 'a array = 'a ArrayAos.t
+    open Primitive.ArrayAos.Raw
+  end
+)
+         
 
-            val unsafeAlloc = Primitive.Array.Raw.allocUnsafe
-            fun alloc n =
-               if Primitive.Controls.safe
-                  andalso SeqIndex.gtu (n, maxLen)
-                  then raise Size
-                  else unsafeAlloc n
+structure Vector = MakeVectorPrimSequence(
+  exception Vector_uninitIsNop
+  exception Vector_uninitUnsafe
+  exception Vector_updateUnsafe
+  type 'a sequence = 'a vector
+  type 'a elt = 'a
+  type 'a prim_array = 'a array
+  type 'a prim_vector = 'a vector
+  val copyUnsafe = Primitive.Array.copyVectorUnsafe
+  val fromArray = Primitive.Vector.fromArrayUnsafe
+  val isMutable = false
+  val length = Vector.length
+  val sameArray = fn _ => false
+  val subUnsafe = Primitive.Vector.subUnsafe
+  val uninitIsNop = fn _ =>
+                    raise Vector_uninitIsNop
+  val uninitUnsafe = fn _ =>
+                    raise Vector_uninitUnsafe
+  val updateUnsafe = fn _ =>
+                    raise Vector_updateUnsafe
+                                                        
+  val primArrayAllocUnsafe = Primitive.Array.allocUnsafe
+  val primArraySubUnsafe = Primitive.Array.subUnsafe
+  val primArrayUpdateUnsafe = Primitive.Array.updateUnsafe
+  val primArrayLength = Primitive.Array.length
+  val primVectorFromArrayUnsafe = Primitive.Vector.fromArrayUnsafe
+)
 
-            val unsafeToArray = Primitive.Array.Raw.toArrayUnsafe
 
-            val uninitIsNop = Primitive.Array.Raw.uninitIsNop
-            val unsafeUninit = Primitive.Array.Raw.uninitUnsafe
-            fun uninit (a, i) =
-               if Primitive.Controls.safe andalso SeqIndex.geu (i, length a)
-                  then raise Subscript
-                  else unsafeUninit (a, i)
-
-         end
-   end
-
-structure Vector =
-   struct
-      local
-         exception Vector_uninitIsNop
-         exception Vector_uninitUnsafe
-         exception Vector_updateUnsafe
-         structure P = PrimSequence (type 'a sequence = 'a vector
-                                     type 'a elt = 'a
-                                     val copyUnsafe = Primitive.Array.copyVectorUnsafe
-                                     val fromArray = Primitive.Vector.fromArrayUnsafe
-                                     val isMutable = false
-                                     val length = Vector.length
-                                     val sameArray = fn _ => false
-                                     val subUnsafe = Primitive.Vector.subUnsafe
-                                     val uninitIsNop = fn _ =>
-                                                       raise Vector_uninitIsNop
-                                     val uninitUnsafe = fn _ =>
-                                                        raise Vector_uninitUnsafe
-                                     val updateUnsafe = fn _ =>
-                                                        raise Vector_updateUnsafe)
-      in
-         open P
-         type 'a vector = 'a vector
-         fun updateVector (v, i, x) =
-            if Primitive.Controls.safe andalso SeqIndex.geu (i, length v)
-               then raise Subscript
-            else let
-                    val a = Array.unsafeAlloc (length v)
-                    val () = copy {dst = a, di = 0, src = v}
-                    val () = Array.unsafeUpdate (a, i, x)
-                 in
-                    unsafeFromArray a
-                 end
-      end
-   end
+structure VectorAos = MakeVectorPrimSequence(
+  exception VectorAos_uninitIsNop
+  exception VectorAos_uninitUnsafe
+  exception VectorAos_updateUnsafe
+  type 'a sequence = 'a VectorAos.t
+  type 'a elt = 'a
+  type 'a prim_array = 'a ArrayAos.t
+  type 'a prim_vector = 'a VectorAos.t
+  val copyUnsafe = Primitive.ArrayAos.copyVectorUnsafe
+  val fromArray = Primitive.VectorAos.fromArrayUnsafe
+  val isMutable = false
+  val length = VectorAos.length
+  val sameArray = fn _ => false
+  val subUnsafe = Primitive.VectorAos.subUnsafe
+  val uninitIsNop = fn _ =>
+                    raise VectorAos_uninitIsNop
+  val uninitUnsafe = fn _ =>
+                    raise VectorAos_uninitUnsafe
+  val updateUnsafe = fn _ =>
+                    raise VectorAos_updateUnsafe
+                                                        
+  val primArrayAllocUnsafe = Primitive.ArrayAos.allocUnsafe
+  val primArraySubUnsafe = Primitive.ArrayAos.subUnsafe
+  val primArrayUpdateUnsafe = Primitive.ArrayAos.updateUnsafe
+  val primArrayLength = Primitive.ArrayAos.length
+  val primVectorFromArrayUnsafe = Primitive.VectorAos.fromArrayUnsafe
+)
 
 end
 
@@ -582,4 +719,13 @@ structure Array =
 structure Vector =
    struct
       type 'a vector = 'a vector
+   end
+
+structure ArrayAos =
+   struct
+      type 'a t = 'a Primitive.ArrayAos.t
+   end
+structure VectorAos =
+   struct
+      type 'a t = 'a Primitive.VectorAos.t
    end

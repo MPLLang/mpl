@@ -157,12 +157,16 @@ structure LambdaNode:
 
 structure UnaryTycon =
    struct
-      datatype t = Array | Ref | Vector | Weak
+      datatype t =
+        Array of ArrayLayout.t
+      | Ref
+      | Vector of ArrayLayout.t
+      | Weak
 
       val toString =
-         fn Array => "Array"
+         fn Array lay => "Array(" ^ ArrayLayout.toString lay ^ ")"
           | Ref => "Ref"
-          | Vector => "Vector"
+          | Vector lay => "Vector(" ^ ArrayLayout.toString lay ^ ")"
           | Weak => "Weak"
 
       val equals: t * t -> bool = op =
@@ -253,10 +257,14 @@ local
                               end
                         in if Tycon.equals (tycon, Tycon.reff)
                               then mutable UnaryTycon.Ref
-                           else if Tycon.equals (tycon, Tycon.array)
-                                   then mutable UnaryTycon.Array
-                           else if Tycon.equals (tycon, Tycon.vector)
-                                   then mutable UnaryTycon.Vector
+                           else if Tycon.equals (tycon, Tycon.array ArrayLayout.Default)
+                                   then mutable (UnaryTycon.Array ArrayLayout.Default)
+                           else if Tycon.equals (tycon, Tycon.array ArrayLayout.Aos)
+                                   then mutable (UnaryTycon.Array ArrayLayout.Aos)
+                           else if Tycon.equals (tycon, Tycon.vector ArrayLayout.Default)
+                                   then mutable (UnaryTycon.Vector ArrayLayout.Default)
+                           else if Tycon.equals (tycon, Tycon.vector ArrayLayout.Aos)
+                                   then mutable (UnaryTycon.Vector ArrayLayout.Aos)
                            else if Tycon.equals (tycon, Tycon.weak)
                                    then mutable UnaryTycon.Weak
                            else if Tycon.equals (tycon, Tycon.tuple)
@@ -359,12 +367,12 @@ val coerce = Trace.trace ("AbstractValue.coerce",
 structure Dest =
    struct
       datatype dest =
-         Array of t
+         Array of {elem: t, layout: ArrayLayout.t}
        | Lambdas of Lambdas.t
        | Ref of t
        | Tuple of t vector
        | Type of Type.t
-       | Vector of t
+       | Vector of {elem: t, layout: ArrayLayout.t}
        | Weak of t
    end
 
@@ -372,9 +380,9 @@ fun dest v =
    case tree v of
       Type t => Dest.Type t
     | Unify (mt, v) => (case mt of
-                           UnaryTycon.Array => Dest.Array v
+                           UnaryTycon.Array lay => Dest.Array {elem=v, layout=lay}
                          | UnaryTycon.Ref => Dest.Ref v
-                         | UnaryTycon.Vector => Dest.Vector v
+                         | UnaryTycon.Vector lay => Dest.Vector {elem=v, layout=lay}
                          | UnaryTycon.Weak => Dest.Weak v)
     | Tuple vs => Dest.Tuple vs
     | Lambdas l => Dest.Lambdas (LambdaNode.toSet l)
@@ -426,12 +434,14 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
          else Error.bug "AbstractValue.primApply.fiveArgs"
    in
       case prim of
-         Prim.Array_array =>
+         Prim.Array_array lay =>
             let
                 val r = result ()
                 val _ =
                    case dest r of
-                      Array x => Vector.foreach (args, fn arg => coerce {from = arg, to = x})
+                      Array {elem = x, layout = lay'} =>
+                        (* SAM_NOTE: could do a sanity check here that lay = lay' *)
+                        Vector.foreach (args, fn arg => coerce {from = arg, to = x})
                     | Type _ => ()
                     | _ => typeError ()
             in
@@ -442,14 +452,14 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
               val (a, _, x, y) = fourArgs ()
             in
               (case dest a of
-                 Array v => (unify (y, v); unify (x, v); v)
+                 Array {elem=v, ...} => (unify (y, v); unify (x, v); v)
                | Type _ => result ()
                | _ => typeError ())
             end
        | Prim.Array_copyArray =>
             let val (da, _, sa, _, _) = fiveArgs ()
             in (case (dest da, dest sa) of
-                   (Array dx, Array sx) => unify (dx, sx)
+                   (Array {elem=dx, ...}, Array {elem=sx, ...}) => unify (dx, sx)
                  | (Type _, Type _) => ()
                  | _ => typeError ()
                 ; result ())
@@ -457,7 +467,7 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
        | Prim.Array_copyVector =>
             let val (da, _, sa, _, _) = fiveArgs ()
             in (case (dest da, dest sa) of
-                   (Array dx, Vector sx) => unify (dx, sx)
+                   (Array {elem=dx, ...}, Vector {elem=sx, ...}) => unify (dx, sx)
                  | (Type _, Type _) => ()
                  | _ => typeError ()
                 ; result ())
@@ -466,7 +476,7 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
             let val r = result ()
             in (case (dest (oneArg ()), dest r) of
                    (Type _, Type _) => ()
-                 | (Array x, Array y) =>
+                 | (Array {elem=x, ...}, Array {elem=y, ...}) =>
                       (* Can't do a coercion here because that would imply
                        * walking over each element of the array and coercing it.
                        *)
@@ -478,7 +488,7 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
             let val r = result ()
             in (case (dest (oneArg ()), dest r) of
                    (Type _, Type _) => ()
-                 | (Array x, Vector y) =>
+                 | (Array {elem=x, ...}, Vector {elem=y, ...}) =>
                       (* Can't do a coercion here because that would imply
                        * walking over each element of the array and coercing it.
                        *)
@@ -488,13 +498,13 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
             end
        | Prim.Array_sub _ =>
             (case dest (#1 (twoArgs ())) of
-                Array x => x
+                Array {elem, ...} => elem
               | Type _ => result ()
               | _ => typeError ())
        | Prim.Array_update _ =>
             let val (a, _, x) = threeArgs ()
             in (case dest a of
-                   Array x' => coerce {from = x, to = x'} (* unify (x, x') *)
+                   Array {elem=x', ...} => coerce {from = x, to = x'} (* unify (x, x') *)
                  | Type _ => ()
                  | _ => typeError ())
                ; result ()
@@ -545,15 +555,17 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
             end
        | Prim.Vector_sub =>
             (case dest (#1 (twoArgs ())) of
-                Vector x => x
+                Vector {elem, ...} => elem
               | Type _ => result ()
               | _ => typeError ())
-       | Prim.Vector_vector =>
+       | Prim.Vector_vector lay =>
             let
                 val r = result ()
                 val _ =
                    case dest r of
-                      Vector x => Vector.foreach (args, fn arg => coerce {from = arg, to = x})
+                      Vector {elem = x, layout = lay'} =>
+                        (* SAM_NOTE: could do a sanity check here that lay = lay' *)
+                        Vector.foreach (args, fn arg => coerce {from = arg, to = x})
                     | Type _ => ()
                     | _ => typeError ()
             in

@@ -24,7 +24,7 @@ structure Type =
                plist: PropertyList.t,
                tree: tree}
       and tree =
-          Array of t
+          Array of {elem: t, layout: ArrayLayout.t}
         | CPointer
         | Datatype of Tycon.t
         | IntInf
@@ -32,7 +32,7 @@ structure Type =
         | Ref of t
         | Thread
         | Tuple of t vector
-        | Vector of t
+        | Vector of {elem: t, layout: ArrayLayout.t}
         | Weak of t
         | Word of WordSize.t
 
@@ -60,18 +60,21 @@ structure Type =
                (deOpt, de, is)
             end
       in
-         val (_,deArray,_) = make (fn Array t => SOME t | _ => NONE)
+         val (_,deArray,_) = make (fn Array {elem, ...} => SOME elem | _ => NONE)
+         val (_,deArrayLayout,_) = make (fn Array {layout, ...} => SOME layout | _ => NONE)
          val (_,deDatatype,_) = make (fn Datatype tyc => SOME tyc | _ => NONE)
          val (_,deRef,_) = make (fn Ref t => SOME t | _ => NONE)
          val (deTupleOpt,deTuple,isTuple) = make (fn Tuple ts => SOME ts | _ => NONE)
-         val (_,deVector,_) = make (fn Vector t => SOME t | _ => NONE)
+         val (_,deVector,_) = make (fn Vector {elem, ...} => SOME elem | _ => NONE)
+         val (_,deVectorLayout,_) = make (fn Vector {layout, ...} => SOME layout | _ => NONE)
          val (_,deWeak,_) = make (fn Weak t => SOME t | _ => NONE)
          val (deWordOpt,deWord,_) = make (fn Word ws => SOME ws | _ => NONE)
       end
 
       local
          val same: tree * tree -> bool =
-            fn (Array t1, Array t2) => equals (t1, t2)
+            fn (Array {elem = t1, layout = l1}, Array {elem = t2, layout = l2}) =>
+               equals (t1, t2) andalso ArrayLayout.equals (l1, l2)
              | (CPointer, CPointer) => true
              | (Datatype t1, Datatype t2) => Tycon.equals (t1, t2)
              | (IntInf, IntInf) => true
@@ -79,7 +82,8 @@ structure Type =
              | (Ref t1, Ref t2) => equals (t1, t2)
              | (Thread, Thread) => true
              | (Tuple ts1, Tuple ts2) => Vector.equals (ts1, ts2, equals)
-             | (Vector t1, Vector t2) => equals (t1, t2)
+             | (Vector {elem = t1, layout = l1}, Vector {elem = t2, layout = l2}) =>
+               equals (t1, t2) andalso ArrayLayout.equals (l1, l2)
              | (Weak t1, Weak t2) => equals (t1, t2)
              | (Word s1, Word s2) => WordSize.equals (s1, s2)
              | _ => false
@@ -110,9 +114,22 @@ structure Type =
                fn t => lookup (Hash.combine (w, hash t), f t)
             end
       in
-         val array = make Array
+         val arrayDefault = make (fn t => Array {elem = t, layout = ArrayLayout.Default})
+         val arrayAos = make (fn t => Array {elem = t, layout = ArrayLayout.Aos})
+         fun array (layout: ArrayLayout.t) elem =
+           case layout of
+             ArrayLayout.Default => arrayDefault elem
+           | ArrayLayout.Aos => arrayAos elem
+
          val reff = make Ref
-         val vector = make Vector
+
+         val vectorDefault = make (fn t => Vector {elem = t, layout = ArrayLayout.Default})
+         val vectorAos = make (fn t => Vector {elem = t, layout = ArrayLayout.Aos})
+         fun vector (layout: ArrayLayout.t) elem =
+           case layout of
+             ArrayLayout.Default => vectorDefault elem
+           | ArrayLayout.Aos => vectorAos elem
+
          val weak = make Weak
       end
 
@@ -155,7 +172,7 @@ structure Type =
              | Null => cpointer
              | Real r => real (RealX.size r)
              | Word w => word (WordX.size w)
-             | WordVector v => vector (word (WordXVector.elementSize v))
+             | WordVector v => vector ArrayLayout.Default (word (WordXVector.elementSize v))
          end
 
       val unit: t = tuple (Vector.new0 ())
@@ -179,7 +196,15 @@ structure Type =
                     seq [paren (layout t), str " ", str tc]
               in
               case dest t of
-                 Array t => unary (t, "array")
+                 Array {elem, layout} =>
+                   let
+                     val name =
+                       case layout of
+                         ArrayLayout.Default => "array"
+                       | ArrayLayout.Aos => "array_aos"
+                   in
+                     unary (elem, name)
+                   end
                | CPointer => str "cpointer"
                | Datatype t => Tycon.layout t
                | IntInf => str "intInf"
@@ -193,7 +218,15 @@ structure Type =
                               (mayAlign o separateRight)
                                  (Vector.toListMap (ts, layout), ","),
                                  str ") tuple"]
-               | Vector t => unary (t, "vector")
+               | Vector {elem, layout} =>
+                   let
+                     val name =
+                       case layout of
+                         ArrayLayout.Default => "vector"
+                       | ArrayLayout.Aos => "vector_aos"
+                   in
+                     unary (elem, name)
+                   end
                | Weak t => unary (t, "weak")
                | Word s => str (concat ["word", WordSize.toString s])
               end))
@@ -212,10 +245,12 @@ structure Type =
              List.map (WordSize.all, fn ws => ("word" ^ WordSize.toString ws, word ws)) @
              List.map (RealSize.all, fn rs => ("real" ^ RealSize.toString rs, real rs)))
          val unary =
-            [array <$ P.kw "array",
+            [array ArrayLayout.Default <$ P.kw "array",
+             array ArrayLayout.Aos <$ P.kw "array_aos",
              reff <$ P.kw "ref",
              (tuple o Vector.new1) <$ P.kw "tuple",
-             vector <$ P.kw "vector",
+             vector ArrayLayout.Default <$ P.kw "vector",
+             vector ArrayLayout.Aos <$ P.kw "vector_aos",
              weak <$ P.kw "weak"]
       in
          fun parse () =
@@ -1918,7 +1953,7 @@ structure Program =
                     datatype z = datatype Type.dest
                     val _ =
                        case Type.dest t of
-                          Array t => countType t
+                          Array {elem, layout} => countType elem
                         | CPointer => ()
                         | Datatype _ => ()
                         | IntInf => ()
@@ -1926,7 +1961,7 @@ structure Program =
                         | Ref t => countType t
                         | Thread => ()
                         | Tuple ts => Vector.foreach (ts, countType)
-                        | Vector t => countType t
+                        | Vector {elem, layout} => countType elem
                         | Weak t => countType t
                         | Word _ => ()
                     val _ = Int.inc numTypes

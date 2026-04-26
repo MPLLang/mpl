@@ -19,7 +19,13 @@ type tycon = t
 local
    fun make s = (s, fromString s)
 in
-   val array = make "array"
+   val arrayDefault = make "array"
+   val arrayAos = make "array_aos"
+   val array = fn lay =>
+     case lay of
+       ArrayLayout.Default => arrayDefault
+     | ArrayLayout.Aos => arrayAos
+
    val arrow = make "arrow"
    val bool = make "bool"
    val cpointer = make "cpointer"
@@ -29,7 +35,23 @@ in
    val reff = make "ref"
    val thread = make "thread"
    val tuple = make "tuple"
-   val vector = make "vector"
+
+   fun vector lay =
+     let
+       val name =
+         case lay of
+           ArrayLayout.Default => "vector"
+         | ArrayLayout.Aos => "vector_aos"
+     in
+       make name
+     end
+   val vectorDefault = make "vector"
+   val vectorAos = make "vector_aos"
+   val vector = fn lay =>
+     case lay of
+       ArrayLayout.Default => vectorDefault
+     | ArrayLayout.Aos => vectorAos
+
    val weak = make "weak"
 end
 
@@ -102,7 +124,8 @@ in
 end
 
 val prims =
-   List.map ([(array, Arity 1, Always),
+   List.map ([(array ArrayLayout.Default, Arity 1, Always),
+              (array ArrayLayout.Aos, Arity 1, Always),
               (arrow, Arity 2, Never),
               (bool, Arity 0, Sometimes),
               (cpointer, Arity 0, Always),
@@ -112,7 +135,8 @@ val prims =
               (reff, Arity 1, Always),
               (thread, Arity 0, Never),
               (tuple, Nary, Sometimes),
-              (vector, Arity 1, Sometimes),
+              (vector ArrayLayout.Default, Arity 1, Sometimes),
+              (vector ArrayLayout.Aos, Arity 1, Sometimes),
               (weak, Arity 1, Never)],
              fn ((name, tycon), kind, admitsEquality) =>
              {admitsEquality = admitsEquality,
@@ -121,7 +145,7 @@ val prims =
               tycon = tycon})
    @ primChars @ primInts @ primReals @ primWords
 
-val array = #2 array
+val array = #2 o array
 val arrow = #2 arrow
 val bool = #2 bool
 val cpointer = #2 cpointer
@@ -131,7 +155,7 @@ val list = #2 list
 val reff = #2 reff
 val thread = #2 thread
 val tuple = #2 tuple
-val vector = #2 vector
+val vector = #2 o vector
 val weak = #2 weak
 
 val defaultChar = fn () =>
@@ -163,6 +187,28 @@ val isBool = fn c => equals (c, bool)
 val isCPointer = fn c => equals (c, cpointer)
 val isIntX = fn c => equals (c, intInf) orelse isIntX c
 val deIntX = fn c => if equals (c, intInf) then NONE else SOME (deIntX c)
+
+val isArray = fn c =>
+  equals (c, array ArrayLayout.Default)
+  orelse equals (c, array ArrayLayout.Aos)
+
+val isVector = fn c =>
+  equals (c, vector ArrayLayout.Default)
+  orelse equals (c, vector ArrayLayout.Aos)
+
+fun deArrayLayout c =
+  if equals (c, array ArrayLayout.Default)
+    then ArrayLayout.Default
+  else if equals (c, array ArrayLayout.Aos)
+    then ArrayLayout.Aos
+  else Error.bug "PrimTycons.deArrayLayout"
+
+fun deVectorLayout c =
+  if equals (c, vector ArrayLayout.Default)
+    then ArrayLayout.Default
+  else if equals (c, vector ArrayLayout.Aos)
+    then ArrayLayout.Aos
+  else Error.bug "PrimTycons.deVectorLayout"
 
 local
    local
@@ -216,7 +262,7 @@ in
               else (mayAlign (Layout.separateLeft
                               (Vector.toListMap (args, maybe TupleElem), "* ")),
                     ({isChar = false}, Tuple))
-      else if equals (c, vector)
+      else if equals (c, vector ArrayLayout.Default)
          then if #isChar (#1 (#2 (Vector.first args)))
                  then LayoutPretty.simple (str "string")
               else normal (layoutPretty c, args, {isChar = false})

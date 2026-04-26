@@ -37,12 +37,12 @@ signature ABSTRACT_VALUE =
       type t
 
       datatype dest =
-         Array of t
+         Array of {elem: t, layout: ArrayLayout.t}
        | Lambdas of Lambdas.t
        | Ref of t
        | Tuple of t vector
        | Type of Sxml.Type.t (* type doesn't contain any arrows *)
-       | Vector of t
+       | Vector of {elem: t, layout: ArrayLayout.t}
        | Weak of t
 
       val addHandler: t * (Lambda.t -> unit) -> unit

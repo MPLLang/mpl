@@ -62,6 +62,7 @@ combine-conversions.fun
 constant-propagation.fun
 contify.fun
 deep-flatten.fun
+flatten-into-sequences.fun
 drop-spork.fun
 drop-spork2.fun
 duplicate-globals.fun
@@ -88,7 +89,7 @@ remove-unused.fun
 remove-unused2.fun
 share-zero-vec.fun
 simplify-types.fun
-split-types.fun
+(* split-types.fun *)
 useless.fun
 zone.fun
 simplify.sig

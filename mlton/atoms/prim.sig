@@ -25,8 +25,8 @@ signature PRIM =
       include PRIM_STRUCTS
 
       datatype 'a t =
-         Array_alloc of {raw: bool} (* to rssa (as runtime C fn) *)
-       | Array_array (* to ssa2 *)
+         Array_alloc of {raw: bool, layout: ArrayLayout.t} (* to rssa (as runtime C fn) *)
+       | Array_array of ArrayLayout.t (* to ssa2 *)
        | Array_cas of CType.t option (* codegen *)
        | Array_copyArray (* to rssa (as runtime C fn) *)
        | Array_copyVector (* to rssa (as runtime C fn) *)
@@ -157,7 +157,7 @@ signature PRIM =
        | TopLevel_setSuffix (* implement suffix *)
        | Vector_length (* to ssa2 *)
        | Vector_sub (* to ssa2 *)
-       | Vector_vector (* to ssa2 *)
+       | Vector_vector of ArrayLayout.t (* to ssa2 *)
        | Weak_canGet (* to rssa (as runtime C fn) *)
        | Weak_get (* to rssa (as runtime C fn) *)
        | Weak_new (* to rssa (as runtime C fn) *)
@@ -219,7 +219,7 @@ signature PRIM =
       val checkApp: 'a t * {args: 'a vector,
                             result: 'a,
                             targs: 'a vector,
-                            typeOps: {array: 'a -> 'a,
+                            typeOps: {array: ArrayLayout.t -> 'a -> 'a,
                                       arrow: 'a * 'a -> 'a,
                                       tuple: 'a vector -> 'a,
                                       bool: 'a,
@@ -231,7 +231,7 @@ signature PRIM =
                                       reff: 'a -> 'a,
                                       thread: 'a,
                                       unit: 'a,
-                                      vector: 'a -> 'a,
+                                      vector: ArrayLayout.t -> 'a -> 'a,
                                       weak: 'a -> 'a,
                                       word: WordSize.t -> 'a}} -> bool
       val cpointerGet: CType.t -> 'a t

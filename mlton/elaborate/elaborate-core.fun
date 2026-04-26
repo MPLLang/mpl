@@ -532,7 +532,7 @@ fun lookConst {default: string option, expandedTy, name, region}: unit -> Const.
                      then realConstFromString (Tycon.deRealX c)
                   else if Tycon.isWordX c
                      then wordConstFromString (Tycon.deWordX c)
-                  else if Tycon.equals (c, Tycon.vector)
+                  else if Tycon.equals (c, Tycon.vector ArrayLayout.Default)
                           andalso 1 = Vector.length ts
                           andalso (case Type.deConOpt (Vector.first ts) of
                                       NONE => false
@@ -583,8 +583,8 @@ fun unifySeq (seqTy, seqStr,
 in
 fun unifyList (trs: (Type.t * Region.t) vector, unify): Type.t =
    unifySeq (Type.list, "list", trs, unify)
-fun unifyVector (trs: (Type.t * Region.t) vector, unify): Type.t =
-   unifySeq (Type.vector, "vector", trs, unify)
+fun unifyVector (lay: ArrayLayout.t) (trs: (Type.t * Region.t) vector, unify): Type.t =
+   unifySeq (Type.vector lay, "vector", trs, unify)
 end
 
 val elabPatInfo = Trace.info "ElaborateCore.elabPat"
@@ -1006,7 +1006,7 @@ val elaboratePat:
                          val ps' = Vector.map (ps, loop)
                       in
                          Cpat.make (Cpat.Vector ps',
-                                    unifyVector
+                                    unifyVector ArrayLayout.Default
                                     (Vector.map2 (ps, ps', fn (p, p') =>
                                                   (Cpat.ty p', Apat.region p)),
                                      unify))
@@ -1116,7 +1116,11 @@ structure Type =
                    {ctype = ctype, name = name, tycon = tycon})
 
       val unary: Tycon.t list =
-         [Tycon.array, Tycon.reff, Tycon.vector]
+         [Tycon.array ArrayLayout.Default,
+          Tycon.array ArrayLayout.Aos,
+          Tycon.reff,
+          Tycon.vector ArrayLayout.Default,
+          Tycon.vector ArrayLayout.Aos]
 
       fun toNullaryCType (t: t): {ctype: CType.t, name: string} option =
          case deConOpt t of
@@ -3845,7 +3849,7 @@ fun elaborateDec (d, {env = E, nest}) =
                       val es' = Vector.map (es, elab)
                    in
                       Cexp.make (Cexp.Vector es',
-                                 unifyVector
+                                 unifyVector ArrayLayout.Default
                                  (Vector.map2 (es, es', fn (e, e') =>
                                                (Cexp.ty e', Aexp.region e)),
                                   unify))

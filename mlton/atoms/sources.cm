@@ -46,6 +46,8 @@ functor GenericScheme
 functor HashType
 functor TypeOps
 
+structure ArrayLayout
+
 is
 
 ../../lib/mlton/sources.cm
@@ -109,6 +111,7 @@ ffi.sig
 ffi.fun
 cases.sig
 cases.fun
+array-layout.sml
 prim.sig
 prim.fun
 exn-dec-elab.sig

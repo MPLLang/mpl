@@ -201,13 +201,15 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   name
                end
       and mkVectorEqualFunc {name: Func.t,
-                             ty: Type.t, doEq: bool}: unit =
+                             ty: Type.t,
+                             doEq: bool,
+                             layout: ArrayLayout.t}: unit =
          let
             val loop = Func.newString (Func.originalName name ^ "Loop")
             (* Build two functions, one that checks the lengths and the
              * other that loops.
              *)
-            val vty = Type.vector ty
+            val vty = Type.vector layout ty
             local
                val vec1 = (Var.newNoname (), vty)
                val vec2 = (Var.newNoname (), vty)
@@ -306,14 +308,14 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          in
             ()
          end
-      and vectorEqualFunc (ty: Type.t): Func.t =
+      and vectorEqualFunc (layout: ArrayLayout.t) (ty: Type.t): Func.t =
          case getVectorEqualFunc ty of
             SOME f => f
           | NONE =>
                let
                   val name = Func.newString "vectorEqual"
                   val _ = setVectorEqualFunc (ty, SOME name)
-                  val () = mkVectorEqualFunc {name = name, ty = ty, doEq = true}
+                  val () = mkVectorEqualFunc {name = name, ty = ty, doEq = true, layout = layout}
                in
                   name
                end
@@ -331,7 +333,8 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   val bigIntInfEqual = Func.newString "bigIntInfEqual"
                   val () = mkVectorEqualFunc {name = bigIntInfEqual,
                                               ty = Type.word bws,
-                                              doEq = false}
+                                              doEq = false,
+                                              layout = ArrayLayout.Default}
 
                   local
                      val arg1 = (Var.newNoname (), Type.intInf)
@@ -350,7 +353,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                         {prim = Prim.IntInf_toVector,
                          targs = Vector.new0 (),
                          args = Vector.new1 dx,
-                         ty = Type.vector (Type.word bws)}
+                         ty = Type.vector ArrayLayout.Default (Type.word bws)}
                      val one = Dexp.word (WordX.one sws)
                      val body =
                         Dexp.disjoin
@@ -453,8 +456,8 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   in
                      loop 0
                   end
-             | Type.Vector ty =>
-                  Dexp.call {func = vectorEqualFunc ty,
+             | Type.Vector {elem=ty, layout} =>
+                  Dexp.call {func = vectorEqualFunc layout ty,
                              args = Vector.new2 (dx1, dx2),
                              inline = InlineAttr.Auto,
                              ty = Type.bool}
