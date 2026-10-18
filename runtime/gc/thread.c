@@ -384,9 +384,9 @@ Bool GC_tryConsumeSpareHeartbeats(GC_state s, uint32_t count) {
   return FALSE;
 }
 
-bool GC_HH_findNextPromotableFrame(
+Bool GC_HH_findNextPromotableFrame(
   GC_state s, 
-  ARG_USED_FOR_ASSERT bool youngest,
+  ARG_USED_FOR_ASSERT Bool youngest,
   pointer threadp)
 {
   /* Note that the promotion policy is _always_ oldest-first, regardless of the
@@ -439,7 +439,7 @@ GC_tokenPolicy GC_HH_getNextPromotionTokenPolicy(GC_state s, pointer threadp) {
 }
 
 
-bool GC_HH_canForkThread(GC_state s, pointer threadp) {
+Bool GC_HH_canForkThread(GC_state s, pointer threadp) {
   enter(s);
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   GC_stack fromStack = (GC_stack)objptrToPointer(thread->stack, NULL);
@@ -454,7 +454,7 @@ bool GC_HH_canForkThread(GC_state s, pointer threadp) {
 
 objptr GC_HH_forkThread(
   GC_state s,
-  ARG_USED_FOR_ASSERT bool youngestOptimization,
+  ARG_USED_FOR_ASSERT Bool youngestOptimization,
   pointer threadp,
   pointer dp)
 {
