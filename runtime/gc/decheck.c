@@ -20,7 +20,7 @@ static uint32_t *synch_depths = SYNCH_DEPTHS_BASE;
 #endif
 
 
-bool GC_HH_decheckMaxDepth(ARG_USED_FOR_DETECT_ENTANGLEMENT objptr resultRef) {
+Bool GC_HH_decheckMaxDepth(ARG_USED_FOR_DETECT_ENTANGLEMENT objptr resultRef) {
 #ifdef DETECT_ENTANGLEMENT
   uint32_t *r = (uint32_t*)objptrToPointer(resultRef, NULL);
   *r = MAX_FORK_DEPTH;
