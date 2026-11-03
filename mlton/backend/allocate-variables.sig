@@ -17,7 +17,7 @@ signature ALLOCATE_VARIABLES_STRUCTS =
 signature ALLOCATE_VARIABLES =
    sig
       include ALLOCATE_VARIABLES_STRUCTS
-
+      (* TODO: mess with isLoop stuff? *)
       val allocate:
          {function: Rssa.Function.t,
           paramOffsets: (Rssa.Var.t * Rssa.Type.t) vector -> {offset: Bytes.t, ty: Rssa.Type.t, volatile: bool} vector,

@@ -38,6 +38,8 @@ local
   in
     Heartbeat.sml
     Scheduler.sml
+    LoopIndex.sml
+    UnrolledLoops.sml
   end
   ForkJoin.sml
 in
