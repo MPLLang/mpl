@@ -1,0 +1,5 @@
+difference from ocaml-nbody:
+  - explicit packing of planet type into a single array of floats
+    (this guarantees that flattening occurred, but after measuring
+    no performance improvement suggests that the other implementations
+    do actually manage to flatten.)
