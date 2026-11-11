@@ -342,11 +342,11 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                     datatype z = datatype Type.dest
                     val () =
                        case Type.dest ty of
-                          Array ty => visitType ty
+                          Array {elem=ty, ...} => visitType ty
                         | Datatype tycon => visitTycon tycon
                         | Ref ty => visitType ty
                         | Tuple tys => Vector.foreach (tys, visitType)
-                        | Vector ty => visitType ty
+                        | Vector {elem=ty, ...} => visitType ty
                         | Weak ty => visitType ty
                         | _ => ()
                  in
@@ -413,7 +413,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                                          (TyconInfo.cons (tyconInfo t),
                                           fn con => deconCon con)
                                     | Tuple ts => Vector.foreach (ts, deconType)
-                                    | Vector t => deconType t
+                                    | Vector {elem=t, ...} => deconType t
                                     | _ => ()
                              in
                                 ()
@@ -917,10 +917,10 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                           datatype z = datatype Type.dest
                           val ty =
                              case Type.dest ty of
-                                Array ty => Type.array (simplifyType ty)
+                                Array {elem=ty, layout=lay} => Type.array lay (simplifyType ty)
                               | Ref ty => Type.reff (simplifyType ty)
                               | Tuple tys => Type.tuple (Vector.map (tys, simplifyType))
-                              | Vector ty => Type.vector (simplifyType ty)
+                              | Vector {elem=ty, layout=lay} => Type.vector lay (simplifyType ty)
                               | Weak ty => Type.weak (simplifyType ty)
                               | _ => ty
                        in

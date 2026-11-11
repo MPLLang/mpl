@@ -64,7 +64,7 @@ fun checkScopes (program as
               datatype z = datatype Type.dest
               val _ =
                  case Type.dest ty of
-                    Array ty => loopType ty
+                    Array {elem, layout} => loopType elem
                   | CPointer => ()
                   | Datatype tycon => getTycon tycon
                   | IntInf => ()
@@ -72,7 +72,7 @@ fun checkScopes (program as
                   | Ref ty => loopType ty
                   | Thread => ()
                   | Tuple tys => Vector.foreach (tys, loopType)
-                  | Vector ty => loopType ty
+                  | Vector {elem, layout} => loopType elem
                   | Weak ty => loopType ty
                   | Word _ => ()
            in

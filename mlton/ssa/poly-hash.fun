@@ -404,7 +404,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                in
                   name
                end
-      and vectorHashFunc (ty: Type.t): Func.t =
+      and vectorHashFunc (lay: ArrayLayout.t) (ty: Type.t): Func.t =
          case getVectorHashFunc ty of
             SOME f => f
           | NONE =>
@@ -415,7 +415,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   val name = Func.newString "vectorHash"
                   val _ = setVectorHashFunc (ty, SOME name)
                   val loop = Func.newString "vectorHashLoop"
-                  val vty = Type.vector ty
+                  val vty = Type.vector lay ty
                   local
                      val st = (Var.newNoname (), Hash.stateTy)
                      val vec = (Var.newNoname (), vty)
@@ -555,7 +555,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                            {prim = Prim.IntInf_toVector,
                             targs = Vector.new0 (),
                             args = Vector.new1 dx,
-                            ty = Type.vector (Type.word bws)}
+                            ty = Type.vector ArrayLayout.Default (Type.word bws)}
                         val w = Var.newNoname ()
                         val dw = Dexp.var (w, Type.word sws)
                         val one = Dexp.word (WordX.one sws)
@@ -575,7 +575,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                            {con = Con.falsee,
                             args = Vector.new0 (),
                             body =
-                            Dexp.call {func = vectorHashFunc (Type.word bws),
+                            Dexp.call {func = vectorHashFunc ArrayLayout.Default (Type.word bws),
                                        args = Vector.new2 (dst, toVector),
                                        inline = InlineAttr.Auto,
                                        ty = Hash.stateTy}})}}
@@ -615,8 +615,8 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      in
                         loop (0, dst)
                      end
-                | Type.Vector ty =>
-                     Dexp.call {func = vectorHashFunc ty,
+                | Type.Vector {elem=ty, layout=lay} =>
+                     Dexp.call {func = vectorHashFunc lay ty,
                                 args = Vector.new2 (dst, dx),
                                 inline = InlineAttr.Auto,
                                 ty = Hash.stateTy}

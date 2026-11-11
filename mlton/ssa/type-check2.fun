@@ -62,7 +62,7 @@ fun checkScopes (program as
             val _ =
                case oc of
                   Con con => getCon con
-                | Sequence => ()
+                | Sequence _ => ()
                 | Tuple => ()
          in
             ()
@@ -648,7 +648,7 @@ fun typeCheck (program as Program.T {datatypes, ...}): unit =
             fun err () = Error.bug "Ssa2.TypeCheck2.sequence (bad sequence)"
          in
             case Type.dest resultType of
-               Type.Object {args = args', con = ObjectCon.Sequence} =>
+               Type.Object {args = args', con = ObjectCon.Sequence _} =>
                   (if (Vector.foreach
                        (args, fn args =>
                         Vector.foreach2

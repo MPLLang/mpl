@@ -36,15 +36,15 @@ end
 local
    fun unary tycon t = con (tycon, Vector.new1 t)
 in
-   val array = unary Tycon.array
+   fun array (lay: ArrayLayout.t) = unary (Tycon.array lay)
    val list = unary Tycon.list
    val reff = unary Tycon.reff
-   val vector = unary Tycon.vector
+   fun vector (lay: ArrayLayout.t) = unary (Tycon.vector lay)
    val weak = unary Tycon.weak
 end
 
 val word8 = word WordSize.word8
-val word8Vector = vector word8
+val word8Vector = vector ArrayLayout.Default word8
 val word32 = word WordSize.word32
 
 local
@@ -68,10 +68,40 @@ fun deUnary tycon t =
       SOME t => t
     | NONE => Error.bug "TypeOps.deUnary"
 
-val deArray = deUnary Tycon.array
 val deRef = deUnary Tycon.reff
-val deVector = deUnary Tycon.vector
 val deWeak = deUnary Tycon.weak
+
+fun deArrayOpt t =
+  case deConOpt t of
+    SOME (c, ts) =>
+      if Tycon.isArray c then SOME (Vector.first ts) else NONE
+  | _ => NONE
+
+fun deVectorOpt t =
+  case deConOpt t of
+    SOME (c, ts) =>
+      if Tycon.isVector c then SOME (Vector.first ts) else NONE
+  | _ => NONE
+
+val deArray = fn t =>
+  case deArrayOpt t of
+    SOME x => x
+  | NONE => Error.bug "TypeOps.deArray"
+
+val deVector = fn t =>
+  case deVectorOpt t of
+    SOME x => x
+  | NONE => Error.bug "TypeOps.deVector"
+
+fun deArrayLayout t =
+  case deConOpt t of
+    SOME (c, _) => Tycon.deArrayLayout c
+  | NONE => Error.bug "TypeOps.deArrayLayout"
+
+fun deVectorLayout t =
+  case deConOpt t of
+    SOME (c, _) => Tycon.deVectorLayout c
+  | NONE => Error.bug "TypeOps.deVectorLayout"
 
 fun tuple ts =
    if 1 = Vector.length ts

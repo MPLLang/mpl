@@ -257,7 +257,7 @@ fun 'a analyze
                let
                   val args =
                      case Type.dest ty of
-                        Type.Object {args = ts, con = ObjectCon.Sequence} =>
+                        Type.Object {args = ts, con = ObjectCon.Sequence _} =>
                            Vector.map
                            (args, fn args =>
                             Prod.make

@@ -1018,7 +1018,7 @@ structure Type =
          val unresolvedWord = make Word
       end
 
-      fun unresolvedString () = vector (unresolvedChar ())
+      fun unresolvedString () = vector ArrayLayout.Default (unresolvedChar ())
 
       val traceCanUnify =
          Trace.trace2 

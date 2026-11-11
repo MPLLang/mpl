@@ -568,13 +568,15 @@ fun closureConvert
                else Error.bug "ClosureConvert.convertType.unary: bogus application of unary tycon"
             val tycons =
                [(Tycon.arrow, fn _ => Error.bug "ClosureConvert.convertType.array"),
-                (Tycon.array, unary Type.array),
+                (Tycon.array ArrayLayout.Default, unary (Type.array ArrayLayout.Default)),
+                (Tycon.array ArrayLayout.Aos, unary (Type.array ArrayLayout.Aos)),
                 (Tycon.cpointer, nullary Type.cpointer),
                 (Tycon.intInf, nullary Type.intInf),
                 (Tycon.reff, unary Type.reff),
                 (Tycon.thread, nullary Type.thread),
                 (Tycon.tuple, Type.tuple),
-                (Tycon.vector, unary Type.vector),
+                (Tycon.vector ArrayLayout.Default, unary (Type.vector ArrayLayout.Default)),
+                (Tycon.vector ArrayLayout.Aos, unary (Type.vector ArrayLayout.Aos)),
                 (Tycon.weak, unary Type.weak)]
                @ Vector.toListMap (Tycon.reals, fn (t, s) => (t, nullary (Type.real s)))
                @ Vector.toListMap (Tycon.words, fn (t, s) => (t, nullary (Type.word s)))
@@ -608,13 +610,13 @@ fun closureConvert
                   let
                      val t =
                         case Value.dest v of
-                           Value.Array v => Type.array (valueType v)
+                           Value.Array {elem=v, layout} => Type.array layout (valueType v)
                          | Value.Lambdas ls => #ty (lambdasInfo ls)
                          | Value.Ref v => Type.reff (valueType v)
                          | Value.Type t => convertType t
                          | Value.Tuple vs =>
                               Type.tuple (Vector.map (vs, valueType))
-                         | Value.Vector v => Type.vector (valueType v)
+                         | Value.Vector {elem=v, layout} => Type.vector layout (valueType v)
                          | Value.Weak v => Type.weak (valueType v)
                   in r := SOME t; t
                   end
@@ -1270,7 +1272,7 @@ fun closureConvert
                   in
                       simple
                       (case prim of
-                          Prim.Array_array =>
+                          Prim.Array_array _ =>
                              let
                                 val ys = Vector.map (args, varExpInfo)
                                 val v = Value.deArray v
@@ -1371,7 +1373,7 @@ fun closureConvert
                                          v1 (coerce (convertVarInfo y,
                                                      VarInfo.value y, v)))
                              end
-                        | Prim.Vector_vector =>
+                        | Prim.Vector_vector _ =>
                              let
                                 val ys = Vector.map (args, varExpInfo)
                                 val v = Value.deVector v

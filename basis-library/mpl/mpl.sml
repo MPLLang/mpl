@@ -4,8 +4,14 @@
  * See the file MLton-LICENSE for details.
  *)
 
-structure MPL :> MPL =
+structure MPL: MPL =
 struct
   structure File = MPLFile
   structure GC = MPLGC
+
+  structure ArrayAos = ArrayAos
+  structure ArrayAosSlice = ArrayAosSlice
+
+  structure VectorAos = VectorAos
+  structure VectorAosSlice = VectorAosSlice
 end

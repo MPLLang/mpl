@@ -105,9 +105,15 @@ in
    ../arrays-and-vectors/vector-slice.sig
    ../arrays-and-vectors/vector.sig
    ../arrays-and-vectors/vector.sml
+   ../arrays-and-vectors/vector-aos-slice.sig
+   ../arrays-and-vectors/vector-aos.sig
+   ../arrays-and-vectors/vector-aos.sml
    ../arrays-and-vectors/array-slice.sig
    ../arrays-and-vectors/array.sig
    ../arrays-and-vectors/array.sml
+   ../arrays-and-vectors/array-aos-slice.sig
+   ../arrays-and-vectors/array-aos.sig
+   ../arrays-and-vectors/array-aos.sml
    ../arrays-and-vectors/array2.sig
    ../arrays-and-vectors/array2.sml
    ../arrays-and-vectors/mono-vector-slice.sig

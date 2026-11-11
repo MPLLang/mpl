@@ -21,7 +21,7 @@ signature SSA_TREE =
             type t
 
             datatype dest =
-               Array of t
+               Array of {elem: t, layout: ArrayLayout.t}
              | CPointer
              | Datatype of Tycon.t
              | IntInf
@@ -29,11 +29,11 @@ signature SSA_TREE =
              | Ref of t
              | Thread
              | Tuple of t vector
-             | Vector of t
+             | Vector of {elem: t, layout: ArrayLayout.t}
              | Weak of t
              | Word of WordSize.t
 
-            val array: t -> t
+            val array: ArrayLayout.t -> t -> t 
             val bool: t
             val checkPrimApp: {targs: t vector,
                                args: t vector,
@@ -43,11 +43,13 @@ signature SSA_TREE =
             val datatypee: Tycon.t -> t
             val dest: t -> dest
             val deArray: t -> t
+            val deArrayLayout: t -> ArrayLayout.t
             val deDatatype: t -> Tycon.t
             val deRef: t -> t
             val deTuple: t -> t vector
             val deTupleOpt: t -> t vector option
             val deVector: t -> t
+            val deVectorLayout: t -> ArrayLayout.t
             val deWeak: t -> t
             val deWord: t -> WordSize.t
             val deWordOpt: t -> WordSize.t option
@@ -63,7 +65,7 @@ signature SSA_TREE =
             val reff: t -> t
             val thread: t
             val tuple: t vector -> t
-            val vector: t -> t
+            val vector: ArrayLayout.t -> t -> t
             val weak: t -> t
             val word: WordSize.t -> t
             val unit: t

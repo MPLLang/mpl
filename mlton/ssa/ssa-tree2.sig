@@ -20,7 +20,7 @@ signature SSA_TREE2 =
          sig
             datatype t =
                Con of Con.t
-             | Sequence
+             | Sequence of ArrayLayout.t
              | Tuple
 
             val isSequence: t -> bool
@@ -42,7 +42,7 @@ signature SSA_TREE2 =
              | Weak of t
              | Word of WordSize.t
 
-            val array1: t -> t
+            val array1: ArrayLayout.t -> t -> t
             val bool: t
             val conApp: Con.t * t Prod.t -> t
             val checkPrimApp: {args: t vector,
@@ -53,6 +53,7 @@ signature SSA_TREE2 =
             val dest: t -> dest
             val deSequence1: t -> t
             val deSequenceOpt: t -> t Prod.t option
+            val deSequenceLayout: t -> ArrayLayout.t
             val deRef1Opt : t -> t option
             val deRef1 : t -> t
             val equals: t * t -> bool
@@ -65,10 +66,10 @@ signature SSA_TREE2 =
             val plist: t -> PropertyList.t
             val real: RealSize.t -> t
             val reff1: t -> t
-            val sequence: t Prod.t -> t
+            val sequence: ArrayLayout.t -> t Prod.t -> t
             val thread: t
             val tuple: t Prod.t -> t
-            val vector1: t -> t
+            val vector1: ArrayLayout.t -> t -> t
             val weak: t -> t
             val word: WordSize.t -> t
             val unit: t

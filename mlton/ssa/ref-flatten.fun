@@ -360,7 +360,7 @@ fun transform2 (program as Program.T {datatypes, functions, globals, main}) =
                                      in
                                         v
                                      end))
-                        | Sequence => doit ()
+                        | Sequence _ => doit ()
                         | Tuple => doit ()
                     end
                | Weak t =>

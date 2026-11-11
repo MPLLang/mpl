@@ -2551,7 +2551,7 @@ fun compute (program as Ssa2.Program.T {datatypes, ...}) =
                            in
                               r
                            end
-                      | ObjectCon.Sequence =>
+                      | ObjectCon.Sequence _ =>
                            let
                               val hasIdentity = Prod.someIsMutable args
                               val args = Prod.dest args
@@ -2700,7 +2700,7 @@ fun compute (program as Ssa2.Program.T {datatypes, ...}) =
              | Word s => nonObjptr (Type.word s)
            end))
       val () = typeRepRef := typeRep
-      val _ = typeRep (S.Type.vector1 (S.Type.word WordSize.byte))
+      val _ = typeRep (S.Type.vector1 ArrayLayout.Default (S.Type.word WordSize.byte))
       (* Establish dependence between constructor argument type representations
        * and tycon representations.
        *)
@@ -2804,7 +2804,7 @@ fun compute (program as Ssa2.Program.T {datatypes, ...}) =
                       ConRep.ShiftAndTag {selects, ...} => (selects, NONE)
                     | ConRep.Tuple tr => (TupleRep.selects tr, NONE)
                     | _ => Error.bug "PackedRepresentation.getSelects: Con,non-select")
-             | Sequence =>
+             | Sequence _ =>
                   (case sequenceRep objectTy of
                      tr as TupleRep.Indirect pr =>
                         (TupleRep.selects tr,

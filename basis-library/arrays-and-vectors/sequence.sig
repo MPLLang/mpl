@@ -12,9 +12,11 @@ signature SEQUENCE =
    sig
       type 'a sequence
       type 'a elt
+      type 'a prim_array
 
       structure Slice : SLICE where type 'a sequence = 'a sequence
                                 and type 'a elt = 'a elt
+                                and type 'a prim_array = 'a prim_array
 
       val maxLen: int
       val length: 'a sequence -> int
@@ -25,8 +27,8 @@ signature SEQUENCE =
       val uninitIsNop: 'a sequence -> bool
       val uninit: 'a sequence * int -> unit
       val unsafeUninit: 'a sequence * int -> unit
-      val copy: {dst: 'a elt Array.array, di: int, src: 'a sequence} -> unit
-      val unsafeCopy: {dst: 'a elt Array.array, di: int, src: 'a sequence} -> unit
+      val copy: {dst: 'a elt prim_array, di: int, src: 'a sequence} -> unit
+      val unsafeCopy: {dst: 'a elt prim_array, di: int, src: 'a sequence} -> unit
       val tabulate: int * (int -> 'a elt) -> 'a sequence
       val appi: (int * 'a elt -> unit) -> 'a sequence -> unit 
       val app: ('a elt -> unit) -> 'a sequence -> unit 

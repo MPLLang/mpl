@@ -78,6 +78,7 @@ $(MLTON_OUTPUT): $(MLTON_SOURCES)
 	"$(RUN_MLTON)" \
 		@MLton $(RUN_MLTON_RUNTIME_XARGS) $(RUN_MLTON_RUNTIME_ARGS) gc-summary -- \
 		$(RUN_MLTON_COMPILE_XARGS) -verbose 2 $(RUN_MLTON_COMPILE_ARGS)	\
+		-const 'Exn.keepHistory true'	\
 		-target $(TARGET) -output $(MLTON_OUTPUT)			\
 		$(MLTON_MLB)
 

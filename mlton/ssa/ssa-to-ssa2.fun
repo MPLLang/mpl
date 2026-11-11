@@ -38,7 +38,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
           Property.initRec
           (fn (t, convertType)  =>
            case S.Type.dest t of
-              S.Type.Array t => S2.Type.array1 (convertType t)
+              S.Type.Array {elem, layout} => S2.Type.array1 layout (convertType elem)
             | S.Type.CPointer => S2.Type.cpointer
             | S.Type.Datatype tycon => S2.Type.datatypee tycon
             | S.Type.IntInf => S2.Type.intInf
@@ -50,7 +50,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                                 (Vector.map (ts, fn t =>
                                              {elt = convertType t,
                                               isMutable = false})))
-            | S.Type.Vector t => S2.Type.vector1 (convertType t)
+            | S.Type.Vector {elem, layout} => S2.Type.vector1 layout (convertType elem)
             | S.Type.Weak t => S2.Type.weak (convertType t)
             | S.Type.Word s => S2.Type.word s))
       fun convertTypes ts = Vector.map (ts, convertType)
@@ -125,7 +125,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                                         readBarrier = false})
                    in
                       case prim of
-                         Prim.Array_array => sequence ()
+                         Prim.Array_array _ => sequence ()
                        | Prim.Array_sub {readBarrier} =>
                             simple
                             (S2.Exp.Select
@@ -159,7 +159,7 @@ fun convert (S.Program.T {datatypes, functions, globals, main}) =
                             simple (S2.Exp.PrimApp {args = args,
                                                     prim = Prim.Array_length})
                        | Prim.Vector_sub => sub ()
-                       | Prim.Vector_vector => sequence ()
+                       | Prim.Vector_vector _ => sequence ()
                        | _ =>
                             simple (S2.Exp.PrimApp {args = args,
                                                     prim = convertPrim prim})

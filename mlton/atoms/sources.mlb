@@ -51,6 +51,7 @@ local
    admits-equality.fun
    tycon-kind.sig
    tycon-kind.fun
+   array-layout.sml
    prim-tycons.sig
    prim-tycons.fun
    tycon.sig

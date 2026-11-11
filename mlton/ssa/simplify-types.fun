@@ -282,11 +282,11 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                      let
                         fun deepSetFFI t =
                            case Type.dest t of
-                              Type.Array t => deepSetFFI t
+                              Type.Array {elem=t, ...} => deepSetFFI t
                             | Type.Datatype tycon => tyconFFI tycon ()
                             | Type.Ref t => deepSetFFI t
                             | Type.Tuple tv => Vector.foreach(tv, deepSetFFI)
-                            | Type.Vector t => deepSetFFI t
+                            | Type.Vector {elem=t, ...} => deepSetFFI t
                             | Type.Weak t => deepSetFFI t
                             | _ => ()
                      in
@@ -352,7 +352,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                | Ref t => ptrCard t
                | Thread => Cardinality.many
                | Tuple ts => tupleCard ts
-               | Vector t => vecCard t
+               | Vector {elem=t, ...} => vecCard t
                | Weak t => ptrCard t
                | Word _ => Cardinality.many
            end))
@@ -536,14 +536,14 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                 Property.initRec
                 (fn (t, containsTycon) =>
                  case Type.dest t of
-                    Array t => containsTycon t
+                    Array {elem=t, ...} => containsTycon t
                   | Datatype tyc' =>
                        (case tyconReplacement tyc' of
                            NONE => Tycon.equals (tyc, tyc')
                          | SOME t => containsTycon t)
                   | Tuple ts => Vector.exists (ts, containsTycon)
                   | Ref t => containsTycon t
-                  | Vector t => containsTycon t
+                  | Vector {elem=t, ...} => containsTycon t
                   | Weak t => containsTycon t
                   | _ => false))
             val res = containsTycon ty
@@ -658,7 +658,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
               open Type
            in
               case dest t of
-                 Array t => array (simplifyType t)
+                 Array {elem=t, layout=l} => array l (simplifyType t)
                | Datatype tycon =>
                     (case tyconReplacement tycon of
                         SOME t =>
@@ -674,7 +674,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                     (case simplifyUsefulTypesOpt ts of
                         NONE => typeVoid
                       | SOME ts => Type.tuple ts)
-               | Vector t => vector (simplifyType t)
+               | Vector {elem=t, layout=l} => vector l (simplifyType t)
                | Weak t => doitPtr (weak, t)
                | _ => t
            end))

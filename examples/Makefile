@@ -13,6 +13,7 @@ PROGRAMS= \
 	ray \
 	tokens \
 	nn \
+	nn-flat \
 	dedup \
 	nqueens \
 	reverb \
