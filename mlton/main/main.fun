@@ -1557,41 +1557,44 @@ fun commandLine (_: string, args: string list): unit =
                      if List.forall (inputs, fn f =>
                                      SOME "o" = File.extension f)
                         then compileO inputs
-                     else
-                     let
-                        val c = Counter.new 0
-                        val (allCommands, oFiles) =
+                     else let
+                        val oFiles =
                            trace (Top, "Compile and Assemble")
                            (fn () =>
-                            List.fold
-                            (inputs, ([], []), fn (input, (allCommands, allOutputs)) =>
-                             let
-                                val extension = File.extension input
-                                val (commands, output) =
-                                    if SOME "o" = extension
-                                    then ([], input)
-                                    else if SOME "c" = extension
-                                    then compileC (c, input)
-                                    else if SOME "ll" = extension
-                                    then compileLL(c, input)
-                                    else if SOME "s" = extension
-                                            orelse SOME "S" = extension
-                                    then compileS (c, input)
-                                    else Error.bug
-                                             (concat
-                                                  ["invalid extension: ",
-                                                   Option.toString (fn s => s) extension])
-                             in
-                                (commands :: allCommands, output :: allOutputs)
-                             end))
+                              let
+                                 val c = Counter.new 0
+                                 val (allCommands, oFiles) =
+                                    List.fold
+                                    (inputs, ([], []), fn (input, (allCommands, allOutputs)) =>
+                                    let
+                                       val extension = File.extension input
+                                       val (commands, output) =
+                                             if SOME "o" = extension
+                                             then ([], input)
+                                             else if SOME "c" = extension
+                                             then compileC (c, input)
+                                             else if SOME "ll" = extension
+                                             then compileLL(c, input)
+                                             else if SOME "s" = extension
+                                                   orelse SOME "S" = extension
+                                             then compileS (c, input)
+                                             else Error.bug
+                                                      (concat
+                                                         ["invalid extension: ",
+                                                            Option.toString (fn s => s) extension])
+                                    in
+                                       (commands :: allCommands, output :: allOutputs)
+                                    end)
+                                 fun doIt l = List.foreach (l, System.system)
+                              in
+                                 Process.foreachPar (Process.numberOfMLtonJobs (), rev allCommands, doIt);
+                                 oFiles
+                              end)
                            ()
-
-                        fun doIt l = List.foreach (l, System.system)
                      in
-                        Process.foreachPar (Process.numberOfMLtonJobs (), rev allCommands, doIt);
                         case stop of
                            Place.O => ()
-                         | _ => compileO (rev oFiles)
+                        | _ => compileO (rev oFiles)
                      end
                   fun compileSrc sel =
                      let
