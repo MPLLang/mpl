@@ -69,6 +69,14 @@ fun implementsPrim (p: 'a Prim.t): bool =
        | _ => CCodegen.implementsPrim p
    end
 
+(* Each entry block has a global symbol for its entry stub, which sets up the
+ * (native) stack frame of its chunk before falling into the block.  The
+ * addresses of the stubs are collected in a table that is indexed by frame
+ * index (that is, by "return address").
+ *)
+fun entryStub l = "vibeArmEntry_" ^ Label.toString l
+val entryTable = "vibeArmEntries"
+
 fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                  {labelBlock: Label.t -> Block.t,
                   labelChunk: Label.t -> ChunkLabel.t,
@@ -81,9 +89,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       fun i ss = (print "\t"; List.foreach (ss, print); print "\n")
       fun label s = (print s; print ":\n")
       val self = ChunkLabel.toString chunkLabel
-      val switch = "Lswitch_" ^ self
       val leave = "Lleave_" ^ self
-      val table = "Ltable_" ^ self
 
       (* Registers: 0-31 are x0-x30,sp; 32-63 are d0-d31. *)
       fun isReal ct =
@@ -1163,32 +1169,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          end
       (* return x0 to the trampoline *)
       fun leaveChunk () = (flushFrontier (); flushStackTop (); i ["b ", leave])
-      (* Transfers between chunks don't go through the trampoline.  Every
-       * chunk function has a second entry point, at a fixed offset from the
-       * first, that expects to already be running in some chunk's frame:
-       * x19-x21 are set, x29 points at the saved registers, and x3 is the
-       * index of the entry block.
+      (* Transfers between chunks don't go through the trampoline: a
+       * transfer to a known entry block of another chunk branches to its
+       * entry stub.  This relies on every chunk running in the same frame
+       * of saved registers (x29) with x19-x21 set.
        *)
-      fun enter c = sym (ChunkLabel.toString c ^ "_enter")
-      val enterOffset = 4 * (2 + List.length saved + 3)
-      val entryLo =
-         Vector.fold (blocks, NONE, fn (Block.T {kind, label, ...}, lo) =>
-                      if Kind.isEntry kind
-                         then SOME (case lo of
-                                       NONE => labelIndex label
-                                     | SOME lo => Int.min (lo, labelIndex label))
-                      else lo)
-      (* jump to the entry block (of this chunk) with index x3 *)
-      fun dispatch () =
-         (addImm (16, 3, ~ (Option.fold (entryLo, 0, #1)))
-          ; i ["adr x17, ", table]
-          ; i ["ldrsw x16, [x17, x16, lsl #2]"]
-          ; i ["add x17, x17, x16"]
-          ; i ["br x17"])
       fun jump l =
          if ChunkLabel.equals (labelChunk l, chunkLabel)
             then goto l
-         else (movInt (3, labelIndex l); i ["b ", enter (labelChunk l)])
+         else i ["b ", sym (entryStub l)]
       fun push (return, size) =
          let
             val size = Bytes.toInt size
@@ -1232,27 +1221,19 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      ; label "1"
                   end
             else ())
-      fun indJump {mustReturnToSelf, mayReturnToSelf = _: bool} =
-         (i ["ldr x3, [x20, #-8]"]
-          ; if mustReturnToSelf
-               then (* `adr` only reaches +-1MB *)
-                    if far then i ["b ", switch] else dispatch ()
-            else (symAddr (16, "nextChunks", {got = false})
-                  ; i ["ldr x16, [x16, x3, lsl #3]"]
-                  ; i ["add x16, x16, #", int enterOffset]
-                  ; i ["br x16"]))
+      (* transfer to the entry block whose index is on top of the stack *)
+      fun indJump () =
+         (i ["ldr x16, [x20, #-8]"]
+          ; symAddr (17, entryTable, {got = false})
+          ; i ["ldr x16, [x17, x16, lsl #3]"]
+          ; i ["br x16"])
       fun rtrans rsTo =
-         let
-            fun isSelf l = ChunkLabel.equals (labelChunk l, chunkLabel)
-         in
-            case rsTo of
-               l :: rsTo' =>
-                  if List.forall (rsTo', fn l' => Label.equals (l, l'))
-                     then jump l
-                  else indJump {mustReturnToSelf = List.forall (rsTo, isSelf),
-                                mayReturnToSelf = List.exists (rsTo, isSelf)}
-             | [] => indJump {mustReturnToSelf = false, mayReturnToSelf = true}
-         end
+         case rsTo of
+            l :: rsTo' =>
+               if List.forall (rsTo', fn l' => Label.equals (l, l'))
+                  then jump l
+               else indJump ()
+          | [] => indJump ()
       fun ccall (args, func as CFunction.T {prototype = (ctys, retTy),
                                              target, ...}, return) =
          let
@@ -1350,7 +1331,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                else ()
          in
             if CFunction.maySwitchThreadsFrom func
-               then indJump {mustReturnToSelf = false, mayReturnToSelf = true}
+               then indJump ()
             else (case return of
                      NONE => (movInt (0, ~2); i ["b ", leave])
                    | SOME {return, ...} => goto return)
@@ -1615,7 +1596,14 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          end
       fun outputBlock (b as Block.T {kind, label = l, statements, transfer,
                                      ...}) =
-         (label (Label.toString l)
+         (if Kind.isEntry kind
+             then (i [".globl ", sym (entryStub l)]
+                   ; i [if darwin then ".private_extern " else ".hidden ",
+                        sym (entryStub l)]
+                   ; label (sym (entryStub l))
+                   ; addImm (31, 29, ~ frameSize))
+          else ()
+          ; label (Label.toString l)
           ; region := blockRegion l
           ; setupCache b
           ; (case kind of
@@ -1760,7 +1748,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                           then (labelIndex label, label) :: es
                        else es),
           fn ((i1, _), (i2, _)) => i1 <= i2)
-      val lo = case entries of [] => 0 | (lo, _) :: _ => lo
       (* Blocks that aren't reachable from an entry (such as the arms of
        * if-converted switches) are not output.
        *)
@@ -1776,21 +1763,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       ; i ["mov x19, x0"]
       ; i ["mov x20, x1"]
       ; i ["mov x21, x2"]
-      (* The entry point for transfers from other chunks; it must be
-       * enterOffset bytes from the start.
-       *)
-      ; i [".globl ", enter chunkLabel]
-      ; i [if darwin then ".private_extern " else ".hidden ", enter chunkLabel]
-      ; label (enter chunkLabel)
-      ; addImm (31, 29, ~ frameSize)
-      ; label switch
-      ; dispatch ()
-      ; label table
-      ; ignore (List.fold
-                (entries, lo, fn ((index, l), next) =>
-                 (Int.for (next, index, fn _ => i [".long 0"])
-                  ; i [".long ", Label.toString l, " - ", table]
-                  ; index + 1)))
+      (* jump to the entry block with index x3 *)
+      ; symAddr (17, entryTable, {got = false})
+      ; i ["ldr x16, [x17, x3, lsl #3]"]
+      ; i ["br x16"]
       (* return x0 to the trampoline *)
       ; label leave
       ; i ["mov sp, x29"]
@@ -1800,10 +1776,49 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       ; outputBlocks (List.rev (!order))
    end
 
-fun output {program, outputC,
+fun output {program as Program.T {chunks, frameInfos, ...}, outputC,
             outputS: unit -> {file: File.t,
                               print: string -> unit,
                               done: unit -> unit}} =
+   let
+      (* the table of entry stubs *)
+      val () =
+         let
+            val {print, done, ...} = outputS ()
+            val darwin = !Control.Target.os = MLton.Platform.OS.Darwin
+            fun sym s = if !Control.labelsHaveExtra_ then "_" ^ s else s
+            val entries = Array.new (Vector.length frameInfos, NONE)
+            val () =
+               List.foreach
+               (chunks, fn Chunk.T {blocks, ...} =>
+                Vector.foreach
+                (blocks, fn Block.T {kind, label, ...} =>
+                 if Kind.isEntry kind
+                    then Array.update
+                         (entries,
+                          FrameInfo.index (valOf (Kind.frameInfoOpt kind)),
+                          SOME label)
+                 else ()))
+         in
+            print (if darwin
+                      then "\t.section __DATA,__const\n"
+                   else "\t.section .data.rel.ro,\"aw\"\n")
+            ; print "\t.p2align 3\n"
+            ; print (concat ["\t.globl ", sym entryTable, "\n"])
+            ; print (concat [if darwin then "\t.private_extern "
+                             else "\t.hidden ",
+                             sym entryTable, "\n"])
+            ; print (concat [sym entryTable, ":\n"])
+            ; Array.foreach
+              (entries, fn lo =>
+               print (concat ["\t.quad ",
+                              case lo of
+                                 NONE => "0"
+                               | SOME l => sym (entryStub l),
+                              "\n"]))
+            ; done ()
+         end
+   in
    CCodegen.outputWith
    {program = program,
     outputC = outputC,
@@ -1819,5 +1834,6 @@ fun output {program, outputC,
                                           labelIndex = labelIndex}))
              ; done ()
           end)}
+   end
 
 end
