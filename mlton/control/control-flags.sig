@@ -94,6 +94,12 @@ signature CONTROL_FLAGS =
       (* whether or not to fuse `op` and `opCheckP` primitives in codegen *)
       val codegenFuseOpAndChk: bool ref
 
+      (* Which register allocator the vibe-arm codegen uses: false is the
+       * global (graph coloring) allocator; true is the local allocator, in
+       * the style of the x86/amd64 codegens.
+       *)
+      val vibeArmLocalRegAlloc: bool ref
+
       val commandLineConsts: StrMap.t
       val setCommandLineConst: {name: string, value: string} -> unit
 

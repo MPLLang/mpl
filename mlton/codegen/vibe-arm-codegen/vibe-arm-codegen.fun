@@ -35,6 +35,11 @@
  * memory and caller-save registers are committed to memory around C calls,
  * but only those that are live across the call.  Temporaries that are live
  * across some C call prefer callee-save registers.
+ *
+ * That is the default ("graph") register allocator.  There is a second,
+ * "local", allocator, selected by `-vibe-arm-regalloc local`, that is
+ * modeled on the allocator of the x86/amd64 codegens; see "The local
+ * register allocator", below.
  *)
 
 functor VibeArmCodegen (S: VIBE_ARM_CODEGEN_STRUCTS): VIBE_ARM_CODEGEN =
@@ -90,6 +95,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       fun label s = (print s; print ":\n")
       val self = ChunkLabel.toString chunkLabel
       val leave = "Lleave_" ^ self
+      (* which register allocator: see "Register allocation", above *)
+      val localRA = !Control.vibeArmLocalRegAlloc
 
       (* Registers: 0-31 are x0-x30,sp; 32-63 are d0-d31. *)
       fun isReal ct =
@@ -536,7 +543,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          let
          in
             List.foreach
-            (!tables, fn table =>
+            (if localRA then [] else !tables, fn table =>
              List.foreach
              (List.insertionSort (!table, fn (e, e') =>
                                   ! (#count e) >= ! (#count e')),
@@ -587,7 +594,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
        *)
       val cacheable: (int * CType.t) list ref = ref []
       val freeRegs: int list ref = ref []
-      fun clearCache () = cache := []
       fun slotKey (StackOffset.T {offset, ty, ...}) =
          (Bytes.toInt offset, Type.toCType ty)
       fun sameSlot ((off, ct), (off', ct')) =
@@ -603,8 +609,179 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                             andalso not (List.exists (!cache, fn {reg, ...} =>
                                                       reg = r)))
          else NONE
-      (* load a slot into the cache, if it is worth it *)
+      (* ------------- The local register allocator ------------- *)
+      (* This is the allocator of the x86/amd64 codegens, adapted.  Every
+       * temporary has a home in the (native) stack frame, and the registers
+       * are a cache of temporaries and stack slots that is filled on
+       * demand as a block is output.  When a register is needed and none
+       * is free, the value whose next use is furthest away is evicted
+       * (and written back, if it is live and dirty); values that are dead
+       * are dropped.  Stack slots are written through, so only temporaries
+       * can be dirty.  The caller-save registers are committed and dropped
+       * at C calls.
+       *
+       * Values cross near transfers in registers ("live transfers"): the
+       * first predecessor of a block to be output fixes which temporaries
+       * the block expects in which registers, and any other predecessor
+       * conforms, with compensation code on the edge if it has to.
+       *)
+      datatype loc =
+         S of int * CType.t      (* a stack slot *)
+       | T of CType.t * int      (* a temporary *)
+      fun sameLoc (l, l') =
+         case (l, l') of
+            (S k, S k') => sameSlot (k, k')
+          | (T (ct, n), T (ct', n')) => n = n' andalso CType.equals (ct, ct')
+          | _ => false
+      fun locCt l = case l of S (_, ct) => ct | T (ct, _) => ct
+      fun isT l = case l of T _ => true | _ => false
+      fun tloc t = T (Type.toCType (Temporary.ty t), Temporary.index t)
+      fun wideCt ct = if isReal ct then CType.Real64 else CType.Word64
+      type rentry = {reg: int, loc: loc, dirty: bool ref}
+      (* what the registers hold *)
+      val regs: rentry list ref = ref []
+      (* registers that the item being output is using *)
+      val pinned: int list ref = ref []
+      (* registers that are reserved for the destinations of the item *)
+      val reserved: (loc * int) list ref = ref []
+      (* the index of the item being output; the transfer comes last *)
+      val pos = ref 0
+      (* where each location occurs in the block being output *)
+      val occs: (loc * int list) list ref = ref []
+      (* the temporaries that are live at the end of the block *)
+      val liveOut: loc list ref = ref []
+      (* what a block expects in registers: (temporary, register, clean?) *)
+      val {get = entryState: Label.t -> (loc * int * bool) list option ref,
+           ...} =
+         Property.get (Label.plist, Property.initFun (fn _ => ref NONE))
+      fun clearCache () =
+         (cache := []
+          ; regs := List.keepAll (!regs, fn {loc, ...} => isT loc))
+      fun pin r = List.push (pinned, r)
+      fun inReg l = List.peek (!regs, fn {loc, ...} => sameLoc (l, loc))
+      fun occsOf l =
+         case List.peek (!occs, fn (l', _) => sameLoc (l, l')) of
+            SOME (_, ps) => ps
+          | NONE => []
+      fun usedLater l = List.exists (occsOf l, fn p => p > !pos)
+      fun isLiveOut l = List.exists (!liveOut, fn l' => sameLoc (l, l'))
+      fun liveLater l = usedLater l orelse isLiveOut l
+      val never = 1000000
+      (* never: live at the end of the block; never + 1: dead *)
+      fun nextUse l =
+         case List.peek (occsOf l, fn p => p >= !pos) of
+            SOME p => p
+          | NONE => if isLiveOut l then never else never + 1
+      fun homeOf (ct, n) = (31, !spAdj + slot ct + 8 * n)
+      (* write a register back to its temporary's home *)
+      fun commitEntry ({reg = r, loc, dirty}: rentry) =
+         case loc of
+            S _ => ()
+          | T (ct, n) =>
+               if !dirty
+                  then let
+                          val (b, off) = homeOf (ct, n)
+                       in
+                          i ["str ", reg (r, wideCt ct), ", ",
+                             mem (b, off, wideCt ct)]
+                          ; dirty := false
+                       end
+               else ()
+      fun dropReg r = regs := List.keepAll (!regs, fn {reg, ...} => reg <> r)
+      fun dropLoc l =
+         regs := List.keepAll (!regs, fn {loc, ...} => not (sameLoc (l, loc)))
+      (* a register for l, evicting something if need be *)
+      fun allocReg l =
+         let
+            val real = isReal (locCt l)
+            val across =
+               case l of
+                  S _ => false
+                | T (ct, n) =>
+                     List.exists (! (!region), fn {ct = ct', index, across, ...} =>
+                                  index = n andalso CType.equals (ct, ct')
+                                  andalso !across)
+            val pool =
+               case (real, across) of
+                  (false, false) => caller @ callee
+                | (false, true) => callee @ caller
+                | (true, false) => fcaller @ fcallee
+                | (true, true) => fcallee @ fcaller
+            fun usable r = not (List.contains (!pinned, r, op =))
+            val r =
+               case List.peek (pool, fn r =>
+                               usable r
+                               andalso not (List.exists (!regs, fn {reg, ...} =>
+                                                         reg = r))) of
+                  SOME r => r
+                | NONE =>
+                     let
+                        (* furthest next use; prefer a clean one *)
+                        val victim =
+                           List.fold
+                           (!regs, NONE, fn (e as {reg, loc, dirty}, best) =>
+                            if (reg >= 32) <> real orelse not (usable reg)
+                               then best
+                            else
+                               let
+                                  val score = 2 * nextUse loc
+                                              + (if !dirty then 0 else 1)
+                               in
+                                  case best of
+                                     NONE => SOME (e, score)
+                                   | SOME (_, score') =>
+                                        if score > score'
+                                           then SOME (e, score)
+                                        else best
+                               end)
+                     in
+                        case victim of
+                           NONE => Error.bug "VibeArmCodegen.allocReg"
+                         | SOME (e as {reg, loc, ...}, _) =>
+                              (if nextUse loc <= never then commitEntry e else ()
+                               ; dropReg reg
+                               ; reg)
+                     end
+         in
+            pin r; r
+         end
+      (* Load a location into a register (of the cache), if it is worth it. *)
       fun cacheIn z =
+         if localRA
+            then
+               let
+                  fun go (l, ct, (b, off)) =
+                     if usedLater l
+                        then
+                           let
+                              val r = allocReg l
+                           in
+                              i ["ldr", sfx ct, " ", reg (r, ct), ", ",
+                                 mem (b, off, ct)]
+                              ; List.push (regs, {reg = r, loc = l,
+                                                  dirty = ref false})
+                              ; SOME r
+                           end
+                     else NONE
+               in
+                  case z of
+                     Operand.Cast (z, _) => cacheIn z
+                   | Operand.StackOffset so =>
+                        let
+                           val k as (off, ct) = slotKey so
+                        in
+                           go (S k, ct, (20, off))
+                        end
+                   | Operand.Temporary t =>
+                        let
+                           val ct = Type.toCType (Temporary.ty t)
+                           val n = Temporary.index t
+                        in
+                           go (T (ct, n), ct, homeOf (ct, n))
+                        end
+                   | _ => NONE
+               end
+         else
          case z of
             Operand.Cast (z, _) => cacheIn z
           | Operand.StackOffset so =>
@@ -625,10 +802,18 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             Operand.Cast (z, _) => home z
           | Operand.Frontier => SOME 21
           | Operand.GCState => SOME 19
-          | Operand.StackOffset so => Option.map (cached so, #reg)
+          | Operand.StackOffset so =>
+               if localRA
+                  then pinnedReg (inReg (S (slotKey so)))
+               else Option.map (cached so, #reg)
           | Operand.StackTop => SOME 20
-          | Operand.Temporary t => tempHome t
+          | Operand.Temporary t =>
+               if localRA then pinnedReg (inReg (tloc t)) else tempHome t
           | _ => NONE
+      and pinnedReg (e: rentry option) =
+         case e of
+            NONE => NONE
+          | SOME {reg, ...} => (pin reg; SOME reg)
       (* The address of a memory operand, as a base register and offset.
        * May clobber x<t> and up.
        *)
@@ -750,28 +935,48 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   1 => i ["and w", int h, ", w", int r, ", #0xff"]
                 | 2 => i ["and w", int h, ", w", int r, ", #0xffff"]
                 | _ => mov (h, r, ct)
-            fun slot z =
+            fun strip z =
                case z of
-                  Operand.Cast (z, _) => slot z
-                | Operand.StackOffset so => SOME so
-                | _ => NONE
+                  Operand.Cast (z, _) => strip z
+                | _ => z
          in
-            case (slot dst, home dst) of
-               (SOME so, _) =>
+            case (strip dst, home dst) of
+               (Operand.StackOffset so, _) =>
                   let
                      val k as (off, _) = slotKey so
                      val () =
                         i ["str", sfx ct, " ", reg (r, ct), ", ",
                            mem (20, off, ct)]
                      (* drop other views of the bytes that were written *)
+                     fun other (off', ct') =
+                        not (sameSlot (k, (off', ct')))
+                        andalso off' + size ct' > off
+                        andalso off + size ct > off'
                      val () =
-                        cache :=
-                        List.keepAll
-                        (!cache, fn {off = off', ct = ct', ...} =>
-                         sameSlot (k, (off', ct'))
-                         orelse off' + size ct' <= off
-                         orelse off + size ct <= off')
+                        cache := List.keepAll (!cache, fn {off, ct, ...} =>
+                                               not (other (off, ct)))
+                     val () =
+                        regs := List.keepAll (!regs, fn {loc, ...} =>
+                                              case loc of
+                                                 S k' => not (other k')
+                                               | T _ => true)
                   in
+                     if localRA
+                        then
+                           (case inReg (S k) of
+                               SOME {reg, ...} => set reg
+                             | NONE =>
+                                  if usedLater (S k)
+                                     then
+                                        let
+                                           val h = allocReg (S k)
+                                        in
+                                           set h
+                                           ; List.push (regs, {reg = h, loc = S k,
+                                                               dirty = ref false})
+                                        end
+                                  else ())
+                     else
                      case cached so of
                         SOME {reg, ...} => set reg
                       | NONE =>
@@ -782,16 +987,131 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                    ; List.push (cache, {off = off, ct = ct,
                                                         reg = h})))
                   end
-             | (NONE, SOME h) => set h
-             | (NONE, NONE) =>
+             | (Operand.Temporary t, h) =>
+                  if localRA
+                     then
+                        let
+                           val l = tloc t
+                           fun enter h =
+                              (dropLoc l
+                               ; set h
+                               ; List.push (regs, {reg = h, loc = l,
+                                                   dirty = ref true}))
+                        in
+                           case (List.peek (!reserved, fn (l', _) =>
+                                            sameLoc (l, l')),
+                                 inReg l) of
+                              (SOME (_, h), _) =>
+                                 (reserved := List.keepAll
+                                              (!reserved, fn (l', _) =>
+                                               not (sameLoc (l, l')))
+                                  ; enter h)
+                            | (NONE, SOME {reg, dirty, ...}) =>
+                                 (set reg; dirty := true)
+                            | (NONE, NONE) =>
+                                 (* a dead destination is not stored at all *)
+                                 if liveLater l then enter (allocReg l) else ()
+                        end
+                  else (case h of
+                           SOME h => set h
+                         | NONE =>
+                              i ["str", sfx ct, " ", reg (r, ct), ", ",
+                                 memOf (dst, 3, ct)])
+             | (_, SOME h) => set h
+             | (_, NONE) =>
                   i ["str", sfx ct, " ", reg (r, ct), ", ", memOf (dst, 3, ct)]
          end
       (* A register in which to compute the value of dst. *)
       fun dstReg dst =
-         case home dst of
-            SOME h => if size (cty dst) < 4 then scratch (cty dst, 0) else h
-          | NONE => scratch (cty dst, 0)
-      fun move {dst, src} = store (dst, value (src, dstReg dst, 3))
+         let
+            fun strip z =
+               case z of
+                  Operand.Cast (z, _) => strip z
+                | _ => z
+            val narrow = size (cty dst) < 4
+         in
+            case (localRA, strip dst) of
+               (true, Operand.Temporary t) =>
+                  let
+                     val l = tloc t
+                  in
+                     if narrow orelse not (liveLater l)
+                        then scratch (cty dst, 0)
+                     else
+                        (* The entry for l isn't made until the store, because
+                         * the arguments may still read the old value of l.
+                         *)
+                        (case List.peek (!reserved, fn (l', _) =>
+                                         sameLoc (l, l')) of
+                            SOME (_, h) => h
+                          | NONE =>
+                               (case inReg l of
+                                   SOME {reg, ...} => (pin reg; reg)
+                                 | NONE =>
+                                      let
+                                         val h = allocReg l
+                                      in
+                                         List.push (reserved, (l, h)); h
+                                      end))
+                  end
+             | _ =>
+                  (case home dst of
+                      SOME h => if narrow then scratch (cty dst, 0) else h
+                    | NONE => scratch (cty dst, 0))
+         end
+      fun move {dst, src} =
+         let
+            fun strip z =
+               case z of
+                  Operand.Cast (z, _) => strip z
+                | _ => z
+            fun default () = store (dst, value (src, dstReg dst, 3))
+         in
+            case (localRA, strip dst, strip src) of
+               (true, Operand.Temporary td, Operand.Temporary ts) =>
+                  let
+                     val ld = tloc td
+                     val ls = tloc ts
+                  in
+                     (* A copy from a temporary that is dead afterwards just
+                      * renames what its register holds.
+                      *)
+                     case inReg ls of
+                        SOME {reg, ...} =>
+                           if not (liveLater ls)
+                              andalso not (sameLoc (ld, ls))
+                              andalso size (cty dst) >= 4
+                              andalso size (cty dst) = size (cty src)
+                              then (dropLoc ld
+                                    ; dropReg reg
+                                    ; if liveLater ld
+                                         then List.push (regs, {reg = reg,
+                                                                loc = ld,
+                                                                dirty = ref true})
+                                      else ())
+                           else default ()
+                      | NONE => default ()
+                  end
+             | _ => default ()
+         end
+
+      (* (Local allocator.)  Before a C call: write back the caller-save
+       * registers that hold live temporaries, and forget what the
+       * caller-save registers hold.
+       *)
+      fun commitCallerSaves live =
+         if localRA
+            then List.foreach (!regs, fn e as {reg, loc, ...} =>
+                               if callerSave reg andalso live loc
+                                  then commitEntry e
+                               else ())
+         else ()
+      fun dropCallerSaves () =
+         if localRA
+            then regs := List.keepAll (!regs, fn {reg, ...} =>
+                                       not (callerSave reg))
+         else ()
+      fun flushCallerSaves live = (commitCallerSaves live; dropCallerSaves ())
 
       (* When fusing, a primitive that computes a condition leaves it in the
        * flags (and reports it in fused) rather than computing dst.
@@ -948,11 +1268,14 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                               (* We don't know what is live here, so commit all
                                * of the caller-save temporaries.
                                *)
-                              val saves = callerSaves (! (!region))
+                              val saves =
+                                 if localRA then []
+                                 else callerSaves (! (!region))
                            in
                               mov (0, obj, ct)
                               ; i ["mov x1, x5"]
                               ; commit ("str", saves)
+                              ; flushCallerSaves (fn _ => true)
                               ; i ["bl ", sym "Assignable_decheckObjptr"]
                               ; clearCache ()
                               ; commit ("ldr", saves)
@@ -1098,6 +1421,128 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             SOME l' => Label.equals (l, l')
           | NONE => false
       fun goto l = if isNext l then () else i ["b ", Label.toString l]
+      (* (Local allocator.)  Live transfers: what registers hold at the start
+       * of a block is fixed by the first of its predecessors to be output;
+       * the others conform.
+       *)
+      fun liveIn l =
+         List.map (liveTemps (labelBlock l), fn {ct, index, ...} =>
+                   T (ct, index))
+      fun member (ls, l) = List.exists (ls, fn l' => sameLoc (l, l'))
+      (* Does the edge to l need code?  (Fixes what l expects, if nothing
+       * has yet.)
+       *)
+      fun edgeNeedsCode l =
+         let
+            val lin = liveIn l
+            val state = entryState l
+         in
+            case !state of
+               NONE =>
+                  (state := SOME (List.keepAllMap
+                                  (!regs, fn {reg, loc, dirty} =>
+                                   if isT loc andalso member (lin, loc)
+                                      then SOME (loc, reg, not (!dirty))
+                                   else NONE))
+                   ; false)
+             | SOME m =>
+                  List.exists
+                  (lin, fn l =>
+                   case (List.peek (m, fn (l', _, _) => sameLoc (l, l')),
+                         inReg l) of
+                      (NONE, NONE) => false
+                    | (NONE, SOME {dirty, ...}) => !dirty
+                    | (SOME _, NONE) => true
+                    | (SOME (_, r, clean), SOME {reg, dirty, ...}) =>
+                         r <> reg orelse (clean andalso !dirty))
+         end
+      fun parallelMove ms =
+         case ms of
+            [] => ()
+          | (d, s) :: _ =>
+               let
+                  fun emit (d, s) =
+                     if d >= 32
+                        then i ["fmov d", int (d - 32), ", d", int (s - 32)]
+                     else i ["mov ", x d, ", ", x s]
+               in
+                  case List.peek (ms, fn (d, _) =>
+                                  not (List.exists (ms, fn (_, s) => s = d))) of
+                     SOME (d, s) =>
+                        (emit (d, s)
+                         ; parallelMove (List.keepAll (ms, fn (d', _) =>
+                                                       d' <> d)))
+                   | NONE =>
+                        (* a cycle: break it with a scratch register *)
+                        let
+                           val t = if d >= 32 then 48 else 16
+                        in
+                           emit (t, s)
+                           ; parallelMove (List.map (ms, fn (d', s') =>
+                                                     (d', if s' = s then t
+                                                          else s')))
+                        end
+               end
+      (* make the registers be what l expects *)
+      fun conform l =
+         let
+            val lin = liveIn l
+            val m = valOf (! (entryState l))
+            fun expects l = List.peek (m, fn (l', _, _) => sameLoc (l, l'))
+            val () =
+               List.foreach
+               (!regs, fn e as {loc, dirty, ...} =>
+                if isT loc andalso member (lin, loc) andalso !dirty
+                   andalso (case expects loc of
+                               NONE => true
+                             | SOME (_, _, clean) => clean)
+                   then commitEntry e
+                else ())
+            val (moves, loads) =
+               List.fold
+               (m, ([], []), fn ((l, r, _), (moves, loads)) =>
+                case inReg l of
+                   NONE => (moves, (l, r) :: loads)
+                 | SOME {reg, ...} =>
+                      if reg = r then (moves, loads)
+                      else ((r, reg) :: moves, loads))
+         in
+            parallelMove moves
+            ; List.foreach
+              (loads, fn (l, r) =>
+               case l of
+                  S _ => ()
+                | T (ct, n) =>
+                     let
+                        val (b, off) = homeOf (ct, n)
+                     in
+                        i ["ldr", sfx ct, " ", reg (r, ct), ", ",
+                           mem (b, off, ct)]
+                     end)
+         end
+      (* compensation blocks, for edges that need code: output at the end of
+       * the chunk
+       *)
+      val comps: (string * Label.t * rentry list) list ref = ref []
+      (* the label to branch to in order to get to l *)
+      fun edge l =
+         if localRA andalso edgeNeedsCode l
+            then
+               let
+                  val name = concat ["Ledge_", self, "_",
+                                     int (List.length (!comps))]
+               in
+                  List.push
+                  (comps, (name, l,
+                           List.map (!regs, fn {reg, loc, dirty} =>
+                                     {reg = reg, loc = loc, dirty = ref (!dirty)})))
+                  ; name
+               end
+         else Label.toString l
+      (* go to l at the end of a block *)
+      fun gotoL l =
+         (if localRA andalso edgeNeedsCode l then conform l else ()
+          ; goto l)
       (* Conditional branches only reach +-1MB. *)
       val far =
          Vector.fold (blocks, 0, fn (Block.T {statements, ...}, n) =>
@@ -1128,8 +1573,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       (* if c then goto l else goto l' *)
       fun twoWay (c, l, l') =
          if isNext l
-            then bcond (negate c, Label.toString l')
-         else (bcond (c, Label.toString l); goto l')
+            then (bcond (negate c, edge l'); gotoL l)
+         else (bcond (c, edge l); gotoL l')
       (* Output an if-converted switch; the flags hold condition c, which
        * selects the case (rather than the default) target.
        *)
@@ -1149,11 +1594,14 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   val wide = if isReal ct then CType.Real64 else CType.Word64
                   val s = value (src, scratch (ct, 1), 3)
                   val (d, spilled) =
+                     if localRA
+                        then (value (dst, scratch (ct, 0), 3), true)
+                     else
                      case home dst of
                         SOME h => (h, false)
                       | NONE => (scratch (ct, 0), true)
                in
-                  if spilled then load (dst, d, 3) else ()
+                  if spilled andalso not localRA then load (dst, d, 3) else ()
                   ; i [if isReal ct then "fcsel " else "csel ",
                        reg (d, wide), ", ", reg (s, wide), ", ",
                        reg (d, wide), ", ", c]
@@ -1165,7 +1613,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          in
             List.foreach (caseMoves, select c)
             ; List.foreach (defaultMoves, select c')
-            ; goto join
+            ; gotoL join
          end
       (* return x0 to the trampoline *)
       fun leaveChunk () = (flushFrontier (); flushStackTop (); i ["b ", leave])
@@ -1176,7 +1624,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
        *)
       fun jump l =
          if ChunkLabel.equals (labelChunk l, chunkLabel)
-            then goto l
+            then gotoL l
          else i ["b ", sym (entryStub l)]
       fun push (return, size) =
          let
@@ -1247,11 +1695,19 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
              * call.
              *)
             val saves =
-               case return of
-                  NONE => []
-                | SOME {return, ...} =>
+               case (localRA, return) of
+                  (false, SOME {return, ...}) =>
                      callerSaves (liveTemps (labelBlock return))
+                | _ => []
             val () = commit ("str", saves)
+            val () =
+               let
+                  val live = case return of
+                                NONE => []
+                              | SOME {return, ...} => liveIn return
+               in
+                  commitCallerSaves (fn l => member (live, l))
+               end
             (* Assign argument locations: a register or 64 + stack offset. *)
             val (locs, _, _, stk) =
                List.fold2
@@ -1311,6 +1767,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                               | _ => name)]
                 | Indirect => i ["blr x16"]
             val () = clearCache ()
+            val () = dropCallerSaves ()
             val () = addImm (31, 31, stk)
             val () =
                case retTy of
@@ -1334,7 +1791,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                then indJump ()
             else (case return of
                      NONE => (movInt (0, ~2); i ["b ", leave])
-                   | SOME {return, ...} => goto return)
+                   | SOME {return, ...} => gotoL return)
          end
       fun outputTransfer t =
          case t of
@@ -1348,7 +1805,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           | Transfer.Call {label, return, ...} =>
                (Option.app (return, fn {return, size, ...} => push (return, size))
                 ; jump label)
-          | Transfer.Goto l => goto l
+          | Transfer.Goto l => gotoL l
           | Transfer.Raise {raisesTo} =>
                (clearCache ()
                 ; i ["add x20, ",
@@ -1356,7 +1813,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                    x (value (gcField GCField.ExnStack, 1, 3))]
                 ; rtrans raisesTo)
           | Transfer.Return {returnsTo} => rtrans returnsTo
-          | Transfer.Spork {cont, ...} => goto cont
+          | Transfer.Spork {cont, ...} => gotoL cont
           | Transfer.Switch (Switch.T {cases, default, test, ...}) =>
                let
                   val r = value (test, 0, 3)
@@ -1415,7 +1872,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                          then i ["cmp x16, #", int span]
                                       else (movInt (17, span)
                                             ; i ["cmp x16, x17"])
-                                    ; bcond (CC "hi", Label.toString default)
+                                    ; bcond (CC "hi", edge default)
                                     ; i ["adr x17, ", table]
                                     ; i ["ldrsw x16, [x17, x16, lsl #2]"]
                                     ; i ["add x17, x17, x16"]
@@ -1424,7 +1881,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                     ; Int.for
                                       (0, span + 1, fn k =>
                                        i [".long ",
-                                          Label.toString
+                                          edge
                                           (case List.peek
                                                 (cases', fn (m, _) =>
                                                  m = lo + IntInf.fromInt k) of
@@ -1433,8 +1890,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                           " - ", table])
                                  end
                            else (List.foreach (cases, fn (w, l) =>
-                                               bcond (eq w, Label.toString l))
-                                 ; goto default)
+                                               bcond (eq w, edge l))
+                                 ; gotoL default)
                         end
                end
       (* The statements of a block, with each adjacent pair of an operation
@@ -1594,6 +2051,83 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                           (caller @ callee @ fcaller @ fcallee, fn r =>
                            not (List.contains (!busy, r, op =)))
          end
+      (* (Local allocator.)  Find where each temporary and stack slot occurs
+       * in a block, and start with the registers that the block expects.
+       *)
+      fun setupLocal (Block.T {label, transfer, ...}, its) =
+         let
+            val table: (loc * int list ref) list ref = ref []
+            fun add (l, k) =
+               case List.peek (!table, fn (l', _) => sameLoc (l, l')) of
+                  SOME (_, ps) => List.push (ps, k)
+                | NONE => List.push (table, (l, ref [k]))
+            fun visit (z, isDst, k) =
+               case z of
+                  Operand.Address z => visit (z, true, k)
+                | Operand.Cast (z, _) => visit (z, isDst, k)
+                | Operand.Offset {base, ...} => visit (base, false, k)
+                | Operand.SequenceOffset {base, index, ...} =>
+                     (visit (base, false, k); visit (index, false, k))
+                | Operand.StackOffset so =>
+                     if isDst then () else add (S (slotKey so), k)
+                | Operand.Temporary t => add (tloc t, k)
+                | _ => ()
+            val n = List.length its
+            val () =
+               List.foreachi
+               (its, fn (k, it) =>
+                case it of
+                   App {args, dst, also, ...} =>
+                      (visit (dst, true, k)
+                       ; Option.app (also, fn (z, _) => visit (z, true, k))
+                       ; Vector.foreach (args, fn z => visit (z, false, k)))
+                 | Move {dst, src} =>
+                      (visit (dst, true, k); visit (src, false, k)))
+            val () =
+               Transfer.foldOperands (transfer, (), fn (z, ()) =>
+                                      visit (z, false, n))
+            val conv = ifConvert transfer
+            val () =
+               Option.app
+               (conv, fn {caseMoves, defaultMoves, ...} =>
+                List.foreach (caseMoves @ defaultMoves, fn {dst, src} =>
+                              (visit (dst, true, n); visit (src, false, n))))
+            val state = entryState label
+         in
+            occs := List.map (!table, fn (l, ps) => (l, List.rev (!ps)))
+            ; liveOut := List.fold
+                         (nearSuccessors transfer
+                          @ (case conv of
+                                NONE => []
+                              | SOME {join, ...} => [join]),
+                          [], fn (l, ac) => liveIn l @ ac)
+            ; regs := (case !state of
+                          NONE => (state := SOME []; [])
+                        | SOME m =>
+                             List.map (m, fn (l, r, clean) =>
+                                       {reg = r, loc = l,
+                                        dirty = ref (not clean)}))
+            ; pinned := []
+            ; reserved := []
+            ; pos := ~1
+         end
+      fun beginItem k =
+         if localRA then (pos := k; pinned := []; reserved := []) else ()
+      (* after an item, drop what is dead *)
+      fun endItem () =
+         if localRA
+            then (pos := !pos + 1
+                  ; pinned := []
+                  ; reserved := []
+                  ; regs := List.keepAll
+                            (!regs, fn {loc, ...} =>
+                             isLiveOut loc
+                             orelse List.exists (occsOf loc, fn p =>
+                                                 p >= !pos)))
+         else ()
+      fun outputItems (its, k0) =
+         List.foreachi (its, fn (k, it) =>
+                        (beginItem (k0 + k); outputItem it; endItem ()))
       fun outputBlock (b as Block.T {kind, label = l, statements, transfer,
                                      ...}) =
          (if Kind.isEntry kind
@@ -1606,6 +2140,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           ; label (Label.toString l)
           ; region := blockRegion l
           ; setupCache b
+          ; if localRA
+               then setupLocal (b, items (Vector.toList statements))
+            else ()
           ; (case kind of
                 Kind.Cont {frameInfo, ...} => pop (frameInfo, {promo = true})
               | Kind.CReturn {dst, frameInfo, ...} =>
@@ -1628,16 +2165,22 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                    pop (frameInfo, {promo = false}))
           ; let
                val its = items (Vector.toList statements)
+               val n = List.length its
+               val () = endItem ()
             in
                case fusable (its, transfer) of
-                  NONE => (List.foreach (its, outputItem)
+                  NONE => (outputItems (its, 0)
+                           ; beginItem n
                            ; outputTransfer transfer)
                 | SOME (its, a, l, l') =>
-                     (List.foreach (its, outputItem)
+                     (outputItems (its, 0)
+                      ; beginItem (n - 1)
                       ; fused := NONE
                       ; fusing := true
                       ; outputApp a
                       ; fusing := false
+                      ; endItem ()
+                      ; beginItem n
                       ; (case !fused of
                             NONE => outputTransfer transfer
                           | SOME c =>
@@ -1774,6 +2317,14 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       ; i ["ldp x29, x30, [sp], #160"]
       ; i ["ret"]
       ; outputBlocks (List.rev (!order))
+      (* the compensation blocks of the local register allocator *)
+      ; List.foreach
+        (List.rev (!comps), fn (name, l, state) =>
+         (label name
+          ; regs := state
+          ; pinned := []
+          ; conform l
+          ; i ["b ", Label.toString l]))
    end
 
 fun output {program as Program.T {chunks, frameInfos, ...}, outputC,

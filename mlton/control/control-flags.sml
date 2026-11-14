@@ -264,6 +264,10 @@ val codegenComments = control {name = "codegen comments",
                                default = 0,
                                toString = Int.toString}
 
+val vibeArmLocalRegAlloc = control {name = "vibe-arm local register allocator",
+                                    default = false,
+                                    toString = Bool.toString}
+
 val codegenFuseOpAndChk = control {name = "fuse `op` and `opCheckP` primitives in codegen",
                                    default = false,
                                    toString = Bool.toString}

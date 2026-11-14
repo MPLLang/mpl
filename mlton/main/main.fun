@@ -318,6 +318,14 @@ fun makeOptions {usage} =
         intRef codegenComments),
        (Expert, "codegen-fuse-op-and-chk", " {false|true}", "fuse `op` and `opCheckP` primitives in codegen",
         boolRef codegenFuseOpAndChk),
+       (Normal, "vibe-arm-regalloc", " {graph|local}",
+        "register allocator for the vibe-arm codegen",
+        SpaceString (fn s =>
+                     vibeArmLocalRegAlloc
+                     := (case s of
+                            "graph" => false
+                          | "local" => true
+                          | _ => usage (concat ["invalid -vibe-arm-regalloc flag: ", s])))),
        (Normal, "const", " '<name> <value>'", "set compile-time constant",
         SpaceString (fn s =>
                      case String.tokens (s, Char.isSpace) of
