@@ -164,6 +164,7 @@ fun hasCodegen (cg, {default}) =
    in
       case cg of
         CCodegen => true
+      | VibeArmCodegen => !Control.Target.arch = ARM64
       (*
       | LLVMCodegen => true
       | _ => false
@@ -1079,7 +1080,9 @@ fun commandLine (_: string, args: string list): unit =
                       NONE => if defaultAlignIs8 () then Align8 else Align4
                     | SOME a => a)
       val () =
-         codegen := CCodegen
+         codegen := (case !explicitCodegen of
+                        SOME (Explicit cg) => cg
+                      | _ => CCodegen)
 (* SAM_NOTE: removing unsupported codegens *)
 (*
          codegen := (case !explicitCodegen of
@@ -1218,6 +1221,7 @@ fun commandLine (_: string, args: string list): unit =
          (case !explicitChunkify of
              NONE => (case !codegen of
                          CCodegen => Chunkify.Coalesce {limit = 4096}
+                       | VibeArmCodegen => Chunkify.Coalesce {limit = 4096}
 (*
                        | AMD64Codegen => Chunkify.Func
                        | LLVMCodegen => Chunkify.Coalesce {limit = 4096}

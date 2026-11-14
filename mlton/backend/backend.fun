@@ -266,7 +266,8 @@ fun toMachine (rssa: Rssa.Program.t) =
                 *)
                (* SAM_NOTE: only CCodegen supported right now *)
                val frameInfos =
-                  if !Control.codegen = Control.CCodegen (* orelse !Control.codegen = Control.LLVMCodegen *)
+                  if !Control.codegen = Control.CCodegen
+                     orelse !Control.codegen = Control.VibeArmCodegen (* orelse !Control.codegen = Control.LLVMCodegen *)
                      then let
                              val done =
                                 Array.array (Vector.length frameInfos, false)
@@ -337,6 +338,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                (* SAM_NOTE: only CCodegen supported right now *)
                if entry
                   andalso (!Control.codegen = Control.CCodegen
+                           orelse !Control.codegen = Control.VibeArmCodegen
                            (* orelse !Control.codegen = Control.LLVMCodegen *))
                   then new ()
                   else HashTable.lookupOrInsert

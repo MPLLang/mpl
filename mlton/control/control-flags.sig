@@ -73,7 +73,7 @@ signature CONTROL_FLAGS =
       structure Codegen:
          sig
             (* SAM_NOTE: removing unsupported codegens *)
-            datatype t = CCodegen
+            datatype t = CCodegen | VibeArmCodegen
             (*
                AMD64Codegen
              | CCodegen

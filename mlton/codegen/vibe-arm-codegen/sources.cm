@@ -1,0 +1,14 @@
+Library
+
+functor VibeArmCodegen
+
+is
+
+../../../lib/mlton/sources.cm
+../../atoms/sources.cm
+../../backend/sources.cm
+../../control/sources.cm
+../c-codegen/sources.cm
+
+vibe-arm-codegen.sig
+vibe-arm-codegen.fun

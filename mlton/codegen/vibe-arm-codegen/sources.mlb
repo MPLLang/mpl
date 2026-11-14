@@ -1,0 +1,12 @@
+local
+   ../../../lib/mlton/sources.mlb
+   ../../atoms/sources.mlb
+   ../../control/sources.mlb
+   ../../backend/sources.mlb
+   ../c-codegen/sources.mlb
+
+   vibe-arm-codegen.sig
+   vibe-arm-codegen.fun
+in
+   functor VibeArmCodegen
+end

@@ -27,6 +27,16 @@ signature C_CODEGEN =
                                      print: string -> unit,
                                      done: unit -> unit}
                    } -> unit
+      val outputWith: {program: Machine.Program.t,
+                       outputC: unit -> {file: File.t,
+                                         print: string -> unit,
+                                         done: unit -> unit},
+                       outputChunks: ({chunks: Machine.Chunk.t list,
+                                       labelBlock: Machine.Label.t -> Machine.Block.t,
+                                       labelChunk: Machine.Label.t -> Machine.ChunkLabel.t,
+                                       labelIndex: Machine.Label.t -> int}
+                                      -> unit) option
+                       } -> unit
       val outputDeclarations: {additionalMainArgs: string list,
                                includes: string list,
                                print: string -> unit,
