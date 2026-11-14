@@ -176,10 +176,12 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                     live: bool ref,
                     home: int option ref}
       val {get = labelInfo: Label.t -> {near: Label.t list ref,
+                                        placed: bool ref,
                                         region: entry list ref option ref},
            ...} =
          Property.get (Label.plist,
                        Property.initFun (fn _ => {near = ref [],
+                                                  placed = ref false,
                                                   region = ref NONE}))
       fun entry (table: entry list ref, t): entry =
          let
@@ -209,6 +211,19 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           | _ => ()
       fun isEntry l =
          case labelBlock l of Block.T {kind, ...} => Kind.isEntry kind
+      (* View a switch as a list of cases and a default target. *)
+      fun switchCases (cases, default) =
+         let
+            val cases = Vector.toList cases
+         in
+            case default of
+               SOME l => (cases, l)
+             | NONE => let
+                          val (cases, (_, l)) = List.splitLast cases
+                       in
+                          (cases, l)
+                       end
+         end
       fun nearSuccessors transfer =
          List.keepAll
          (case transfer of
@@ -236,7 +251,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
              val table = ref []
              fun visit l =
                 let
-                   val {near, region} = labelInfo l
+                   val {near, region, ...} = labelInfo l
                 in
                    case !region of
                       SOME _ => ()
@@ -500,6 +515,11 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           | NONE => scratch (cty dst, 0)
       fun move {dst, src} = store (dst, value (src, dstReg dst, 3))
 
+      (* When fusing, a primitive that computes a condition leaves it in the
+       * flags (and reports it in fused) rather than computing dst.
+       *)
+      val fusing = ref false
+      val fused: string option ref = ref NONE
       fun primApp (prim: Type.t Prim.t, args, dst) =
          let
             datatype z = datatype Prim.t
@@ -527,7 +547,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                (i [opc, " ", reg (d, ct), ", ", reg (v 0, ct), ", ",
                    reg (v 1, ct), ", ", reg (v 2, ct)]
                 ; done ())
-            fun cset cond = (i ["cset ", reg (d, dct), ", ", cond]; done ())
+            fun cset cond =
+               if !fusing
+                  then fused := SOME cond
+               else (i ["cset ", reg (d, dct), ", ", cond]; done ())
             fun cmp' (opc, ct, r0, cond) =
                (i [opc, " ", reg (r0, ct), ", ", opnd (1, ct, opc = "cmp")]
                 ; cset cond)
@@ -769,7 +792,45 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          move {dst = gcField GCField.Frontier, src = Operand.Frontier}
       fun flushStackTop () =
          move {dst = gcField GCField.StackTop, src = Operand.StackTop}
-      fun goto l = i ["b ", Label.toString l]
+      (* the block that is laid out after the one being output *)
+      val next: Label.t option ref = ref NONE
+      fun isNext l =
+         case !next of
+            SOME l' => Label.equals (l, l')
+          | NONE => false
+      fun goto l = if isNext l then () else i ["b ", Label.toString l]
+      (* Conditional branches only reach +-1MB. *)
+      val far =
+         Vector.fold (blocks, 0, fn (Block.T {statements, ...}, n) =>
+                      n + 1 + Vector.length statements) > 8000
+      datatype cond =
+         CC of string           (* condition code *)
+       | Z of string * bool     (* register is (true) or isn't (false) zero *)
+      val negate =
+         fn CC c =>
+               CC (case c of
+                      "eq" => "ne" | "ne" => "eq" | "lo" => "hs" | "hs" => "lo"
+                    | "lt" => "ge" | "ge" => "lt" | "vs" => "vc" | "vc" => "vs"
+                    | "cs" => "cc" | "cc" => "cs" | "mi" => "pl" | "pl" => "mi"
+                    | "ls" => "hi" | "hi" => "ls"
+                    | _ => Error.bug "VibeArmCodegen.negate")
+          | Z (r, b) => Z (r, not b)
+      fun bcond (c, l: string) =
+         let
+            fun br (c, l) =
+               case c of
+                  CC c => i ["b.", c, " ", l]
+                | Z (r, b) => i [if b then "cbz " else "cbnz ", r, ", ", l]
+         in
+            if far
+               then (br (negate c, "1f"); i ["b ", l]; label "1")
+            else br (c, l)
+         end
+      (* if c then goto l else goto l' *)
+      fun twoWay (c, l, l') =
+         if isNext l
+            then bcond (negate c, Label.toString l')
+         else (bcond (c, Label.toString l); goto l')
       (* return nextBlock (in x0) to the trampoline *)
       fun leaveChunk () = (flushFrontier (); flushStackTop (); i ["b ", leave])
       fun jump l =
@@ -968,32 +1029,58 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           | Transfer.Switch (Switch.T {cases, default, test, ...}) =>
                let
                   val r = value (test, 0, 3)
-                  val cases = Vector.toList cases
-                  val (cases, default) =
-                     case default of
-                        SOME l => (cases, l)
-                      | NONE => let
-                                   val (cases, (_, l)) = List.splitLast cases
-                                in
-                                   (cases, l)
-                                end
+                  val (cases, default) = switchCases (cases, default)
+                  (* the condition that r = w *)
+                  fun eq w =
+                     let
+                        val n = WordX.toIntInf w
+                     in
+                        if n = 0
+                           then Z (x r, true)
+                        else (if n < 4096
+                                 then i ["cmp ", x r, ", #", IntInf.toString n]
+                              else (movImm (16, n); i ["cmp ", x r, ", x16"])
+                              ; CC "eq")
+                     end
                in
-                  List.foreach
-                  (cases, fn (w, l) =>
-                   let
-                      val n = WordX.toIntInf w
-                   in
-                      if n = 0
-                         then i ["cbnz ", x r, ", 1f"]
-                      else (if n < 4096
-                               then i ["cmp ", x r, ", #", IntInf.toString n]
-                            else (movImm (16, n); i ["cmp ", x r, ", x16"])
-                            ; i ["b.ne 1f"])
-                      ; goto l
-                      ; label "1"
-                   end)
-                  ; goto default
+                  case cases of
+                     [(w, l)] => twoWay (eq w, l, default)
+                   | _ => (List.foreach (cases, fn (w, l) =>
+                                         bcond (eq w, Label.toString l))
+                           ; goto default)
                end
+      (* Is this a block that ends by computing a boolean temporary that is
+       * only used to choose between two successors?  If so, return the
+       * primitive and the targets for true and false.
+       *)
+      fun fusable (statements, transfer) =
+         case (transfer, Vector.length statements) of
+            (_, 0) => NONE
+          | (Transfer.Switch (Switch.T {cases, default,
+                                        test = Operand.Temporary t, ...}),
+             n) =>
+               (case (Vector.sub (statements, n - 1),
+                      switchCases (cases, default)) of
+                   (Statement.PrimApp {args, dst = SOME (dst as Operand.Temporary t'),
+                                       prim},
+                    ([(w, l)], l')) =>
+                      let
+                         val e = entry (!region, t)
+                         fun dead l =
+                            not (List.exists (liveTemps (labelBlock l), fn e' =>
+                                              #live e = #live e'))
+                      in
+                         if Temporary.equals (t, t')
+                            andalso dead l andalso dead l'
+                            then if WordX.isOne w
+                                    then SOME (prim, args, dst, l, l')
+                                 else if WordX.isZero w
+                                    then SOME (prim, args, dst, l', l)
+                                 else NONE
+                         else NONE
+                      end
+                 | _ => NONE)
+          | _ => NONE
       fun outputBlock (Block.T {kind, label = l, statements, transfer, ...}) =
          (label (Label.toString l)
           ; region := blockRegion l
@@ -1017,9 +1104,90 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
               | Kind.Jump => ()
               | Kind.SporkSpwn {frameInfo, ...} =>
                    pop (frameInfo, {promo = false}))
-          ; Vector.foreach (statements, outputStatement)
-          ; outputTransfer transfer)
+          ; (case fusable (statements, transfer) of
+                NONE => (Vector.foreach (statements, outputStatement)
+                         ; outputTransfer transfer)
+              | SOME (prim, args, dst, l, l') =>
+                   (Vector.foreachi
+                    (statements, fn (k, s) =>
+                     if k < Vector.length statements - 1
+                        then outputStatement s
+                     else ())
+                    ; fused := NONE
+                    ; fusing := true
+                    ; primApp (prim, args, dst)
+                    ; fusing := false
+                    ; (case !fused of
+                          NONE => outputTransfer transfer
+                        | SOME c => twoWay (CC c, l, l')))))
 
+      (* Block layout: greedily extend a trace with the successor that is
+       * most likely to be next.  For a two-way switch, that is the target
+       * that the backend expects, else the one that isn't cold, else the
+       * default.
+       *)
+      val order: Block.t list ref = ref []
+      val pending: Label.t list ref = ref []
+      fun placed l = ! (#placed (labelInfo l))
+      fun cold (l, depth) =
+         case labelBlock l of
+            Block.T {transfer, ...} =>
+               (case transfer of
+                   Transfer.CCall {return = NONE, ...} => true
+                 | Transfer.CCall {return = SOME {size = SOME _, ...}, ...} =>
+                      true
+                 | Transfer.Goto l => depth > 0 andalso cold (l, depth - 1)
+                 | Transfer.Raise _ => true
+                 | _ => false)
+      fun trace l =
+         if placed l then ()
+         else
+            let
+               val b as Block.T {transfer, ...} = labelBlock l
+               val () = #placed (labelInfo l) := true
+               val () = List.push (order, b)
+               (* the successors that could fall through, best first *)
+               val succs =
+                  case transfer of
+                     Transfer.CCall {return = SOME {return, ...}, ...} =>
+                        [return]
+                   | Transfer.Call {label, ...} =>
+                        if ChunkLabel.equals (labelChunk label, chunkLabel)
+                           then [label]
+                        else []
+                   | Transfer.Goto l => [l]
+                   | Transfer.Spork {cont, ...} => [cont]
+                   | Transfer.Switch (Switch.T {cases, default, expect, ...}) =>
+                        (case switchCases (cases, default) of
+                            ([(w, l)], l') =>
+                               if (case expect of
+                                      SOME w' => WordX.equals (w, w')
+                                    | NONE => cold (l', 2)
+                                              andalso not (cold (l, 2)))
+                                  then [l, l']
+                               else [l', l]
+                          | (cases, l) => l :: List.map (cases, #2))
+                   | _ => []
+            in
+               case List.peek (succs, not o placed) of
+                  NONE => ()
+                | SOME l => (List.foreach (succs, fn l =>
+                                           List.push (pending, l))
+                             ; trace l)
+            end
+      fun drain () =
+         case !pending of
+            [] => ()
+          | l :: ls => (pending := ls; trace l; drain ())
+      fun outputBlocks bs =
+         case bs of
+            [] => ()
+          | b :: bs =>
+               (next := (case bs of
+                            Block.T {label, ...} :: _ => SOME label
+                          | [] => NONE)
+                ; outputBlock b
+                ; outputBlocks bs)
       fun pair (opc, (r1, r2), k) =
          i [opc, reg (r1, CType.Word64), ", ", reg (r2, CType.Word64),
             ", [sp, #", int (16 * (k + 1)), "]"]
@@ -1031,6 +1199,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                        else es),
           fn ((i1, _), (i2, _)) => i1 <= i2)
       val lo = case entries of [] => 0 | (lo, _) :: _ => lo
+      val () = List.foreach (entries, fn (_, l) => (trace l; drain ()))
+      val () =
+         Vector.foreach (blocks, fn Block.T {label, ...} =>
+                         (trace label; drain ()))
    in
       print "\t.text\n\t.p2align 2\n"
       ; i [".globl ", sym self]
@@ -1062,7 +1234,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       ; List.foreachi (saved, fn (k, rs) => pair ("ldp ", rs, k))
       ; i ["ldp x29, x30, [sp], #160"]
       ; i ["ret"]
-      ; Vector.foreach (blocks, outputBlock)
+      ; outputBlocks (List.rev (!order))
    end
 
 fun output {program, outputC,
