@@ -976,6 +976,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          move {dst = gcField GCField.Frontier, src = Operand.Frontier}
       fun flushStackTop () =
          move {dst = gcField GCField.StackTop, src = Operand.StackTop}
+      val jumpTables = ref 0
       (* the block that is laid out after the one being output *)
       val next: Label.t option ref = ref NONE
       fun isNext l =
@@ -1270,9 +1271,57 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                               (i ["cmp ", r, ", #0"]
                                                ; if b then "eq" else "ne"),
                                         z))
-                   | _ => (List.foreach (cases, fn (w, l) =>
-                                         bcond (eq w, Label.toString l))
-                           ; goto default)
+                   | _ =>
+                        let
+                           val cases' =
+                              List.map (cases, fn (w, l) =>
+                                        (WordX.toIntInf w, l))
+                           val (lo, hi) =
+                              List.fold
+                              (cases', (#1 (hd cases'), #1 (hd cases')),
+                               fn ((n, _), (lo, hi)) =>
+                               (IntInf.min (lo, n), IntInf.max (hi, n)))
+                           val n = List.length cases
+                        in
+                           if n >= 4 andalso hi - lo < IntInf.fromInt (3 * n)
+                              then
+                                 (* dense: use a jump table *)
+                                 let
+                                    val span = IntInf.toInt (hi - lo)
+                                    val () = Int.inc jumpTables
+                                    val table =
+                                       concat ["Ljump_", self, "_",
+                                               int (!jumpTables)]
+                                 in
+                                    if lo < 4096
+                                       then addImm (16, r, ~ (IntInf.toInt lo))
+                                    else (movImm (17, lo)
+                                          ; i ["sub x16, ", x r, ", x17"])
+                                    ; if span < 4096
+                                         then i ["cmp x16, #", int span]
+                                      else (movInt (17, span)
+                                            ; i ["cmp x16, x17"])
+                                    ; bcond (CC "hi", Label.toString default)
+                                    ; i ["adr x17, ", table]
+                                    ; i ["ldrsw x16, [x17, x16, lsl #2]"]
+                                    ; i ["add x17, x17, x16"]
+                                    ; i ["br x17"]
+                                    ; label table
+                                    ; Int.for
+                                      (0, span + 1, fn k =>
+                                       i [".long ",
+                                          Label.toString
+                                          (case List.peek
+                                                (cases', fn (m, _) =>
+                                                 m = lo + IntInf.fromInt k) of
+                                              SOME (_, l) => l
+                                            | NONE => default),
+                                          " - ", table])
+                                 end
+                           else (List.foreach (cases, fn (w, l) =>
+                                               bcond (eq w, Label.toString l))
+                                 ; goto default)
+                        end
                end
       (* The statements of a block, with each adjacent pair of an operation
        * and its overflow check (on the same arguments) combined, so that
