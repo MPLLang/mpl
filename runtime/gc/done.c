@@ -78,9 +78,6 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
   struct rusage ru_total;
   uintmax_t totalTime;
   uintmax_t gcTime;
-  uintmax_t syncTime;
-  uintmax_t critTime;
-  uintmax_t bspTime;
 
 #ifdef __MACH__
   getrusage_thread (&ru_total);
@@ -89,26 +86,12 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
 #endif
   totalTime = rusageTime (&ru_total);
   gcTime = rusageTime (&cumulativeStatistics->ru_gc);
-  syncTime = rusageTime (&cumulativeStatistics->ru_sync);
-  critTime = rusageTime (&cumulativeStatistics->ru_crit);
-  bspTime = rusageTime (&cumulativeStatistics->ru_bsp);
   fprintf (out, "GC type\t\ttime ms\t number\t\t  bytes\t      bytes/sec\n");
   fprintf (out, "-------------\t-------\t-------\t---------------\t---------------\n");
-  displayCollectionStats
-    (out, "copying\t\t",
-     &cumulativeStatistics->ru_gcCopying,
-     cumulativeStatistics->numCopyingGCs,
-     cumulativeStatistics->bytesCopied);
-  displayCollectionStats
-    (out, "mark-compact\t",
-     &cumulativeStatistics->ru_gcMarkCompact,
-     cumulativeStatistics->numMarkCompactGCs,
-     cumulativeStatistics->bytesMarkCompacted);
-  displayCollectionStats
-    (out, "minor\t\t",
-     &cumulativeStatistics->ru_gcMinor,
-     cumulativeStatistics->numMinorGCs,
-     cumulativeStatistics->bytesCopiedMinor);
+  /* The copying, mark-compact and minor rows and most of the lines that
+   * used to follow (bytes scanned, max HH LC size, cards, hash consing,
+   * sync/crit/bsp times, ...) are MLton statistics that MPL never updates,
+   * so they always printed 0. Print the statistics MPL does maintain. */
   displayCollectionStats
       (out, "HHLocal\t\t",
        &cumulativeStatistics->ru_gcHHLocal,
@@ -120,50 +103,20 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (gcTime),
            (0 == totalTime) ?
            0.0 : 100.0 * ((double) gcTime) / (double)totalTime);
-  fprintf (out, "total sync time: %s ms (%.1f%%)\n",
-           uintmaxToCommaString (syncTime),
-           (0 == totalTime) ?
-           0.0 : 100.0 * ((double) syncTime) / (double)totalTime);
-  fprintf (out, "total crit time: %s ms (%.1f%%)\n",
-           uintmaxToCommaString (critTime),
-           (0 == totalTime) ?
-           0.0 : 100.0 * ((double) critTime) / (double)totalTime);
-  fprintf (out, "total bsp time: %s ms (%.1f%%)\n",
-           uintmaxToCommaString (bspTime),
-           (0 == totalTime) ?
-           0.0 : 100.0 * ((double) bspTime) / (double)totalTime);
-  fprintf (out, "max pause time: %s ms\n",
-           uintmaxToCommaString (cumulativeStatistics->maxPauseTime));
   fprintf (out, "total bytes allocated: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->bytesAllocated));
-  fprintf (out, "total bytes promoted: %s bytes\n",
-           uintmaxToCommaString (cumulativeStatistics->bytesPromoted));
-  fprintf (out, "max global heap bytes live: %s bytes\n",
-           uintmaxToCommaString (cumulativeStatistics->maxBytesLive));
-  fprintf (out, "max global heap size: %s bytes\n",
-           uintmaxToCommaString (cumulativeStatistics->maxHeapSize));
-  fprintf (out, "max hierarchical heap LC size: %s bytes\n",
-           uintmaxToCommaString (cumulativeStatistics->maxHHLCS));
-  fprintf (out, "max hierarchical heap LC heap size: %s bytes\n",
-           uintmaxToCommaString (cumulativeStatistics->maxHHLCHS));
+  fprintf (out, "local collections: bytes in scope: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->bytesInScopeForLocal));
+  fprintf (out, "local collections: bytes reclaimed: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->bytesReclaimedByLocal));
+  fprintf (out, "concurrent collections: %s\n",
+           uintmaxToCommaString (cumulativeStatistics->numCCs));
+  fprintf (out, "concurrent collections: bytes in scope: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->bytesInScopeForCC));
+  fprintf (out, "concurrent collections: bytes reclaimed: %s bytes\n",
+           uintmaxToCommaString (cumulativeStatistics->bytesReclaimedByCC));
   fprintf (out, "max stack size: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->maxStackSize));
-  fprintf (out, "num cards marked: %s\n",
-           uintmaxToCommaString (cumulativeStatistics->numCardsMarked));
-  fprintf (out, "bytes scanned: %s bytes\n",
-           uintmaxToCommaString (cumulativeStatistics->bytesScannedMinor));
-  fprintf (out, "bytes hash consed: %s bytes\n",
-           uintmaxToCommaString (cumulativeStatistics->bytesHashConsed));
-  fprintf (out, "sync for old gen array: %s\n",
-           uintmaxToCommaString (cumulativeStatistics->syncForOldGenArray));
-  fprintf (out, "sync for new gen array: %s\n",
-           uintmaxToCommaString (cumulativeStatistics->syncForNewGenArray));
-  fprintf (out, "sync for stack: %s\n",
-           uintmaxToCommaString (cumulativeStatistics->syncForStack));
-  fprintf (out, "sync for heap: %s\n",
-           uintmaxToCommaString (cumulativeStatistics->syncForHeap));
-  fprintf (out, "sync misc: %s\n",
-           uintmaxToCommaString (cumulativeStatistics->syncMisc));
 }
 
 static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
