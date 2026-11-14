@@ -243,6 +243,82 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                              fn ((_, l), ls) => l :: ls)
            | _ => [],
           not o isEntry)
+      (* If-conversion.  Recognize a two-way switch where each target either
+       * is the join block or is a block of a few moves to temporaries that
+       * goes to the join block.  Such a switch is output as conditional
+       * selects followed by a jump to the join block: no branch to
+       * mispredict.  The moves must be safe to execute unconditionally, so
+       * the sources may not be heap loads.
+       *)
+      fun ifConvert transfer =
+         let
+            fun okSrc z =
+               case z of
+                  Operand.Cast (z, _) => okSrc z
+                | Operand.Const (Const.Null) => true
+                | Operand.Const (Const.Real _) => true
+                | Operand.Const (Const.Word _) => true
+                | Operand.Global _ => true
+                | Operand.StackOffset _ => true
+                | Operand.Temporary _ => true
+                | _ => false
+            fun arm l =
+               if isEntry l then NONE
+               else
+                  case labelBlock l of
+                     Block.T {statements, transfer = Transfer.Goto j, ...} =>
+                        let
+                           val moves =
+                              Vector.toListKeepAllMap
+                              (statements, fn s =>
+                               case s of
+                                  Statement.Move (z as {dst = Operand.Temporary _,
+                                                        src}) =>
+                                     if okSrc src then SOME z else NONE
+                                | _ => NONE)
+                        in
+                           if List.length moves = Vector.length statements
+                              then SOME (moves, j)
+                           else NONE
+                        end
+                   | _ => NONE
+         in
+            case transfer of
+               Transfer.Switch (Switch.T {cases, default, expect = NONE, ...}) =>
+                  (case switchCases (cases, default) of
+                      ([(_, l)], l') =>
+                         let
+                            fun ok (ms, ms', j) =
+                               if List.length ms + List.length ms' <= 4
+                                  then SOME {caseLabel = l, caseMoves = ms,
+                                             defaultMoves = ms', join = j}
+                               else NONE
+                            fun triangle (a, other) =
+                               case a of
+                                  SOME (ms, j) =>
+                                     if Label.equals (j, other)
+                                        then SOME ms
+                                     else NONE
+                                | NONE => NONE
+                         in
+                            case (arm l, arm l') of
+                               (SOME (ms, j), SOME (ms', j')) =>
+                                  if Label.equals (j, j')
+                                     then ok (ms, ms', j)
+                                  else (case (triangle (arm l, l'),
+                                              triangle (arm l', l)) of
+                                           (SOME ms, _) => ok (ms, [], l')
+                                         | (_, SOME ms') => ok ([], ms', l)
+                                         | _ => NONE)
+                             | (a, a') =>
+                                  (case (triangle (a, l'), triangle (a', l)) of
+                                      (SOME ms, _) => ok (ms, [], l')
+                                    | (_, SOME ms') => ok ([], ms', l)
+                                    | _ => NONE)
+                         end
+                    | _ => NONE)
+             | _ => NONE
+         end
       (* 1. Partition the blocks into regions. *)
       val () =
          Vector.foreach
@@ -939,6 +1015,38 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          if isNext l
             then bcond (negate c, Label.toString l')
          else (bcond (c, Label.toString l); goto l')
+      (* Output an if-converted switch; the flags hold condition c, which
+       * selects the case (rather than the default) target.
+       *)
+      fun selects (c, {caseLabel = _, caseMoves, defaultMoves, join}) =
+         let
+            fun select c {dst, src} =
+               let
+                  val ct = cty dst
+                  (* Select the whole register, because it may be shared
+                   * with a wider temporary that is live when c is false.
+                   *)
+                  val wide = if isReal ct then CType.Real64 else CType.Word64
+                  val s = value (src, scratch (ct, 1), 3)
+                  val (d, spilled) =
+                     case home dst of
+                        SOME h => (h, false)
+                      | NONE => (scratch (ct, 0), true)
+               in
+                  if spilled then load (dst, d, 3) else ()
+                  ; i [if isReal ct then "fcsel " else "csel ",
+                       reg (d, wide), ", ", reg (s, wide), ", ",
+                       reg (d, wide), ", ", c]
+                  ; if spilled then store (dst, d) else ()
+               end
+            val c' = case negate (CC c) of
+                        CC c' => c'
+                      | _ => Error.bug "VibeArmCodegen.selects"
+         in
+            List.foreach (caseMoves, select c)
+            ; List.foreach (defaultMoves, select c')
+            ; goto join
+         end
       (* return nextBlock (in x0) to the trampoline *)
       fun leaveChunk () = (flushFrontier (); flushStackTop (); i ["b ", leave])
       fun jump l =
@@ -1152,7 +1260,16 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      end
                in
                   case cases of
-                     [(w, l)] => twoWay (eq w, l, default)
+                     [(w, l)] =>
+                        (case ifConvert t of
+                            NONE => twoWay (eq w, l, default)
+                          | SOME z =>
+                               selects (case eq w of
+                                           CC c => c
+                                         | Z (r, b) =>
+                                              (i ["cmp ", r, ", #0"]
+                                               ; if b then "eq" else "ne"),
+                                        z))
                    | _ => (List.foreach (cases, fn (w, l) =>
                                          bcond (eq w, Label.toString l))
                            ; goto default)
@@ -1295,7 +1412,17 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                       ; fusing := false
                       ; (case !fused of
                             NONE => outputTransfer transfer
-                          | SOME c => twoWay (CC c, l, l')))
+                          | SOME c =>
+                               (case ifConvert transfer of
+                                   NONE => twoWay (CC c, l, l')
+                                 | SOME (z as {caseLabel, ...}) =>
+                                      selects
+                                      (if Label.equals (l, caseLabel)
+                                          then c
+                                       else (case negate (CC c) of
+                                                CC c => c
+                                              | _ => Error.bug "VibeArmCodegen"),
+                                       z))))
             end)
 
       (* Block layout: greedily extend a trace with the successor that is
@@ -1336,8 +1463,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                    | Transfer.Goto l => [l]
                    | Transfer.Spork {cont, ...} => [cont]
                    | Transfer.Switch (Switch.T {cases, default, expect, ...}) =>
-                        (case switchCases (cases, default) of
-                            ([(w, l)], l') =>
+                        (case (ifConvert transfer,
+                               switchCases (cases, default)) of
+                            (SOME {join, ...}, _) => [join]
+                          | (NONE, ([(w, l)], l')) =>
                                let
                                   fun byCold () =
                                      cold (l', 2) andalso not (cold (l, 2))
@@ -1359,7 +1488,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                      then [l, l']
                                   else [l', l]
                                end
-                          | (cases, l) => l :: List.map (cases, #2))
+                          | (NONE, (cases, l)) => l :: List.map (cases, #2))
                    | _ => []
             in
                case List.peek (succs, not o placed) of
@@ -1392,10 +1521,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                        else es),
           fn ((i1, _), (i2, _)) => i1 <= i2)
       val lo = case entries of [] => 0 | (lo, _) :: _ => lo
+      (* Blocks that aren't reachable from an entry (such as the arms of
+       * if-converted switches) are not output.
+       *)
       val () = List.foreach (entries, fn (_, l) => (trace l; drain ()))
-      val () =
-         Vector.foreach (blocks, fn Block.T {label, ...} =>
-                         (trace label; drain ()))
    in
       print "\t.text\n\t.p2align 2\n"
       ; i [".globl ", sym self]
