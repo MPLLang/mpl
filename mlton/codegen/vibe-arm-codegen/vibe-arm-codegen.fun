@@ -520,6 +520,11 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
        *)
       val fusing = ref false
       val fused: string option ref = ref NONE
+      (* When set, an overflow-checking primitive also stores the result of
+       * the operation itself to the given operand; the bool is true if the
+       * check originally came before the operation.
+       *)
+      val also: (Operand.t * bool) option ref = ref NONE
       fun primApp (prim: Type.t Prim.t, args, dst) =
          let
             datatype z = datatype Prim.t
@@ -597,23 +602,43 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                let
                   val n = bits ws
                   val ops =
-                     concat (List.map (ks, fn k =>
-                                       ", " ^ x (ext (k, ws, signed, true))))
+                     if n = 64 andalso (opc = "add" orelse opc = "sub")
+                        then concat [", ", x (v 0), ", ",
+                                     opnd (1, wct ws, true)]
+                     else concat (List.map (ks, fn k =>
+                                            ", " ^ x (ext (k, ws, signed, true))))
+                  (* r holds the result of the operation itself *)
+                  fun finish (r, cond) =
+                     case !also of
+                        NONE => cset cond
+                      | SOME (z, chkFirst) =>
+                           if chkFirst
+                              then (cset cond; store (z, r))
+                           else (store (z, r); cset cond)
                in
                   if n < 64
                      then (i [opc, " x5", ops]
                            ; i ["cmp x5, w5, ", if signed then "s" else "u",
                                 "xt", bhw n]
-                           ; cset "ne")
+                           ; finish (5, "ne"))
                   else if opc = "mul"
                      then (i [if signed then "smulh" else "umulh", " x5", ops]
+                           ; if signed orelse Option.isSome (!also)
+                                then i ["mul x6", ops]
+                             else ()
                            ; if signed
-                                then (i ["mul x6", ops]
-                                      ; i ["cmp x5, x6, asr #63"])
+                                then i ["cmp x5, x6, asr #63"]
                              else i ["cmp x5, #0"]
-                           ; cset "ne")
-                  else (i [opc, "s x5", ops]
-                        ; cset (if signed then sCond else uCond))
+                           ; finish (6, "ne"))
+                  else
+                     let
+                        val r = case !also of
+                                   SOME (z, false) => dstReg z
+                                 | _ => 5
+                     in
+                        i [opc, "s ", x r, ops]
+                        ; finish (r, if signed then sCond else uCond)
+                     end
                end
             fun shift (opc, ws, r0) = bin' (opc, wct ws, r0, true)
             (* compare-and-swap; setAddr puts the address in x7 *)
@@ -780,12 +805,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
              | _ => Error.bug (concat ["VibeArmCodegen.primApp: ",
                                        Prim.toString prim])
          end
-      fun outputStatement s =
-         case s of
-            Statement.Move z => move z
-          | Statement.PrimApp {args, dst, prim} =>
-               (* all primitives are pure *)
-               Option.app (dst, fn dst => primApp (prim, args, dst))
 
       fun gcField f = Operand.gcField f
       fun flushFrontier () =
@@ -1049,20 +1068,89 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                          bcond (eq w, Label.toString l))
                            ; goto default)
                end
+      (* The statements of a block, with each adjacent pair of an operation
+       * and its overflow check (on the same arguments) combined, so that
+       * the arithmetic is only done once.
+       *)
+      datatype item =
+         App of {args: Operand.t vector,
+                 dst: Operand.t,
+                 prim: Type.t Prim.t,
+                 also: (Operand.t * bool) option}
+       | Move of {dst: Operand.t, src: Operand.t}
+      fun items (ss: Statement.t list): item list =
+         case ss of
+            [] => []
+          | Statement.Move z :: ss => Move z :: items ss
+          | Statement.PrimApp {dst = NONE, ...} :: ss =>
+               (* all primitives are pure *)
+               items ss
+          | Statement.PrimApp {args, dst = SOME dst, prim} :: ss =>
+               let
+                  datatype z = datatype Prim.t
+                  fun single () =
+                     App {args = args, dst = dst, prim = prim, also = NONE}
+                     :: items ss
+                  (* is q the overflow check for p? *)
+                  fun checks (p, q) =
+                     case (p, q) of
+                        (Word_add s, Word_addCheckP (s', _)) =>
+                           WordSize.equals (s, s')
+                      | (Word_mul (s, _), Word_mulCheckP (s', _)) =>
+                           WordSize.equals (s, s')
+                      | (Word_neg s, Word_negCheckP (s', _)) =>
+                           WordSize.equals (s, s')
+                      | (Word_sub s, Word_subCheckP (s', _)) =>
+                           WordSize.equals (s, s')
+                      | _ => false
+                  fun simple z =
+                     case z of
+                        Operand.StackOffset _ => true
+                      | Operand.Temporary _ => true
+                      | _ => false
+               in
+                  case ss of
+                     Statement.PrimApp {args = args', dst = SOME dst',
+                                        prim = prim'} :: ss' =>
+                        if Vector.equals (args, args', Operand.equals)
+                           andalso simple dst andalso simple dst'
+                           andalso not (Operand.interfere (dst, dst'))
+                           andalso not (Vector.exists
+                                        (args, fn z =>
+                                         Operand.interfere (dst, z)
+                                         orelse Operand.interfere (dst', z)))
+                           then if checks (prim, prim')
+                                   then App {args = args, dst = dst',
+                                             prim = prim',
+                                             also = SOME (dst, false)}
+                                        :: items ss'
+                                else if checks (prim', prim)
+                                   then App {args = args, dst = dst,
+                                             prim = prim,
+                                             also = SOME (dst', true)}
+                                        :: items ss'
+                                else single ()
+                        else single ()
+                   | _ => single ()
+               end
+      fun outputApp {args, dst, prim, also = a} =
+         (also := a; primApp (prim, args, dst); also := NONE)
+      fun outputItem it =
+         case it of
+            App z => outputApp z
+          | Move z => move z
       (* Is this a block that ends by computing a boolean temporary that is
        * only used to choose between two successors?  If so, return the
-       * primitive and the targets for true and false.
+       * other items, the final one, and the targets for true and false.
        *)
-      fun fusable (statements, transfer) =
-         case (transfer, Vector.length statements) of
-            (_, 0) => NONE
+      fun fusable (its, transfer) =
+         case (transfer, its) of
+            (_, []) => NONE
           | (Transfer.Switch (Switch.T {cases, default,
                                         test = Operand.Temporary t, ...}),
-             n) =>
-               (case (Vector.sub (statements, n - 1),
-                      switchCases (cases, default)) of
-                   (Statement.PrimApp {args, dst = SOME (dst as Operand.Temporary t'),
-                                       prim},
+             _) =>
+               (case (List.splitLast its, switchCases (cases, default)) of
+                   ((its, App (a as {dst = Operand.Temporary t', ...})),
                     ([(w, l)], l')) =>
                       let
                          val e = entry (!region, t)
@@ -1073,9 +1161,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                          if Temporary.equals (t, t')
                             andalso dead l andalso dead l'
                             then if WordX.isOne w
-                                    then SOME (prim, args, dst, l, l')
+                                    then SOME (its, a, l, l')
                                  else if WordX.isZero w
-                                    then SOME (prim, args, dst, l', l)
+                                    then SOME (its, a, l', l)
                                  else NONE
                          else NONE
                       end
@@ -1104,22 +1192,22 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
               | Kind.Jump => ()
               | Kind.SporkSpwn {frameInfo, ...} =>
                    pop (frameInfo, {promo = false}))
-          ; (case fusable (statements, transfer) of
-                NONE => (Vector.foreach (statements, outputStatement)
-                         ; outputTransfer transfer)
-              | SOME (prim, args, dst, l, l') =>
-                   (Vector.foreachi
-                    (statements, fn (k, s) =>
-                     if k < Vector.length statements - 1
-                        then outputStatement s
-                     else ())
-                    ; fused := NONE
-                    ; fusing := true
-                    ; primApp (prim, args, dst)
-                    ; fusing := false
-                    ; (case !fused of
-                          NONE => outputTransfer transfer
-                        | SOME c => twoWay (CC c, l, l')))))
+          ; let
+               val its = items (Vector.toList statements)
+            in
+               case fusable (its, transfer) of
+                  NONE => (List.foreach (its, outputItem)
+                           ; outputTransfer transfer)
+                | SOME (its, a, l, l') =>
+                     (List.foreach (its, outputItem)
+                      ; fused := NONE
+                      ; fusing := true
+                      ; outputApp a
+                      ; fusing := false
+                      ; (case !fused of
+                            NONE => outputTransfer transfer
+                          | SOME c => twoWay (CC c, l, l')))
+            end)
 
       (* Block layout: greedily extend a trace with the successor that is
        * most likely to be next.  For a two-way switch, that is the target
