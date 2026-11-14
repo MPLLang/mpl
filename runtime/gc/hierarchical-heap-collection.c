@@ -253,7 +253,18 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
    */
   uint32_t minNoCC = minDepthWithoutCC(thread);
   uint32_t minOkay = desiredScope;
-  minOkay = max(minOkay, thread->minLocalCollectionDepth);
+  /* min-collection-depth (default 2) keeps a collection from claiming the
+   * shallow levels of the deque, where claiming would block steals. A thread
+   * running at depth 1 (the top level, outside any par) has an empty deque:
+   * collecting its depth-1 heap claims nothing, so it is just a leaf
+   * collection, the same one the scheduler threads already do at depth 1.
+   * Without this, sequential code at the top level, including the
+   * unpromoted/unstolen right branch of a top-level par, is never collected
+   * (#115). */
+  uint32_t minLocal = thread->minLocalCollectionDepth;
+  if (thread->currentDepth == 1)
+    minLocal = 1;
+  minOkay = max(minOkay, minLocal);
   minOkay = max(minOkay, minNoCC);
   uint32_t minDepth = originalLocalScope;
   while (minDepth > minOkay && tryClaimLocalScope(s))
