@@ -13,12 +13,28 @@
  *
  * Register conventions within a chunk:
  *    x19 = GCState, x20 = StackTop, x21 = Frontier
- *    x22-x28, d8-d15: the low-numbered temporaries (see tempHome)
- *    x9-x11, d16-d18: operands/results of the current statement
- *    x12-x15: address computations
- *    x16-x17: constants, large offsets
- * All other temporaries live in the (native) stack frame.
+ *    x8-x15, x22-x28, d8-d15, d19-d31: temporaries (see "Register
+ *       allocation", below)
+ *    x0-x2, d16-d18: operands/results of the current statement
+ *    x3-x4: address computations
+ *    x5-x7: scratch for multi-instruction primitives
+ *    x16-x17: constants, large offsets, C call setup
  * Integer values narrower than 64 bits are kept zero-extended in registers.
+ *
+ * Register allocation.  The backend has already packed variables into
+ * Machine temporaries (pseudo-registers), such that temporaries that are
+ * simultaneously live are distinct, and temporaries are never live across a
+ * transfer that leaves the chunk function or re-enters it at an entry block.
+ * So, the blocks of a chunk are partitioned into regions connected by "near"
+ * transfers (Goto, Switch, C calls that don't have a frame); no temporary is
+ * live between regions.  Within each region, we build an interference graph
+ * (by a backward scan of each block, starting from the live temporaries that
+ * the backend recorded for the successor blocks) and color it greedily, in
+ * order of use count; temporaries that can't be colored live in the (native)
+ * stack frame.  As in the x86/amd64 codegens, every temporary has a home in
+ * memory and caller-save registers are committed to memory around C calls,
+ * but only those that are live across the call.  Temporaries that are live
+ * across some C call prefer callee-save registers.
  *)
 
 functor VibeArmCodegen (S: VIBE_ARM_CODEGEN_STRUCTS): VIBE_ARM_CODEGEN =
@@ -79,7 +95,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          if r >= 32
             then (if size ct = 4 then "s" else "d") ^ int (r - 32)
          else if size ct = 8 then x r else "w" ^ int r
-      fun scratch (ct, k) = if isReal ct then 48 + k else 9 + k
+      fun scratch (ct, k) = if isReal ct then 48 + k else k
       fun mov (d, s, ct) =
          if d = s then ()
          else i [if d >= 32 then "fmov " else "mov ",
@@ -149,18 +165,227 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          #2 (valOf (List.peek (slots, fn (t, _) => CType.equals (t, ct))))
       (* extra adjustment of sp while passing C arguments on the stack *)
       val spAdj = ref 0
-      fun tempHome t =
+
+      (* ---------------- Register allocation ---------------- *)
+      (* A region's table of temporaries. *)
+      datatype entry' = E of entry
+      withtype entry = {ct: CType.t, index: int,
+                    count: int ref,      (* number of uses and defs *)
+                    across: bool ref,    (* live across some C call? *)
+                    adj: entry' list ref, (* interferes with *)
+                    live: bool ref,
+                    home: int option ref}
+      val {get = labelInfo: Label.t -> {near: Label.t list ref,
+                                        region: entry list ref option ref},
+           ...} =
+         Property.get (Label.plist,
+                       Property.initFun (fn _ => {near = ref [],
+                                                  region = ref NONE}))
+      fun entry (table: entry list ref, t): entry =
          let
-            val n = Temporary.index t
-            fun home (k, base) = if n < k then SOME (base + n) else NONE
+            val ct = Type.toCType (Temporary.ty t)
+            val index = Temporary.index t
          in
-            case Type.toCType (Temporary.ty t) of
-               CType.Objptr => home (3, 22)
-             | CType.Word64 => home (2, 25)
-             | CType.Word32 => home (2, 27)
-             | CType.Real64 => home (8, 40)
-             | _ => NONE
+            case List.peek (!table, fn {ct = ct', index = index', ...} =>
+                            index = index' andalso CType.equals (ct, ct')) of
+               SOME e => e
+             | NONE =>
+                  let
+                     val e = {ct = ct, index = index, count = ref 0,
+                              across = ref false, adj = ref [],
+                              live = ref false, home = ref NONE}
+                  in
+                     List.push (table, e); e
+                  end
          end
+      fun foreachTemp (z, f) =
+         case z of
+            Operand.Address z => foreachTemp (z, f)
+          | Operand.Cast (z, _) => foreachTemp (z, f)
+          | Operand.Offset {base, ...} => foreachTemp (base, f)
+          | Operand.SequenceOffset {base, index, ...} =>
+               (foreachTemp (base, f); foreachTemp (index, f))
+          | Operand.Temporary t => f t
+          | _ => ()
+      fun isEntry l =
+         case labelBlock l of Block.T {kind, ...} => Kind.isEntry kind
+      fun nearSuccessors transfer =
+         List.keepAll
+         (case transfer of
+             Transfer.CCall {return = SOME {return, ...}, ...} => [return]
+           | Transfer.Goto l => [l]
+           | Transfer.Spork {cont, ...} => [cont]
+           | Transfer.Switch (Switch.T {cases, default, ...}) =>
+                Vector.fold (cases, Option.fold (default, [], op ::),
+                             fn ((_, l), ls) => l :: ls)
+           | _ => [],
+          not o isEntry)
+      (* 1. Partition the blocks into regions. *)
+      val () =
+         Vector.foreach
+         (blocks, fn Block.T {label, transfer, ...} =>
+          List.foreach
+          (nearSuccessors transfer, fn l =>
+           (List.push (#near (labelInfo label), l)
+            ; List.push (#near (labelInfo l), label))))
+      val tables = ref []
+      val () =
+         Vector.foreach
+         (blocks, fn Block.T {label, ...} =>
+          let
+             val table = ref []
+             fun visit l =
+                let
+                   val {near, region} = labelInfo l
+                in
+                   case !region of
+                      SOME _ => ()
+                    | NONE => (region := SOME table
+                               ; List.foreach (!near, visit))
+                end
+          in
+             if Option.isSome (! (#region (labelInfo label)))
+                then ()
+             else (List.push (tables, table); visit label)
+          end)
+      fun blockRegion l = valOf (! (#region (labelInfo l)))
+      (* the region of the block that is being output *)
+      val region = ref (ref [])
+      fun liveTemps (Block.T {label, live, ...}) =
+         Vector.fold (live, [], fn (z, es) =>
+                      case z of
+                         Live.Temporary t => entry (blockRegion label, t) :: es
+                       | _ => es)
+      (* 2. Count the uses of each temporary and compute interference. *)
+      val () =
+         Vector.foreach
+         (blocks, fn b as Block.T {kind, label, statements, transfer, ...} =>
+          let
+             val table = blockRegion label
+             fun use (z, ()) =
+                foreachTemp (z, fn t => Int.inc (#count (entry (table, t))))
+             val () =
+                if Kind.isEntry kind andalso not (List.isEmpty (liveTemps b))
+                   then Error.bug "VibeArmCodegen: temporary live at entry"
+                else ()
+             val () =
+                case kind of
+                   Kind.CReturn {dst = SOME z, ...} =>
+                      use (Live.toOperand z, ())
+                 | _ => ()
+             val () =
+                Vector.foreach (statements, fn s =>
+                                Statement.foldOperands (s, (), use))
+             val () = Transfer.foldOperands (transfer, (), use)
+             val () =
+                case transfer of
+                   Transfer.CCall {return = SOME {return, ...}, ...} =>
+                      List.foreach (liveTemps (labelBlock return),
+                                    fn {across, ...} => across := true)
+                 | _ => ()
+             (* The temporaries that are live, during a backward scan. *)
+             val live: entry list ref = ref []
+             fun same (e: entry, e': entry) = #live e = #live e'
+             fun add (e: entry) =
+                if ! (#live e) then ()
+                else (#live e := true; List.push (live, e))
+             fun uses z = foreachTemp (z, fn t => add (entry (table, t)))
+             (* e is defined; a copy needn't interfere with its source *)
+             fun def (e: entry, src: entry option) =
+                (List.foreach
+                 (!live, fn e' =>
+                  if same (e, e')
+                     orelse (case src of
+                                NONE => false
+                              | SOME e'' => same (e', e''))
+                     then ()
+                  else (List.push (#adj e, E e'); List.push (#adj e', E e)))
+                 ; if ! (#live e)
+                      then (#live e := false
+                            ; live := List.remove (!live, fn e' => same (e, e')))
+                   else ())
+             val () =
+                List.foreach (nearSuccessors transfer, fn l =>
+                              List.foreach (liveTemps (labelBlock l), add))
+             val () = Transfer.foldOperands (transfer, (), fn (z, ()) => uses z)
+             val () =
+                Vector.foreachr
+                (statements, fn s =>
+                 let
+                    val (dst, srcs) =
+                       case s of
+                          Statement.Move {dst, src} => (SOME dst, [src])
+                        | Statement.PrimApp {args, dst, ...} =>
+                             (dst, Vector.toList args)
+                 in
+                    (case dst of
+                        NONE => ()
+                      | SOME (Operand.Temporary t) =>
+                           def (entry (table, t),
+                                case s of
+                                   Statement.Move {src = Operand.Temporary t',
+                                                   ...} =>
+                                      SOME (entry (table, t'))
+                                 | _ => NONE)
+                      | SOME z => uses z)
+                    ; List.foreach (srcs, uses)
+                 end)
+             val () =
+                case kind of
+                   Kind.CReturn {dst = SOME z, ...} =>
+                      (case Live.toOperand z of
+                          Operand.Temporary t => def (entry (table, t), NONE)
+                        | _ => ())
+                 | _ => ()
+          in
+             List.foreach (!live, fn e => #live e := false)
+          end)
+      (* 3. Color, in order of use count. *)
+      fun callerSave r = (8 <= r andalso r <= 15) orelse r >= 51
+      val () =
+         let
+            val caller = [8, 9, 10, 11, 12, 13, 14, 15]
+            val callee = [22, 23, 24, 25, 26, 27, 28]
+            val fcaller = List.tabulate (13, fn k => 51 + k)
+            val fcallee = List.tabulate (8, fn k => 40 + k)
+         in
+            List.foreach
+            (!tables, fn table =>
+             List.foreach
+             (List.insertionSort (!table, fn (e, e') =>
+                                  ! (#count e) >= ! (#count e')),
+              fn {ct, across, adj, home, ...} =>
+              let
+                 val used = List.keepAllMap (!adj, fn E e => ! (#home e))
+                 val regs =
+                    case (isReal ct, !across) of
+                       (false, false) => caller @ callee
+                     | (false, true) => callee @ caller
+                     | (true, false) => fcaller @ fcallee
+                     | (true, true) => fcallee @ fcaller
+              in
+                 home := List.peek (regs, fn r =>
+                                    not (List.contains (used, r, op =)))
+              end))
+         end
+      fun tempHome t = ! (#home (entry (!region, t)))
+      fun callerSaves (es: entry list) =
+         List.keepAll (es, fn {home, ...} =>
+                       case !home of
+                          SOME r => callerSave r
+                        | NONE => false)
+      (* store/load registers to/from their temporaries' slots in the frame *)
+      fun commit (opc, es: entry list) =
+         List.foreach
+         (es, fn {ct, index, home, ...} =>
+          let
+             val ct' = if isReal ct then CType.Real64 else CType.Word64
+          in
+             i [opc, " ", reg (valOf (!home), ct'), ", ",
+                mem (31, slot ct + 8 * index, ct')]
+          end)
+      (* ----------------------------------------------------- *)
+
       val saved = [(19, 20), (21, 22), (23, 24), (25, 26), (27, 28),
                    (40, 41), (42, 43), (44, 45), (46, 47)]
 
@@ -190,6 +415,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                (value (base, t, t), Bytes.toInt offset)
           | Operand.SequenceOffset {base, index, offset, scale, ...} =>
                let
+                  val () = if t >= 17
+                              then Error.bug "VibeArmCodegen.addr: nesting"
+                           else ()
                   val b = value (base, t, t)
                   val ix = value (index, t + 1, t + 1)
                   val lg = case scale of
@@ -252,10 +480,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             val ct = cty dst
          in
             case home dst of
-               SOME h => mov (h, r, ct)
+               SOME h =>
+                  (* keep narrow values zero-extended *)
+                  (case size ct of
+                      1 => i ["and w", int h, ", w", int r, ", #0xff"]
+                    | 2 => i ["and w", int h, ", w", int r, ", #0xffff"]
+                    | _ => mov (h, r, ct))
              | NONE =>
                   let
-                     val (b, off) = addr (dst, 12)
+                     val (b, off) = addr (dst, 3)
                   in
                      i ["str", sfx ct, " ", reg (r, ct), ", ", mem (b, off, ct)]
                   end
@@ -263,9 +496,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       (* A register in which to compute the value of dst. *)
       fun dstReg dst =
          case home dst of
-            SOME h => h
+            SOME h => if size (cty dst) < 4 then scratch (cty dst, 0) else h
           | NONE => scratch (cty dst, 0)
-      fun move {dst, src} = store (dst, value (src, dstReg dst, 12))
+      fun move {dst, src} = store (dst, value (src, dstReg dst, 3))
 
       fun primApp (prim: Type.t Prim.t, args, dst) =
          let
@@ -274,7 +507,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             val d = dstReg dst
             fun a k = Vector.sub (args, k)
             (* a register holding argument k *)
-            fun v k = value (a k, scratch (cty (a k), k), 12)
+            fun v k = value (a k, scratch (cty (a k), k), 3)
             fun opnd (k, ct, immOk) =
                case (immOk, a k) of
                   (true, Operand.Const (Const.Word w)) =>
@@ -329,7 +562,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                let
                   val n = bits ws
                   val r = v k
-                  val s = 9 + k
+                  val s = k
                in
                   if signed andalso (n < 32 orelse (to64 andalso n < 64))
                      then (i ["sxt", bhw n, " ",
@@ -345,22 +578,22 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                        ", " ^ x (ext (k, ws, signed, true))))
                in
                   if n < 64
-                     then (i [opc, " x11", ops]
-                           ; i ["cmp x11, w11, ", if signed then "s" else "u",
+                     then (i [opc, " x5", ops]
+                           ; i ["cmp x5, w5, ", if signed then "s" else "u",
                                 "xt", bhw n]
                            ; cset "ne")
                   else if opc = "mul"
-                     then (i [if signed then "smulh" else "umulh", " x11", ops]
+                     then (i [if signed then "smulh" else "umulh", " x5", ops]
                            ; if signed
-                                then (i ["mul x12", ops]
-                                      ; i ["cmp x11, x12, asr #63"])
-                             else i ["cmp x11, #0"]
+                                then (i ["mul x6", ops]
+                                      ; i ["cmp x5, x6, asr #63"])
+                             else i ["cmp x5, #0"]
                            ; cset "ne")
-                  else (i [opc, "s x11", ops]
+                  else (i [opc, "s x5", ops]
                         ; cset (if signed then sCond else uCond))
                end
             fun shift (opc, ws, r0) = bin' (opc, wct ws, r0, true)
-            (* compare-and-swap; setAddr puts the address in x15 *)
+            (* compare-and-swap; setAddr puts the address in x7 *)
             fun cas (ct, kOld, kNew, obj, setAddr) =
                let
                   fun iv k =
@@ -368,8 +601,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                         val r = v k
                      in
                         if r >= 32
-                           then (i ["fmov ", reg (9 + k, ct), ", ", reg (r, ct)]
-                                 ; 9 + k)
+                           then (i ["fmov ", reg (k, ct), ", ", reg (r, ct)]
+                                 ; k)
                         else r
                      end
                   val old = iv kOld
@@ -377,21 +610,30 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   val () = setAddr ()
                in
                   label "1"
-                  ; i ["ldaxr", sfx ct, " ", reg (13, ct), ", [x15]"]
-                  ; i ["cmp ", reg (13, ct), ", ", reg (old, ct)]
+                  ; i ["ldaxr", sfx ct, " ", reg (5, ct), ", [x7]"]
+                  ; i ["cmp ", reg (5, ct), ", ", reg (old, ct)]
                   ; i ["b.ne 2f"]
-                  ; i ["stlxr", sfx ct, " w14, ", reg (new, ct), ", [x15]"]
-                  ; i ["cbnz w14, 1b"]
+                  ; i ["stlxr", sfx ct, " w6, ", reg (new, ct), ", [x7]"]
+                  ; i ["cbnz w6, 1b"]
                   ; label "2"
                   ; (case ct of
                         CType.Objptr =>
-                           (mov (0, obj, ct)
-                            ; i ["mov x1, x13"]
-                            ; i ["bl ", sym "Assignable_decheckObjptr"]
-                            ; mov (d, 0, ct))
+                           let
+                              (* We don't know what is live here, so commit all
+                               * of the caller-save temporaries.
+                               *)
+                              val saves = callerSaves (! (!region))
+                           in
+                              mov (0, obj, ct)
+                              ; i ["mov x1, x5"]
+                              ; commit ("str", saves)
+                              ; i ["bl ", sym "Assignable_decheckObjptr"]
+                              ; commit ("ldr", saves)
+                              ; mov (d, 0, ct)
+                           end
                       | _ => if isReal ct
-                                then i ["fmov ", reg (d, ct), ", ", reg (13, ct)]
-                             else mov (d, 13, ct))
+                                then i ["fmov ", reg (d, ct), ", ", reg (5, ct)]
+                             else mov (d, 5, ct))
                   ; done ()
                end
          in
@@ -403,7 +645,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      val lg = case size ct of 1 => 0 | 2 => 1 | 4 => 2 | _ => 3
                   in
                      cas (ct, 2, 3, obj, fn () =>
-                          i ["add x15, ", x obj, ", ", x ix, ", lsl #", int lg])
+                          i ["add x7, ", x obj, ", ", x ix, ", lsl #", int lg])
                   end
              | CPointer_add => addsub (true, ptr)
              | CPointer_diff => bin ("sub", ptr, false)
@@ -426,8 +668,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
              | Real_neg rs => un ("fneg", rct rs)
              | Real_qequal rs =>
                   (i ["fcmp ", reg (v 0, rct rs), ", ", reg (v 1, rct rs)]
-                   ; i ["cset w11, eq"]
-                   ; i ["csinc ", reg (d, dct), ", w11, wzr, vc"]
+                   ; i ["cset w5, eq"]
+                   ; i ["csinc ", reg (d, dct), ", w5, wzr, vc"]
                    ; done ())
              | Real_rndToReal (rs, _) => un ("fcvt", rct rs)
              | Real_rndToWord (rs, _, {signed}) =>
@@ -438,7 +680,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   let
                      val obj = v 0
                   in
-                     cas (ct, 1, 2, obj, fn () => mov (15, obj, ptr))
+                     cas (ct, 1, 2, obj, fn () => mov (7, obj, ptr))
                   end
              | Word_add ws => addsub (true, wct ws)
              | Word_addCheckP z => chk ("add", "vs", "cs", z, [0, 1])
@@ -485,9 +727,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      val r0 = ext (0, ws, signed, false)
                      val r1 = ext (1, ws, signed, false)
                   in
-                     i [if signed then "sdiv " else "udiv ", reg (11, ct),
+                     i [if signed then "sdiv " else "udiv ", reg (5, ct),
                         ", ", reg (r0, ct), ", ", reg (r1, ct)]
-                     ; i ["msub ", reg (d, ct), ", ", reg (11, ct), ", ",
+                     ; i ["msub ", reg (d, ct), ", ", reg (5, ct), ", ",
                           reg (r1, ct), ", ", reg (r0, ct)]
                      ; done ()
                   end
@@ -500,9 +742,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      val ct = wct ws
                      val r0 = v 0
                   in
-                     i ["neg ", reg (11, ct), ", ", reg (v 1, ct)]
+                     i ["neg ", reg (5, ct), ", ", reg (v 1, ct)]
                      ; i ["ror ", reg (d, ct), ", ", reg (r0, ct), ", ",
-                          reg (11, ct)]
+                          reg (5, ct)]
                      ; done ()
                   end
              | Word_ror ws => shift ("ror", ws, v 0)
@@ -538,9 +780,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          let
             val size = Bytes.toInt size
          in
-            movInt (9, labelIndex return)
-            ; i ["str x9, ", mem (20, size - 8, CType.Word64)]
-            ; addImm (20, 20, size)
+            (* only x17 is available: C arguments may already be in place *)
+            addImm (20, 20, size)
+            ; movInt (17, labelIndex return)
+            ; i ["str x17, [x20, #-8]"]
             ; (case labelBlock return of
                   Block.T {kind, ...} =>
                      (case Option.map (Kind.frameInfoOpt kind,
@@ -550,9 +793,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                             let
                                val pst = gcField GCField.PromoStackTop
                             in
-                               load (pst, 9, 12)
-                               ; i ["str x20, [x9], #8"]
-                               ; store (pst, 9)
+                               load (pst, 17, 17)
+                               ; i ["str x20, [x17], #8"]
+                               ; store (pst, 17)
                             end
                        | _ => ()))
          end
@@ -564,13 +807,13 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      val pst = gcField GCField.PromoStackTop
                      val psb = gcField GCField.PromoStackBot
                   in
-                     load (pst, 9, 12)
-                     ; i ["sub x9, x9, #8"]
-                     ; store (pst, 9)
-                     ; load (psb, 10, 12)
-                     ; i ["cmp x10, x9"]
+                     load (pst, 0, 3)
+                     ; i ["sub x0, x0, #8"]
+                     ; store (pst, 0)
+                     ; load (psb, 1, 3)
+                     ; i ["cmp x1, x0"]
                      ; i ["b.ls 1f"]
-                     ; store (psb, 9)
+                     ; store (psb, 0)
                      ; label "1"
                   end
             else ())
@@ -606,10 +849,19 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          let
             datatype z = datatype CFunction.Target.t
             val args = Vector.toList args
-            val args =
+            val (fptr, args) =
                case (target, args) of
-                  (Indirect, fptr :: args) => (load (fptr, 11, 12); args)
-                | _ => args
+                  (Indirect, fptr :: args) => (SOME fptr, args)
+                | _ => (NONE, args)
+            (* Commit the caller-save temporaries that are live across the
+             * call.
+             *)
+            val saves =
+               case return of
+                  NONE => []
+                | SOME {return, ...} =>
+                     callerSaves (liveTemps (labelBlock return))
+            val () = commit ("str", saves)
             (* Assign argument locations: a register or 64 + stack offset. *)
             val (locs, _, _, stk) =
                List.fold2
@@ -638,7 +890,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                (locs, fn (z, ct, loc) =>
                 let
                    val r = if loc >= 64 then scratch (ct, 0) else loc
-                   val () = load (z, r, 12)
+                   val () = load (z, r, 16)
                    val () =
                       case ct of
                          CType.Int8 => i ["sxtb w", int r, ", w", int r]
@@ -650,6 +902,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                               mem (31, loc - 64, ct)]
                    else ()
                 end)
+            val () = Option.app (fptr, fn z => load (z, 16, 16))
             val () = spAdj := 0
             val () =
                case return of
@@ -666,7 +919,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                 "GC_readBarrier" => "Assignable_readBarrier"
                               | "GC_writeBarrier" => "Assignable_writeBarrier"
                               | _ => name)]
-                | Indirect => i ["blr x11"]
+                | Indirect => i ["blr x16"]
             val () = addImm (31, 31, stk)
             val () =
                case retTy of
@@ -674,6 +927,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                 | SOME ct => if isReal ct
                                 then i ["str d0, [sp, #8]"]
                              else i ["str x0, [sp]"]
+            val () = commit ("ldr", saves)
             val () =
                if CFunction.modifiesFrontier func
                   then move {dst = Operand.Frontier,
@@ -706,14 +960,14 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           | Transfer.Goto l => goto l
           | Transfer.Raise {raisesTo} =>
                (i ["add x20, ",
-                   x (value (gcField GCField.StackBottom, 9, 12)), ", ",
-                   x (value (gcField GCField.ExnStack, 10, 12))]
+                   x (value (gcField GCField.StackBottom, 0, 3)), ", ",
+                   x (value (gcField GCField.ExnStack, 1, 3))]
                 ; rtrans raisesTo)
           | Transfer.Return {returnsTo} => rtrans returnsTo
           | Transfer.Spork {cont, ...} => goto cont
           | Transfer.Switch (Switch.T {cases, default, test, ...}) =>
                let
-                  val r = value (test, 9, 12)
+                  val r = value (test, 0, 3)
                   val cases = Vector.toList cases
                   val (cases, default) =
                      case default of
@@ -742,6 +996,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                end
       fun outputBlock (Block.T {kind, label = l, statements, transfer, ...}) =
          (label (Label.toString l)
+          ; region := blockRegion l
           ; (case kind of
                 Kind.Cont {frameInfo, ...} => pop (frameInfo, {promo = true})
               | Kind.CReturn {dst, frameInfo, ...} =>
