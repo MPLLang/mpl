@@ -173,7 +173,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       val (slots, frameSize) =
          List.fold (CType.all, ([], 16), fn (t, (slots, off)) =>
                     ((t, off) :: slots, off + 8 * (1 + tempsMax t)))
-      val frameSize = 16 * ((frameSize + 15) div 16)
+      (* then an area in which to save the caller-save registers at C calls *)
+      val saveBase = frameSize
+      val frameSize = 16 * ((frameSize + 8 * 21 + 15) div 16)
       fun slot ct =
          #2 (valOf (List.peek (slots, fn (t, _) => CType.equals (t, ct))))
       (* extra adjustment of sp while passing C arguments on the stack *)
@@ -304,6 +306,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                             fun ok (ms, ms', j) =
                                if List.length ms + List.length ms' <= 4
                                   then SOME {caseLabel = l, caseMoves = ms,
+                                             defaultLabel = l',
                                              defaultMoves = ms', join = j}
                                else NONE
                             fun triangle (a, other) =
@@ -440,142 +443,397 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
              | (_, []) => NONE
              | (p, p') => check (p, p')
          end
-      (* 2. Count the uses of each temporary and compute interference. *)
+      (* 2. Split each temporary into its webs: the live ranges that are
+       * connected by definitions reaching uses.  A temporary gets a new
+       * segment at each definition, plus one for its value at the start of
+       * each block where it is live; a segment at the end of a block is the
+       * same web as the one at the start of each successor.  Webs, not
+       * temporaries, are what get registers, so a temporary can be in
+       * different registers at different points.
+       *)
+      datatype web =
+         W of {parent: web option ref,
+               ct: CType.t,
+               count: int ref,                (* weighted uses and defs *)
+               across: bool ref,              (* live across a C call? *)
+               adj: web list ref,             (* interferes with *)
+               aff: (web * int) list ref,     (* copies to/from *)
+               live: bool ref,
+               mark: int ref,
+               noReg: bool ref,
+               home: int option ref}
+      val webs: web list ref = ref []
+      fun newWeb (ct, noReg) =
+         let
+            val w = W {parent = ref NONE, ct = ct, count = ref 0,
+                       across = ref false, adj = ref [], aff = ref [],
+                       live = ref false, mark = ref 0, noReg = ref noReg,
+                       home = ref NONE}
+         in
+            List.push (webs, w); w
+         end
+      fun find (w as W {parent, ...}) =
+         case !parent of
+            NONE => w
+          | SOME p => let val r = find p in parent := SOME r; r end
+      fun sameWeb (W {live, ...}, W {live = live', ...}) = live = live'
+      fun union (w, w') =
+         let
+            val w as W r = find w
+            val w' as W r' = find w'
+         in
+            if sameWeb (w, w') then ()
+            else (#parent r' := SOME w
+                  ; #count r := ! (#count r) + ! (#count r')
+                  ; #across r := (! (#across r) orelse ! (#across r'))
+                  ; #noReg r := (! (#noReg r) orelse ! (#noReg r'))
+                  ; #adj r := ! (#adj r') @ ! (#adj r)
+                  ; #aff r := ! (#aff r') @ ! (#aff r))
+         end
+      datatype event =
+         Def of web * web option    (* a copy doesn't interfere with its source *)
+       | Use of web
+      val {get = blockWebs: Label.t -> {(* at the start of the block *)
+                                        segIn: (entry * web) list ref,
+                                        (* the definitions, in order *)
+                                        defs: (entry * web) list ref,
+                                        (* in reverse order *)
+                                        events: event list ref},
+           ...} =
+         Property.get (Label.plist,
+                       Property.initFun (fn _ => {segIn = ref [], defs = ref [],
+                                                  events = ref []}))
+      fun sameEntry (e: entry, e': entry) = #live e = #live e'
+      fun segIn (l, e: entry, noReg) =
+         let
+            val {segIn, ...} = blockWebs l
+         in
+            case List.peek (!segIn, fn (e', _) => sameEntry (e, e')) of
+               SOME (_, w) => w
+             | NONE =>
+                  let
+                     val w = newWeb (#ct e, noReg)
+                  in
+                     List.push (segIn, (e, w)); w
+                  end
+         end
+      fun stripCast z =
+         case z of
+            Operand.Cast (z, _) => stripCast z
+          | _ => z
+      fun dstTemp z =
+         case stripCast z of
+            Operand.Temporary t => SOME t
+          | _ => NONE
+      val affinities: (web * web * int) list ref = ref []
       val () =
          Vector.foreach
          (blocks, fn b as Block.T {kind, label, statements, transfer, ...} =>
           let
              val table = blockRegion label
+             val {defs, events, ...} = blockWebs label
              (* weigh uses by loop depth *)
              val weight =
                 List.fold (! (#loopPath (labelInfo label)), 1, fn (_, w) =>
                            if w < 4096 then 8 * w else w)
-             fun use (z, ()) =
-                foreachTemp (z, fn t =>
-                             let
-                                val {count, ...} = entry (table, t)
-                             in
-                                count := !count + weight
-                             end)
              val () =
                 if Kind.isEntry kind andalso not (List.isEmpty (liveTemps b))
                    then Error.bug "VibeArmCodegen: temporary live at entry"
                 else ()
+             val cur: (entry * web) list ref =
+                ref (List.map (liveTemps b, fn e => (e, segIn (label, e, false))))
+             fun curWeb e =
+                case List.peek (!cur, fn (e', _) => sameEntry (e, e')) of
+                   SOME (_, w) => w
+                 | NONE =>
+                      (* not live here, according to the backend: keep it in
+                       * memory
+                       *)
+                      let
+                         val w = segIn (label, e, true)
+                      in
+                         List.push (cur, (e, w)); w
+                      end
+             fun bump (W {count, ...}) = count := !count + weight
+             fun use z =
+                foreachTemp (z, fn t =>
+                             let
+                                val w = curWeb (entry (table, t))
+                             in
+                                bump w; List.push (events, Use w)
+                             end)
+             fun def (t, src) =
+                let
+                   val e = entry (table, t)
+                   val w = newWeb (#ct e, false)
+                in
+                   bump w
+                   ; List.push (defs, (e, w))
+                   ; List.push (events, Def (w, src))
+                   ; cur := (e, w) :: List.keepAll (!cur, fn (e', _) =>
+                                                    not (sameEntry (e, e')))
+                   ; (case src of
+                         NONE => ()
+                       | SOME (w' as W {aff = aff', ...}) =>
+                            let
+                               val W {aff, ...} = w
+                            in
+                               List.push (aff, (w', weight))
+                               ; List.push (aff', (w, weight))
+                               ; List.push (affinities, (w, w', weight))
+                            end)
+                end
+             fun dst (z, src) =
+                case dstTemp z of
+                   NONE => use z
+                 | SOME t => def (t, src)
              val () =
                 case kind of
                    Kind.CReturn {dst = SOME z, ...} =>
-                      use (Live.toOperand z, ())
+                      dst (Live.toOperand z, NONE)
                  | _ => ()
              val () =
-                Vector.foreach (statements, fn s =>
-                                Statement.foldOperands (s, (), use))
-             val () = Transfer.foldOperands (transfer, (), use)
-             val () =
-                case transfer of
-                   Transfer.CCall {return = SOME {return, ...}, ...} =>
-                      List.foreach (liveTemps (labelBlock return),
-                                    fn {across, ...} => across := true)
-                 | _ => ()
-             (* The temporaries that are live, during a backward scan. *)
-             val live: entry list ref = ref []
-             fun same (e: entry, e': entry) = #live e = #live e'
-             fun add (e: entry) =
-                if ! (#live e) then ()
-                else (#live e := true; List.push (live, e))
-             fun uses z = foreachTemp (z, fn t => add (entry (table, t)))
-             (* e is defined; a copy needn't interfere with its source *)
-             fun def (e: entry, src: entry option) =
-                (List.foreach
-                 (!live, fn e' =>
-                  if same (e, e')
-                     orelse (case src of
-                                NONE => false
-                              | SOME e'' => same (e', e''))
-                     then ()
-                  else (List.push (#adj e, E e'); List.push (#adj e', E e)))
-                 ; if ! (#live e)
-                      then (#live e := false
-                            ; live := List.remove (!live, fn e' => same (e, e')))
-                   else ())
-             val () =
-                List.foreach (nearSuccessors transfer, fn l =>
-                              List.foreach (liveTemps (labelBlock l), add))
-             val () = Transfer.foldOperands (transfer, (), fn (z, ()) => uses z)
-             val () =
-                Vector.foreachr
+                Vector.foreach
                 (statements, fn s =>
-                 let
-                    val (dst, srcs) =
-                       case s of
-                          Statement.Move {dst, src} => (SOME dst, [src])
-                        | Statement.PrimApp {args, dst, ...} =>
-                             (dst, Vector.toList args)
-                 in
-                    (case dst of
-                        NONE => ()
-                      | SOME (Operand.Temporary t) =>
-                           def (entry (table, t),
-                                case s of
-                                   Statement.Move {src = Operand.Temporary t',
-                                                   ...} =>
-                                      SOME (entry (table, t'))
-                                 | _ => NONE)
-                      | SOME z => uses z)
-                    ; List.foreach (srcs, uses)
-                 end)
-             val () =
-                case kind of
-                   Kind.CReturn {dst = SOME z, ...} =>
-                      (case Live.toOperand z of
-                          Operand.Temporary t => def (entry (table, t), NONE)
-                        | _ => ())
-                 | _ => ()
+                 case s of
+                    Statement.Move {dst = d, src} =>
+                       (use src
+                        ; dst (d,
+                               case (dstTemp d, dstTemp src) of
+                                  (SOME td, SOME ts) =>
+                                     if CType.equals
+                                        (Type.toCType (Temporary.ty td),
+                                         Type.toCType (Temporary.ty ts))
+                                        then SOME (curWeb (entry (table, ts)))
+                                     else NONE
+                                | _ => NONE))
+                  | Statement.PrimApp {args, dst = d, ...} =>
+                       (Vector.foreach (args, use)
+                        ; Option.app (d, fn d => dst (d, NONE))))
+             val () = Transfer.foldOperands (transfer, (), fn (z, ()) => use z)
           in
-             List.foreach (!live, fn e => #live e := false)
+             defs := List.rev (!defs)
+          end)
+      (* the web of a temporary at the end of a block *)
+      fun segOut (l, e) =
+         case List.peek (List.rev (! (#defs (blockWebs l))), fn (e', _) =>
+                         sameEntry (e, e')) of
+            SOME (_, w) => w
+          | NONE => segIn (l, e, true)
+      val () =
+         Vector.foreach
+         (blocks, fn Block.T {label, transfer, ...} =>
+          (List.foreach
+           (nearSuccessors transfer, fn l =>
+            List.foreach (liveTemps (labelBlock l), fn e =>
+                          union (segOut (label, e), segIn (l, e, false))))
+           ; (case transfer of
+                 Transfer.CCall {return = SOME {return, ...}, ...} =>
+                    List.foreach
+                    (liveTemps (labelBlock return), fn e =>
+                     let
+                        val W {across, ...} = find (segIn (return, e, false))
+                     in
+                        #across e := true
+                        ; across := true
+                     end)
+               | _ => ())))
+      (* 3. Interference, by a backward scan of each block. *)
+      val () =
+         Vector.foreach
+         (blocks, fn Block.T {label, transfer, ...} =>
+          let
+             val live: web list ref = ref []
+             fun add w =
+                let
+                   val w as W {live = l, ...} = find w
+                in
+                   if !l then () else (l := true; List.push (live, w))
+                end
+             fun def (w, src) =
+                let
+                   val w as W {adj, live = l, ...} = find w
+                   val src = Option.map (src, find)
+                in
+                   List.foreach
+                   (!live, fn w' as W {adj = adj', ...} =>
+                    if sameWeb (w, w')
+                       orelse (case src of
+                                  NONE => false
+                                | SOME w'' => sameWeb (w', w''))
+                       then ()
+                    else (List.push (adj, w'); List.push (adj', w)))
+                   ; if !l
+                        then (l := false
+                              ; live := List.remove (!live, fn w' =>
+                                                     sameWeb (w, w')))
+                     else ()
+                end
+             val () =
+                List.foreach
+                (nearSuccessors transfer, fn l =>
+                 List.foreach (liveTemps (labelBlock l), fn e =>
+                               add (segOut (label, e))))
+             val () =
+                List.foreach (! (#events (blockWebs label)), fn ev =>
+                              case ev of
+                                 Def z => def z
+                               | Use w => add w)
+          in
+             List.foreach (!live, fn W {live, ...} => live := false)
           end)
       val caller = [8, 9, 10, 11, 12, 13, 14, 15]
       val callee = [22, 23, 24, 25, 26, 27, 28]
       val fcaller = List.tabulate (13, fn k => 51 + k)
       val fcallee = List.tabulate (8, fn k => 40 + k)
-      (* 3. Color, in order of use count. *)
       fun callerSave r = (8 <= r andalso r <= 15) orelse r >= 51
+      (* the distinct webs among ws *)
+      val stamp = ref 0
+      fun distinct ws =
+         (Int.inc stamp
+          ; List.fold (ws, [], fn (w, ac) =>
+                       let
+                          val w as W {mark, ...} = find w
+                       in
+                          if !mark = !stamp then ac
+                          else (mark := !stamp; w :: ac)
+                       end))
+      (* 4. Coalesce: make a copy's source and destination the same web, when
+       * they don't interfere and the result is sure to be colorable (it
+       * interferes with fewer webs than there are registers).
+       *)
       val () =
-         let
-         in
+         if localRA then ()
+         else
             List.foreach
-            (if localRA then [] else !tables, fn table =>
-             List.foreach
-             (List.insertionSort (!table, fn (e, e') =>
-                                  ! (#count e) >= ! (#count e')),
-              fn {ct, across, adj, home, ...} =>
-              let
-                 val used = List.keepAllMap (!adj, fn E e => ! (#home e))
-                 val regs =
-                    case (isReal ct, !across) of
-                       (false, false) => caller @ callee
-                     | (false, true) => callee @ caller
-                     | (true, false) => fcaller @ fcallee
-                     | (true, true) => fcallee @ fcaller
-              in
-                 home := List.peek (regs, fn r =>
-                                    not (List.contains (used, r, op =)))
-              end))
+            (QuickSort.sortList (!affinities, fn ((_, _, n), (_, _, n')) =>
+                                 n >= n'),
+             fn (w, w', _) =>
+             let
+                val w as W {ct, adj, noReg, ...} = find w
+                val w' as W {ct = ct', adj = adj', noReg = noReg', ...} = find w'
+             in
+                if sameWeb (w, w')
+                   orelse isReal ct <> isReal ct'
+                   orelse !noReg orelse !noReg'
+                   orelse List.exists (!adj, fn w'' => sameWeb (find w'', w'))
+                   orelse (List.length
+                           (List.keepAll
+                            (distinct (!adj @ !adj'), fn W {ct = ct'', ...} =>
+                             isReal ct'' = isReal ct))
+                           >= (if isReal ct then 21 else 15))
+                   then ()
+                else union (w, w')
+             end)
+      (* 5. Color, in order of use count.  Prefer the register of a web that
+       * this one is copied to or from.
+       *)
+      val () =
+         if localRA then ()
+         else
+            List.foreach
+            (QuickSort.sortList
+             (distinct (!webs), fn (W {count, ...}, W {count = count', ...}) =>
+              !count >= !count'),
+             fn W {ct, across, adj, aff, noReg, home, ...} =>
+             if !noReg then ()
+             else
+                let
+                   val used =
+                      List.keepAllMap (!adj, fn w =>
+                                       let
+                                          val W {home, ...} = find w
+                                       in
+                                          !home
+                                       end)
+                   fun free r = not (List.contains (used, r, op =))
+                   val regs =
+                      case (isReal ct, !across) of
+                         (false, false) => caller @ callee
+                       | (false, true) => callee @ caller
+                       | (true, false) => fcaller @ fcallee
+                       | (true, true) => fcallee @ fcaller
+                   (* the best register of a copy partner *)
+                   val (partner, _) =
+                      List.fold
+                      (!aff, (NONE, 0), fn ((w, n), best as (_, n')) =>
+                       let
+                          val W {ct = ct', home, ...} = find w
+                       in
+                          case !home of
+                             NONE => best
+                           | SOME r =>
+                                if n > n' andalso free r
+                                   andalso isReal ct' = isReal ct
+                                   then (SOME r, n)
+                                else best
+                       end)
+                in
+                   home := (case partner of
+                               SOME r => SOME r
+                             | NONE => List.peek (regs, free))
+                end)
+      (* The webs of the temporaries at the point that is being output. *)
+      val curWebs: (entry * web) list ref = ref []
+      (* the definitions that are still to come in the block *)
+      val pendingDefs: (entry * web) list ref = ref []
+      fun webHome w = let val W {home, ...} = find w in !home end
+      fun enterBlock l =
+         let
+            val {segIn, defs, ...} = blockWebs l
+         in
+            curWebs := !segIn
+            ; pendingDefs := !defs
          end
-      fun tempHome t = ! (#home (entry (!region, t)))
-      fun callerSaves (es: entry list) =
-         List.keepAll (es, fn {home, ...} =>
-                       case !home of
-                          SOME r => callerSave r
-                        | NONE => false)
-      (* store/load registers to/from their temporaries' slots in the frame *)
-      fun commit (opc, es: entry list) =
+      (* the register of a temporary that is being used *)
+      fun tempHome t =
+         let
+            val e = entry (!region, t)
+         in
+            case List.peek (!curWebs, fn (e', _) => sameEntry (e, e')) of
+               NONE => NONE
+             | SOME (_, w) => webHome w
+         end
+      (* the register of a temporary that is being defined *)
+      fun defHome t =
+         let
+            val e = entry (!region, t)
+         in
+            case List.peek (!pendingDefs, fn (e', _) => sameEntry (e, e')) of
+               NONE => NONE
+             | SOME (_, w) => webHome w
+         end
+      (* the definition of z has been output *)
+      fun defined z =
+         case dstTemp z of
+            NONE => ()
+          | SOME t =>
+               let
+                  val e = entry (!region, t)
+                  fun same (e', _) = sameEntry (e, e')
+               in
+                  case List.peek (!pendingDefs, same) of
+                     NONE => ()
+                   | SOME d =>
+                        (pendingDefs := List.removeFirst (!pendingDefs, same)
+                         ; curWebs := d :: List.keepAll (!curWebs, not o same))
+               end
+      (* the caller-save registers that hold some of the webs *)
+      fun callerSaves ws =
+         List.fold (List.keepAllMap (ws, webHome), [], fn (r, ac) =>
+                    if callerSave r andalso not (List.contains (ac, r, op =))
+                       then r :: ac
+                    else ac)
+      (* store/load registers to/from the save area of the frame *)
+      fun commit (opc, rs) =
          List.foreach
-         (es, fn {ct, index, home, ...} =>
+         (rs, fn r =>
           let
-             val ct' = if isReal ct then CType.Real64 else CType.Word64
+             val ct = if r >= 32 then CType.Real64 else CType.Word64
           in
-             i [opc, " ", reg (valOf (!home), ct'), ", ",
-                mem (31, slot ct + 8 * index, ct')]
+             i [opc, " ", reg (r, ct), ", ",
+                mem (31, saveBase + 8 * (if r >= 32 then r - 43 else r - 8),
+                     ct)]
           end)
       (* ----------------------------------------------------- *)
 
@@ -987,7 +1245,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                    ; List.push (cache, {off = off, ct = ct,
                                                         reg = h})))
                   end
-             | (Operand.Temporary t, h) =>
+             | (Operand.Temporary t, _) =>
                   if localRA
                      then
                         let
@@ -1012,7 +1270,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                  (* a dead destination is not stored at all *)
                                  if liveLater l then enter (allocReg l) else ()
                         end
-                  else (case h of
+                  else (case defHome t of
                            SOME h => set h
                          | NONE =>
                               i ["str", sfx ct, " ", reg (r, ct), ", ",
@@ -1054,6 +1312,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                          List.push (reserved, (l, h)); h
                                       end))
                   end
+             | (false, Operand.Temporary t) =>
+                  (case defHome t of
+                      SOME h => if narrow then scratch (cty dst, 0) else h
+                    | NONE => scratch (cty dst, 0))
              | _ =>
                   (case home dst of
                       SOME h => if narrow then scratch (cty dst, 0) else h
@@ -1270,7 +1532,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                *)
                               val saves =
                                  if localRA then []
-                                 else callerSaves (! (!region))
+                                 else callerSaves (List.map (!curWebs, #2))
                            in
                               mov (0, obj, ct)
                               ; i ["mov x1, x5"]
@@ -1578,7 +1840,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       (* Output an if-converted switch; the flags hold condition c, which
        * selects the case (rather than the default) target.
        *)
-      fun selects (c, {caseLabel = _, caseMoves, defaultMoves, join}) =
+      fun selects (c, {caseLabel, caseMoves, defaultLabel, defaultMoves,
+                       join}) =
          let
             (* The selects write temporaries of other blocks, whose registers
              * the cache may be using.
@@ -1597,7 +1860,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      if localRA
                         then (value (dst, scratch (ct, 0), 3), true)
                      else
-                     case home dst of
+                     case Option.fold (dstTemp dst, NONE, fn (t, _) =>
+                                       defHome t) of
                         SOME h => (h, false)
                       | NONE => (scratch (ct, 0), true)
                in
@@ -1606,13 +1870,18 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                        reg (d, wide), ", ", reg (s, wide), ", ",
                        reg (d, wide), ", ", c]
                   ; if spilled then store (dst, d) else ()
+                  ; defined dst
                end
+            (* the moves of an arm are output in the context of its block *)
+            fun arm (l, moves, c) =
+               if List.isEmpty moves then ()
+               else (enterBlock l; List.foreach (moves, select c))
             val c' = case negate (CC c) of
                         CC c' => c'
                       | _ => Error.bug "VibeArmCodegen.selects"
          in
-            List.foreach (caseMoves, select c)
-            ; List.foreach (defaultMoves, select c')
+            arm (caseLabel, caseMoves, c)
+            ; arm (defaultLabel, defaultMoves, c')
             ; gotoL join
          end
       (* return x0 to the trampoline *)
@@ -1697,7 +1966,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             val saves =
                case (localRA, return) of
                   (false, SOME {return, ...}) =>
-                     callerSaves (liveTemps (labelBlock return))
+                     callerSaves (List.map (liveTemps (labelBlock return),
+                                            fn e => segIn (return, e, false)))
                 | _ => []
             val () = commit ("str", saves)
             val () =
@@ -1998,10 +2268,16 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       (* Find the stack slots that are read more than once in a block, and
        * the registers that no temporary uses in the block.
        *)
-      fun setupCache (Block.T {kind, live, statements, transfer, ...}) =
+      fun setupCache (Block.T {kind, label, statements, transfer, ...}) =
          let
-            val busy = ref []
-            fun temp t = Option.app (tempHome t, fn r => List.push (busy, r))
+            (* the registers of the webs that are live somewhere in the block *)
+            val busy =
+               let
+                  val {segIn, defs, ...} = blockWebs label
+               in
+                  List.keepAllMap (!segIn @ !defs, fn (_, w) => webHome w)
+               end
+            fun temp (_: Temporary.t) = ()
             val reads: ((int * CType.t) * int ref) list ref = ref []
             fun read so =
                let
@@ -2021,11 +2297,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                 | Operand.StackOffset so => if isDst then () else read so
                 | Operand.Temporary t => temp t
                 | _ => ()
-            val () =
-               Vector.foreach (live, fn z =>
-                               case z of
-                                  Live.Temporary t => temp t
-                                | _ => ())
             val () =
                case kind of
                   Kind.CReturn {dst = SOME z, ...} =>
@@ -2049,7 +2320,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                             if !n >= 2 then SOME k else NONE)
             ; freeRegs := List.keepAll
                           (caller @ callee @ fcaller @ fcallee, fn r =>
-                           not (List.contains (!busy, r, op =)))
+                           not (List.contains (busy, r, op =)))
          end
       (* (Local allocator.)  Find where each temporary and stack slot occurs
        * in a block, and start with the registers that the block expects.
@@ -2125,9 +2396,16 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                              orelse List.exists (occsOf loc, fn p =>
                                                  p >= !pos)))
          else ()
+      (* an item has been output: so have its definitions *)
+      fun afterItem it =
+         (case it of
+             App {dst, also, ...} =>
+                (defined dst; Option.app (also, fn (z, _) => defined z))
+           | Move {dst, ...} => defined dst
+          ; endItem ())
       fun outputItems (its, k0) =
          List.foreachi (its, fn (k, it) =>
-                        (beginItem (k0 + k); outputItem it; endItem ()))
+                        (beginItem (k0 + k); outputItem it; afterItem it))
       fun outputBlock (b as Block.T {kind, label = l, statements, transfer,
                                      ...}) =
          (if Kind.isEntry kind
@@ -2139,6 +2417,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           else ()
           ; label (Label.toString l)
           ; region := blockRegion l
+          ; enterBlock l
           ; setupCache b
           ; if localRA
                then setupLocal (b, items (Vector.toList statements))
@@ -2157,6 +2436,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                           i ["ldr", sfx ct, " ", reg (d, ct),
                              if isReal ct then ", [sp, #8]" else ", [sp]"]
                           ; store (dst, d)
+                          ; defined dst
                        end))
               | Kind.Func _ => ()
               | Kind.Handler {frameInfo, ...} => pop (frameInfo, {promo = false})
@@ -2179,7 +2459,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                       ; fusing := true
                       ; outputApp a
                       ; fusing := false
-                      ; endItem ()
+                      ; afterItem (App a)
                       ; beginItem n
                       ; (case !fused of
                             NONE => outputTransfer transfer
