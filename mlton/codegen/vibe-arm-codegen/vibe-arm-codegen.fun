@@ -176,11 +176,19 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                     live: bool ref,
                     home: int option ref}
       val {get = labelInfo: Label.t -> {near: Label.t list ref,
+                                        (* is a loop header? *)
+                                        loopHeader: bool ref,
+                                        (* the nest of loops it is in,
+                                         * outermost first
+                                         *)
+                                        loopPath: int list ref,
                                         placed: bool ref,
                                         region: entry list ref option ref},
            ...} =
          Property.get (Label.plist,
                        Property.initFun (fn _ => {near = ref [],
+                                                  loopHeader = ref false,
+                                                  loopPath = ref [],
                                                   placed = ref false,
                                                   region = ref NONE}))
       fun entry (table: entry list ref, t): entry =
@@ -271,14 +279,95 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                       case z of
                          Live.Temporary t => entry (blockRegion label, t) :: es
                        | _ => es)
+      (* Loop info, as in the x86/amd64 codegens: compute the loop forest of
+       * the control-flow graph of near transfers.
+       *)
+      val () =
+         let
+            val g = DirectedGraph.new ()
+            val {get = nodeLabel: unit DirectedGraph.Node.t -> Label.t option,
+                 set = setNodeLabel, ...} =
+               Property.getSetOnce
+               (DirectedGraph.Node.plist, Property.initConst NONE)
+            val root = DirectedGraph.newNode g
+            val {get = labelNode: Label.t -> unit DirectedGraph.Node.t, ...} =
+               Property.get
+               (Label.plist,
+                Property.initFun (fn l =>
+                                  let
+                                     val n = DirectedGraph.newNode g
+                                  in
+                                     setNodeLabel (n, SOME l); n
+                                  end))
+            fun addEdge e = ignore (DirectedGraph.addEdge (g, e))
+            val () =
+               Vector.foreach
+               (blocks, fn Block.T {kind, label, transfer, ...} =>
+                (if Kind.isEntry kind
+                    then addEdge {from = root, to = labelNode label}
+                 else ()
+                 ; List.foreach (nearSuccessors transfer, fn l =>
+                                 addEdge {from = labelNode label,
+                                          to = labelNode l})))
+            fun walk (forest, headers, path) =
+               let
+                  val {loops, notInLoop} = DirectedGraph.LoopForest.dest forest
+               in
+                  Vector.foreach
+                  (notInLoop, fn l =>
+                   Option.app
+                   (l, fn l =>
+                    let
+                       val {loopHeader, loopPath, ...} = labelInfo l
+                    in
+                       loopPath := List.rev path
+                       ; loopHeader := Vector.exists
+                                       (headers, fn l' =>
+                                        case l' of
+                                           SOME l' => Label.equals (l, l')
+                                         | NONE => false)
+                    end))
+                  ; Vector.foreachi (loops, fn (k, {headers, child}) =>
+                                     walk (child, headers, k :: path))
+               end
+         in
+            walk (DirectedGraph.loopForestSteensgaard
+                  (g, {root = root, nodeValue = nodeLabel}),
+                  Vector.new0 (), [])
+         end
+      (* How much deeper in the loop nest is l' than l?  NONE if either isn't
+       * in a loop, or they are in unrelated loops.
+       *)
+      fun loopDistance (l, l') =
+         let
+            fun check (p, p') =
+               case (p, p') of
+                  ([], _) => SOME (List.length p')
+                | (_, []) => SOME (~ (List.length p))
+                | (k :: p, k' :: p') => if k = k' then check (p, p') else NONE
+         in
+            case (! (#loopPath (labelInfo l)), ! (#loopPath (labelInfo l'))) of
+               ([], _) => NONE
+             | (_, []) => NONE
+             | (p, p') => check (p, p')
+         end
       (* 2. Count the uses of each temporary and compute interference. *)
       val () =
          Vector.foreach
          (blocks, fn b as Block.T {kind, label, statements, transfer, ...} =>
           let
              val table = blockRegion label
+             (* weigh uses by loop depth *)
+             val weight =
+                List.fold (! (#loopPath (labelInfo label)), 1, fn (_, w) =>
+                           if w < 4096 then 8 * w else w)
              fun use (z, ()) =
-                foreachTemp (z, fn t => Int.inc (#count (entry (table, t))))
+                foreachTemp (z, fn t =>
+                             let
+                                val {count, ...} = entry (table, t)
+                             in
+                                count := !count + weight
+                             end)
              val () =
                 if Kind.isEntry kind andalso not (List.isEmpty (liveTemps b))
                    then Error.bug "VibeArmCodegen: temporary live at entry"
@@ -1211,8 +1300,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
 
       (* Block layout: greedily extend a trace with the successor that is
        * most likely to be next.  For a two-way switch, that is the target
-       * that the backend expects, else the one that isn't cold, else the
-       * default.
+       * that the backend expects, else the one that is deeper in the loop
+       * nest, else the one that isn't cold, else the default.
        *)
       val order: Block.t list ref = ref []
       val pending: Label.t list ref = ref []
@@ -1227,10 +1316,11 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                  | Transfer.Goto l => depth > 0 andalso cold (l, depth - 1)
                  | Transfer.Raise _ => true
                  | _ => false)
-      fun trace l =
-         if placed l then ()
+      fun trace from =
+         if placed from then ()
          else
             let
+               val l = from
                val b as Block.T {transfer, ...} = labelBlock l
                val () = #placed (labelInfo l) := true
                val () = List.push (order, b)
@@ -1248,12 +1338,27 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                    | Transfer.Switch (Switch.T {cases, default, expect, ...}) =>
                         (case switchCases (cases, default) of
                             ([(w, l)], l') =>
-                               if (case expect of
-                                      SOME w' => WordX.equals (w, w')
-                                    | NONE => cold (l', 2)
-                                              andalso not (cold (l, 2)))
-                                  then [l, l']
-                               else [l', l]
+                               let
+                                  fun byCold () =
+                                     cold (l', 2) andalso not (cold (l, 2))
+                                  (* prefer to stay in, or go deeper into,
+                                   * a loop
+                                   *)
+                                  fun byLoop () =
+                                     case (loopDistance (from, l),
+                                           loopDistance (from, l')) of
+                                        (SOME _, NONE) => true
+                                      | (NONE, SOME _) => false
+                                      | (SOME d, SOME d') =>
+                                           if d = d' then byCold () else d > d'
+                                      | (NONE, NONE) => byCold ()
+                               in
+                                  if (case expect of
+                                         SOME w' => WordX.equals (w, w')
+                                       | NONE => byLoop ())
+                                     then [l, l']
+                                  else [l', l]
+                               end
                           | (cases, l) => l :: List.map (cases, #2))
                    | _ => []
             in
