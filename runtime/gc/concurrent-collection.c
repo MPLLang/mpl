@@ -177,6 +177,12 @@ void markObj(pointer p) {
   // *headerp = header;
 }
 
+/* Record that this collection marked op, so that it is unmarked at the end. */
+static inline void rememberMarked(ConcurrentCollectArgs* args, objptr op) {
+  HM_storeInChunkListWithPurpose(
+    &(args->markedObjects), &op, sizeof(objptr), BLOCK_FOR_GC_WORKLIST);
+}
+
 // This function is exactly the same as in chunk.c.
 // The only difference is, it doesn't NULL the levelHead of the unlinking chunk.
 // TODO: replace with HM_unlinkChunkPreserveLevelHead (see chunk.c)
@@ -324,32 +330,10 @@ void tryMarkAndAddToWorkList(
 
   if (!CC_isPointerMarked(p)) {
     markObj(p);
+    rememberMarked(args, op);
     args->bytesSaved += sizeofObject(s, p);
     args->numObjectsMarked++;
     assert(CC_isPointerMarked(p));
-    CC_workList_push(s, &(args->worklist), op);
-  }
-}
-
-void tryUnmarkAndAddToWorkList(
-  GC_state s,
-  __attribute__((unused)) objptr *opp,
-  objptr op,
-  void* rawArgs)
-{
-  ConcurrentCollectArgs* args = (ConcurrentCollectArgs*)rawArgs;
-  assert(isObjptr(op));
-  pointer p = objptrToPointer (op, NULL);
-  HM_chunk chunk = HM_getChunkOf(p);
-
-  if (!isChunkInToSpace(chunk, rawArgs)) {
-    return;
-  }
-
-  if (CC_isPointerMarked(p)) {
-    assert(isChunkInToSpace(chunk, args));
-    markObj(p);
-    assert(!CC_isPointerMarked(p));
     CC_workList_push(s, &(args->worklist), op);
   }
 }
@@ -369,29 +353,9 @@ void markLoop(GC_state s, ConcurrentCollectArgs* args) {
   assert(CC_workList_isEmpty(s, worklist));
 }
 
-void unmarkLoop(GC_state s, ConcurrentCollectArgs* args) {
-  struct GC_foreachObjptrClosure unmarkAddClosure =
-    {.fun = tryUnmarkAndAddToWorkList, .env = (void*)args};
-
-  CC_workList worklist = &(args->worklist);
-
-  objptr* current = CC_workList_pop(s, worklist);
-  while (NULL != current) {
-    callIfIsObjptr(s, &unmarkAddClosure, current);
-    current = CC_workList_pop(s, worklist);
-  }
-
-  assert(CC_workList_isEmpty(s, worklist));
-}
-
 void tryMarkAndMarkLoop(GC_state s, objptr *opp, objptr op, void* rawArgs) {
   tryMarkAndAddToWorkList(s, opp, op, rawArgs);
   markLoop(s, rawArgs);
-}
-
-void tryUnmarkAndUnmarkLoop(GC_state s, objptr *opp, objptr op, void* rawArgs) {
-  tryUnmarkAndAddToWorkList(s, opp, op, rawArgs);
-  unmarkLoop(s, rawArgs);
 }
 
 #if 0
@@ -492,38 +456,6 @@ void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
 // #endif
 // }
 
-void unmarkPinned(
-  GC_state s,
-  HM_remembered remElem,
-  void* rawArgs)
-{
-  objptr src = remElem->object;
-  assert(!(HM_getChunkOf(objptrToPointer(src, NULL))->pinnedDuringCollection));
-  tryUnmarkAndUnmarkLoop(s, &src, src, rawArgs);
-  if (remElem->from != BOGUS_OBJPTR) {
-    tryUnmarkAndUnmarkLoop(s, &(remElem->from), remElem->from, rawArgs);
-  }
-  // unmarkPtrChunk(s, &src, rawArgs);
-  // unmarkPtrChunk(s, &(remElem->from), rawArgs);
-
-#if 0
-#if ASSERT
-  HM_chunk fromChunk = HM_getChunkOf(objptrToPointer(remElem->from, NULL));
-  HM_chunk objChunk = HM_getChunkOf(objptrToPointer(remElem->object, NULL));
-  assert(!isChunkInFromSpace(fromChunk, rawArgs));
-  assert(!isChunkInToSpace(fromChunk, rawArgs));
-  assert(
-    HM_HH_getDepth(HM_getLevelHead(fromChunk))
-    <=
-    HM_HH_getDepth(HM_getLevelHead(objChunk))
-  );
-#endif
-#endif
-
-  // TODO: SAM_NOTE: check this??
-  // unmarkPtrChunk(s, &dst, rawArgs);
-}
-
 // This function does more than forwardPtrChunk.
 // It scans the object pointed by the pointer even if its not in scope.
 // Recursively however it only calls forwardPtrChunk and not itself
@@ -543,6 +475,7 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   if(saved && !CC_isPointerMarked(p)) {
     assert(getTransitivePtr(p, rawArgs) == p);
     markObj(p);
+    rememberMarked(args, op);
     assert(CC_isPointerMarked(p));
     args->bytesSaved += sizeofObject(s, p);
     args->numObjectsMarked++;
@@ -550,27 +483,6 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
 
   CC_workList_push(s, &(args->worklist), op);
   markLoop(s, rawArgs);
-}
-
-void forceUnmark (GC_state s, objptr* opp, void* rawArgs) {
-  ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
-  objptr op = *opp;
-  pointer p = objptrToPointer(op, NULL);
-
-  if (!isObjptr(op)) {
-    return;
-  }
-
-  assert(isObjptr(op));
-
-  if(CC_isPointerMarked(p)){
-    assert(getTransitivePtr(p, rawArgs) == p);
-    markObj(p);
-    assert(!CC_isPointerMarked(p));
-  }
-
-  CC_workList_push(s, &(args->worklist), op);
-  unmarkLoop(s, rawArgs);
 }
 
 void ensureCallSanity(
@@ -969,6 +881,7 @@ void CC_collectWithRoots(
     .numObjectsMarked = 0
   };
   CC_workList_init(s, &(lists.worklist));
+  HM_initChunkList(&(lists.markedObjects));
 
   HH_EBR_enterQuiescentState(s);
 
@@ -1063,22 +976,29 @@ void CC_collectWithRoots(
 //   }
 // #endif
 
-  struct HM_foreachDownptrClosure unmarkPinnedClosure =
-    {.fun = unmarkPinned, .env = &lists};
-  HM_foreachRemembered(s, HM_HH_getRemSet(targetHH), &unmarkPinnedClosure, false);
-
-  forceUnmark(s, &(cp->snapLeft), &lists);
-  forceUnmark(s, &(cp->snapRight), &lists);
-  forceUnmark(s, &(cp->snapTemp), &lists);
-  // forceUnmark(s, &(s->wsQueue), &lists);
-  forceUnmark(s, &(cp->stack), &lists);
-  forceUnmark(s, &(cp->additionalStack), &lists);
-
-  unmarkLoop(s, &lists);
-
-  // forEachObjptrinStack(s, cp->rootList, unmarkPtrChunk, &lists);
-  forEachObjptrInCCStackBag(s, removedFromCCBag, tryUnmarkAndUnmarkLoop, &lists);
-  unmarkLoop(s, &lists);
+  /* Unmark everything this collection marked. This used to be done by
+   * tracing again from the same roots, but the mutator runs concurrently and
+   * can rewire the graph between the two traversals: e.g. after `r := x :: !r`
+   * the old (marked) list is reachable only through the new cons cell, which
+   * is out of scope, and the write barrier does not record old values that
+   * are already marked. Such objects stayed marked, and the next collection
+   * of this heap then treated them as already traced and freed the chunks of
+   * their (still live) children. */
+  for (HM_chunk chunk = HM_getChunkListFirstChunk(&(lists.markedObjects));
+       chunk != NULL;
+       chunk = chunk->nextChunk)
+  {
+    for (pointer q = HM_getChunkStart(chunk);
+         q < HM_getChunkFrontier(chunk);
+         q += sizeof(objptr))
+    {
+      pointer p = objptrToPointer(*(objptr*)q, NULL);
+      if (CC_isPointerMarked(p))
+        markObj(p);
+      assert(!CC_isPointerMarked(p));
+    }
+  }
+  HM_freeChunksInListWithInfo(s, &(lists.markedObjects), NULL, BLOCK_FOR_GC_WORKLIST);
 
   HM_freeChunksInListWithInfo(s, removedFromCCBag, NULL, BLOCK_FOR_FORGOTTEN_SET);
 
