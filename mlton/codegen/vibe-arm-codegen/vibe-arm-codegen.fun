@@ -691,12 +691,42 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                          (case cacheIn z of
                              SOME r => mov (d, r, ct)
                            | NONE =>
-                                let
-                                   val (b, off) = addr (z, t)
-                                in
-                                   i ["ldr", sfx ct, " ", reg (d, ct), ", ",
-                                      mem (b, off, ct)]
-                                end))
+                                i ["ldr", sfx ct, " ", reg (d, ct), ", ",
+                                   memOf (z, t, ct)]))
+         end
+      (* An addressing mode for a memory operand that is accessed at type ct.
+       * A sequence element is addressed as [base, index, lsl #s] when it can
+       * be: no offset, and a scale that is 1 or the size of the access.
+       *)
+      and memOf (z, t, ct): string =
+         let
+            fun default () =
+               let val (b, off) = addr (z, t) in mem (b, off, ct) end
+         in
+            case z of
+               Operand.Cast (z, _) => memOf (z, t, ct)
+             | Operand.SequenceOffset {base, index, offset, scale, ...} =>
+                  let
+                     val n = Bytes.toInt (Scale.toBytes scale)
+                  in
+                     if Bytes.toInt offset = 0
+                        andalso (n = 1 orelse n = size ct)
+                        andalso t < 17
+                        then
+                           let
+                              val b = value (base, t, t)
+                              val ix = value (index, t + 1, t + 1)
+                           in
+                              concat ["[", x b, ", ", x ix,
+                                      case n of
+                                         1 => "]"
+                                       | 2 => ", lsl #1]"
+                                       | 4 => ", lsl #2]"
+                                       | _ => ", lsl #3]"]
+                           end
+                     else default ()
+                  end
+             | _ => default ()
          end
       (* A register holding the value of z: either its home or d. *)
       and value (z, d, t): int =
@@ -748,11 +778,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   end
              | (NONE, SOME h) => set h
              | (NONE, NONE) =>
-                  let
-                     val (b, off) = addr (dst, 3)
-                  in
-                     i ["str", sfx ct, " ", reg (r, ct), ", ", mem (b, off, ct)]
-                  end
+                  i ["str", sfx ct, " ", reg (r, ct), ", ", memOf (dst, 3, ct)]
          end
       (* A register in which to compute the value of dst. *)
       fun dstReg dst =
