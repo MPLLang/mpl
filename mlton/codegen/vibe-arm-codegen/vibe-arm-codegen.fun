@@ -520,14 +520,14 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           in
              List.foreach (!live, fn e => #live e := false)
           end)
+      val caller = [8, 9, 10, 11, 12, 13, 14, 15]
+      val callee = [22, 23, 24, 25, 26, 27, 28]
+      val fcaller = List.tabulate (13, fn k => 51 + k)
+      val fcallee = List.tabulate (8, fn k => 40 + k)
       (* 3. Color, in order of use count. *)
       fun callerSave r = (8 <= r andalso r <= 15) orelse r >= 51
       val () =
          let
-            val caller = [8, 9, 10, 11, 12, 13, 14, 15]
-            val callee = [22, 23, 24, 25, 26, 27, 28]
-            val fcaller = List.tabulate (13, fn k => 51 + k)
-            val fcallee = List.tabulate (8, fn k => 40 + k)
          in
             List.foreach
             (!tables, fn table =>
@@ -570,11 +570,56 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                    (40, 41), (42, 43), (44, 45), (46, 47)]
 
       fun cty z = Type.toCType (Operand.ty z)
+      (* Stack slot caching.  Within a block, a stack slot that is read more
+       * than once is kept in a register that no temporary is using in the
+       * block.  Stores write through to memory, so the cache can be dropped
+       * at any time; it is dropped whenever StackTop changes and at C calls.
+       *)
+      val cache: {off: int, ct: CType.t, reg: int} list ref = ref []
+      (* the slots that are worth caching, and the registers that are free,
+       * in the block being output
+       *)
+      val cacheable: (int * CType.t) list ref = ref []
+      val freeRegs: int list ref = ref []
+      fun clearCache () = cache := []
+      fun slotKey (StackOffset.T {offset, ty, ...}) =
+         (Bytes.toInt offset, Type.toCType ty)
+      fun sameSlot ((off, ct), (off', ct')) =
+         off = off' andalso size ct = size ct' andalso isReal ct = isReal ct'
+      fun cached so =
+         List.peek (!cache, fn {off, ct, ...} =>
+                    sameSlot ((off, ct), slotKey so))
+      (* a free register in which to cache a slot, if it is worth it *)
+      fun cacheReg (k as (_, ct)) =
+         if List.exists (!cacheable, fn k' => sameSlot (k, k'))
+            then List.peek (!freeRegs, fn r =>
+                            (r >= 32) = isReal ct
+                            andalso not (List.exists (!cache, fn {reg, ...} =>
+                                                      reg = r)))
+         else NONE
+      (* load a slot into the cache, if it is worth it *)
+      fun cacheIn z =
+         case z of
+            Operand.Cast (z, _) => cacheIn z
+          | Operand.StackOffset so =>
+               let
+                  val k as (off, ct) = slotKey so
+               in
+                  case cacheReg k of
+                     NONE => NONE
+                   | SOME r =>
+                        (i ["ldr", sfx ct, " ", reg (r, ct), ", ",
+                            mem (20, off, ct)]
+                         ; List.push (cache, {off = off, ct = ct, reg = r})
+                         ; SOME r)
+               end
+          | _ => NONE
       fun home z =
          case z of
             Operand.Cast (z, _) => home z
           | Operand.Frontier => SOME 21
           | Operand.GCState => SOME 19
+          | Operand.StackOffset so => Option.map (cached so, #reg)
           | Operand.StackTop => SOME 20
           | Operand.Temporary t => tempHome t
           | _ => NONE
@@ -643,30 +688,66 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   (case home z of
                       SOME h => mov (d, h, ct)
                     | NONE =>
-                         let
-                            val (b, off) = addr (z, t)
-                         in
-                            i ["ldr", sfx ct, " ", reg (d, ct), ", ",
-                               mem (b, off, ct)]
-                         end)
+                         (case cacheIn z of
+                             SOME r => mov (d, r, ct)
+                           | NONE =>
+                                let
+                                   val (b, off) = addr (z, t)
+                                in
+                                   i ["ldr", sfx ct, " ", reg (d, ct), ", ",
+                                      mem (b, off, ct)]
+                                end))
          end
       (* A register holding the value of z: either its home or d. *)
       and value (z, d, t): int =
          case home z of
             SOME h => h
-          | NONE => (load (z, d, t); d)
+          | NONE => (case cacheIn z of
+                        SOME r => r
+                      | NONE => (load (z, d, t); d))
       fun store (dst, r) =
          let
             val ct = cty dst
+            (* set a register home, keeping narrow values zero-extended *)
+            fun set h =
+               case size ct of
+                  1 => i ["and w", int h, ", w", int r, ", #0xff"]
+                | 2 => i ["and w", int h, ", w", int r, ", #0xffff"]
+                | _ => mov (h, r, ct)
+            fun slot z =
+               case z of
+                  Operand.Cast (z, _) => slot z
+                | Operand.StackOffset so => SOME so
+                | _ => NONE
          in
-            case home dst of
-               SOME h =>
-                  (* keep narrow values zero-extended *)
-                  (case size ct of
-                      1 => i ["and w", int h, ", w", int r, ", #0xff"]
-                    | 2 => i ["and w", int h, ", w", int r, ", #0xffff"]
-                    | _ => mov (h, r, ct))
-             | NONE =>
+            case (slot dst, home dst) of
+               (SOME so, _) =>
+                  let
+                     val k as (off, _) = slotKey so
+                     val () =
+                        i ["str", sfx ct, " ", reg (r, ct), ", ",
+                           mem (20, off, ct)]
+                     (* drop other views of the bytes that were written *)
+                     val () =
+                        cache :=
+                        List.keepAll
+                        (!cache, fn {off = off', ct = ct', ...} =>
+                         sameSlot (k, (off', ct'))
+                         orelse off' + size ct' <= off
+                         orelse off + size ct <= off')
+                  in
+                     case cached so of
+                        SOME {reg, ...} => set reg
+                      | NONE =>
+                           (case cacheReg k of
+                               NONE => ()
+                             | SOME h =>
+                                  (set h
+                                   ; List.push (cache, {off = off, ct = ct,
+                                                        reg = h})))
+                  end
+             | (NONE, SOME h) => set h
+             | (NONE, NONE) =>
                   let
                      val (b, off) = addr (dst, 3)
                   in
@@ -841,6 +922,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                               ; i ["mov x1, x5"]
                               ; commit ("str", saves)
                               ; i ["bl ", sym "Assignable_decheckObjptr"]
+                              ; clearCache ()
                               ; commit ("ldr", saves)
                               ; mov (d, 0, ct)
                            end
@@ -1021,6 +1103,11 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
        *)
       fun selects (c, {caseLabel = _, caseMoves, defaultMoves, join}) =
          let
+            (* The selects write temporaries of other blocks, whose registers
+             * the cache may be using.
+             *)
+            val () = clearCache ()
+            val () = cacheable := []
             fun select c {dst, src} =
                let
                   val ct = cty dst
@@ -1059,7 +1146,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             val size = Bytes.toInt size
          in
             (* only x17 is available: C arguments may already be in place *)
-            addImm (20, 20, size)
+            clearCache ()
+            ; addImm (20, 20, size)
             ; movInt (17, labelIndex return)
             ; i ["str x17, [x20, #-8]"]
             ; (case labelBlock return of
@@ -1078,7 +1166,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                        | _ => ()))
          end
       fun pop (fi, {promo}) =
-         (addImm (20, 20, ~ (Bytes.toInt (FrameInfo.size fi)))
+         (clearCache ()
+          ; addImm (20, 20, ~ (Bytes.toInt (FrameInfo.size fi)))
           ; if promo andalso Option.isSome (FrameInfo.sporkInfo fi)
                then
                   let
@@ -1198,6 +1287,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                               | "GC_writeBarrier" => "Assignable_writeBarrier"
                               | _ => name)]
                 | Indirect => i ["blr x16"]
+            val () = clearCache ()
             val () = addImm (31, 31, stk)
             val () =
                case retTy of
@@ -1237,7 +1327,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                 ; jump label)
           | Transfer.Goto l => goto l
           | Transfer.Raise {raisesTo} =>
-               (i ["add x20, ",
+               (clearCache ()
+                ; i ["add x20, ",
                    x (value (gcField GCField.StackBottom, 0, 3)), ", ",
                    x (value (gcField GCField.ExnStack, 1, 3))]
                 ; rtrans raisesTo)
@@ -1424,9 +1515,67 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                       end
                  | _ => NONE)
           | _ => NONE
-      fun outputBlock (Block.T {kind, label = l, statements, transfer, ...}) =
+      (* Find the stack slots that are read more than once in a block, and
+       * the registers that no temporary uses in the block.
+       *)
+      fun setupCache (Block.T {kind, live, statements, transfer, ...}) =
+         let
+            val busy = ref []
+            fun temp t = Option.app (tempHome t, fn r => List.push (busy, r))
+            val reads: ((int * CType.t) * int ref) list ref = ref []
+            fun read so =
+               let
+                  val k = slotKey so
+               in
+                  case List.peek (!reads, fn (k', _) => sameSlot (k, k')) of
+                     SOME (_, n) => Int.inc n
+                   | NONE => List.push (reads, (k, ref 1))
+               end
+            fun visit (z, isDst) =
+               case z of
+                  Operand.Address z => visit (z, true)
+                | Operand.Cast (z, _) => visit (z, isDst)
+                | Operand.Offset {base, ...} => visit (base, false)
+                | Operand.SequenceOffset {base, index, ...} =>
+                     (visit (base, false); visit (index, false))
+                | Operand.StackOffset so => if isDst then () else read so
+                | Operand.Temporary t => temp t
+                | _ => ()
+            val () =
+               Vector.foreach (live, fn z =>
+                               case z of
+                                  Live.Temporary t => temp t
+                                | _ => ())
+            val () =
+               case kind of
+                  Kind.CReturn {dst = SOME z, ...} =>
+                     visit (Live.toOperand z, true)
+                | _ => ()
+            val () =
+               Vector.foreach
+               (statements, fn s =>
+                case s of
+                   Statement.Move {dst, src} =>
+                      (visit (dst, true); visit (src, false))
+                 | Statement.PrimApp {args, dst, ...} =>
+                      (Option.app (dst, fn z => visit (z, true))
+                       ; Vector.foreach (args, fn z => visit (z, false))))
+            val () =
+               Transfer.foldOperands (transfer, (), fn (z, ()) =>
+                                      visit (z, false))
+         in
+            clearCache ()
+            ; cacheable := List.keepAllMap (!reads, fn (k, n) =>
+                                            if !n >= 2 then SOME k else NONE)
+            ; freeRegs := List.keepAll
+                          (caller @ callee @ fcaller @ fcallee, fn r =>
+                           not (List.contains (!busy, r, op =)))
+         end
+      fun outputBlock (b as Block.T {kind, label = l, statements, transfer,
+                                     ...}) =
          (label (Label.toString l)
           ; region := blockRegion l
+          ; setupCache b
           ; (case kind of
                 Kind.Cont {frameInfo, ...} => pop (frameInfo, {promo = true})
               | Kind.CReturn {dst, frameInfo, ...} =>
