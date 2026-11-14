@@ -1135,12 +1135,34 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             ; List.foreach (defaultMoves, select c')
             ; goto join
          end
-      (* return nextBlock (in x0) to the trampoline *)
+      (* return x0 to the trampoline *)
       fun leaveChunk () = (flushFrontier (); flushStackTop (); i ["b ", leave])
+      (* Transfers between chunks don't go through the trampoline.  Every
+       * chunk function has a second entry point, at a fixed offset from the
+       * first, that expects to already be running in some chunk's frame:
+       * x19-x21 are set, x29 points at the saved registers, and x3 is the
+       * index of the entry block.
+       *)
+      fun enter c = sym (ChunkLabel.toString c ^ "_enter")
+      val enterOffset = 4 * (2 + List.length saved + 3)
+      val entryLo =
+         Vector.fold (blocks, NONE, fn (Block.T {kind, label, ...}, lo) =>
+                      if Kind.isEntry kind
+                         then SOME (case lo of
+                                       NONE => labelIndex label
+                                     | SOME lo => Int.min (lo, labelIndex label))
+                      else lo)
+      (* jump to the entry block (of this chunk) with index x3 *)
+      fun dispatch () =
+         (addImm (16, 3, ~ (Option.fold (entryLo, 0, #1)))
+          ; i ["adr x17, ", table]
+          ; i ["ldrsw x16, [x17, x16, lsl #2]"]
+          ; i ["add x17, x17, x16"]
+          ; i ["br x17"])
       fun jump l =
          if ChunkLabel.equals (labelChunk l, chunkLabel)
             then goto l
-         else (movInt (0, labelIndex l); leaveChunk ())
+         else (movInt (3, labelIndex l); i ["b ", enter (labelChunk l)])
       fun push (return, size) =
          let
             val size = Bytes.toInt size
@@ -1184,21 +1206,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      ; label "1"
                   end
             else ())
-      fun indJump {mustReturnToSelf, mayReturnToSelf} =
+      fun indJump {mustReturnToSelf, mayReturnToSelf = _: bool} =
          (i ["ldr x3, [x20, #-8]"]
           ; if mustReturnToSelf
-               then i ["b ", switch]
-            else (if mayReturnToSelf
-                     then (symAddr (16, "nextChunks", {got = false})
-                           ; i ["ldr x16, [x16, x3, lsl #3]"]
-                           ; symAddr (17, self, {got = false})
-                           ; i ["cmp x16, x17"]
-                           ; i ["b.ne 1f"]
-                           ; i ["b ", switch]
-                           ; label "1")
-                  else ()
-                  ; i ["mov x0, x3"]
-                  ; leaveChunk ()))
+               then (* `adr` only reaches +-1MB *)
+                    if far then i ["b ", switch] else dispatch ()
+            else (symAddr (16, "nextChunks", {got = false})
+                  ; i ["ldr x16, [x16, x3, lsl #3]"]
+                  ; i ["add x16, x16, #", int enterOffset]
+                  ; i ["br x16"]))
       fun rtrans rsTo =
          let
             fun isSelf l = ChunkLabel.equals (labelChunk l, chunkLabel)
@@ -1731,17 +1747,18 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       ; i ["stp x29, x30, [sp, #-160]!"]
       ; i ["mov x29, sp"]
       ; List.foreachi (saved, fn (k, rs) => pair ("stp ", rs, k))
-      ; addImm (31, 31, ~ frameSize)
       ; i ["mov x19, x0"]
       ; i ["mov x20, x1"]
       ; i ["mov x21, x2"]
-      (* jump to the entry block with index x3 *)
+      (* The entry point for transfers from other chunks; it must be
+       * enterOffset bytes from the start.
+       *)
+      ; i [".globl ", enter chunkLabel]
+      ; i [if darwin then ".private_extern " else ".hidden ", enter chunkLabel]
+      ; label (enter chunkLabel)
+      ; addImm (31, 29, ~ frameSize)
       ; label switch
-      ; addImm (16, 3, ~ lo)
-      ; i ["adr x17, ", table]
-      ; i ["ldrsw x16, [x17, x16, lsl #2]"]
-      ; i ["add x17, x17, x16"]
-      ; i ["br x17"]
+      ; dispatch ()
       ; label table
       ; ignore (List.fold
                 (entries, lo, fn ((index, l), next) =>
