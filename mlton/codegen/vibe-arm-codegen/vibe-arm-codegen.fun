@@ -97,6 +97,18 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       val leave = "Lleave_" ^ self
       (* which register allocator: see "Register allocation", above *)
       val localRA = !Control.vibeArmLocalRegAlloc
+      (* The label of a block, and of the preheader that loads its promoted
+       * stack slots.  By default they are local to the assembler; with
+       * -vibe-arm-symbols true, each is a symbol, so that tools (a
+       * profiler, a debugger) can name the block that an address is in.
+       *)
+      val symbols = !Control.vibeArmSymbols
+      fun blockLabel l =
+         if symbols then sym (Label.toString l)
+         else (if darwin then "L" else ".L") ^ Label.toString l
+      fun preLabel l =
+         if symbols then sym ("pre_" ^ Label.toString l)
+         else "Lpre_" ^ Label.toString l
 
       (* Registers: 0-31 are x0-x30,sp; 32-63 are d0-d31. *)
       fun isReal ct =
@@ -1316,9 +1328,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                andalso !ploop <> 0
                andalso !ploop <> ! (#ploop (blockWebs (!curLabel)))
                then if !pheader
-                       then "Lpre_" ^ Label.toString l
+                       then preLabel l
                     else Error.bug "VibeArmCodegen.target: no preheader"
-            else Label.toString l
+            else blockLabel l
          end
       (* the register of a temporary that is being used *)
       fun tempHome t =
@@ -2537,7 +2549,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             SOME l' => Label.equals (l, l')
           | NONE => false
       fun goto l =
-         if isNext l andalso target l = Label.toString l
+         if isNext l andalso target l = blockLabel l
             then ()
          else i ["b ", target l]
       (* (Local allocator.)  Live transfers: what registers hold at the start
@@ -2662,8 +2674,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          if localRA andalso edgeNeedsCode l
             then
                let
-                  val name = concat ["Ledge_", self, "_",
-                                     int (List.length (!comps))]
+                  val name = concat [if symbols then sym "edge_" else "Ledge_",
+                                     self, "_", int (List.length (!comps))]
                in
                   List.push
                   (comps, (name, l,
@@ -3511,7 +3523,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                    ; label (sym (entryStub l))
                    ; addImm (31, 29, ~ frameSize))
           else ()
-          ; label (Label.toString l)
+          ; label (blockLabel l)
           ; region := blockRegion l
           ; enterBlock l
           ; setupCache b
@@ -3703,7 +3715,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             val {pheader, promoted, ...} = blockWebs l
          in
             if !pheader andalso not localRA
-               then (label ("Lpre_" ^ Label.toString l)
+               then (label (preLabel l)
                      ; List.foreach
                        (!promoted, fn ((off, ct), w) =>
                         case webHome w of
@@ -3711,7 +3723,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                          | SOME r =>
                               i ["ldr", sfx ct, " ", reg (r, ct), ", ",
                                  mem (20, off, ct)])
-                     ; i ["b ", Label.toString l])
+                     ; i ["b ", blockLabel l])
             else ()
          end)
       (* the compensation blocks of the local register allocator *)
@@ -3721,7 +3733,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           ; regs := state
           ; pinned := []
           ; conform l
-          ; i ["b ", Label.toString l]))
+          ; i ["b ", blockLabel l]))
    end
 
 fun output {program as Program.T {chunks, frameInfos, ...}, outputC,

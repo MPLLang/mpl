@@ -268,6 +268,10 @@ val vibeArmLocalRegAlloc = control {name = "vibe-arm local register allocator",
                                     default = false,
                                     toString = Bool.toString}
 
+val vibeArmSymbols = control {name = "vibe-arm symbols",
+                              default = false,
+                              toString = Bool.toString}
+
 val codegenFuseOpAndChk = control {name = "fuse `op` and `opCheckP` primitives in codegen",
                                    default = false,
                                    toString = Bool.toString}

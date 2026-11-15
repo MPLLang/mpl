@@ -326,6 +326,9 @@ fun makeOptions {usage} =
                             "graph" => false
                           | "local" => true
                           | _ => usage (concat ["invalid -vibe-arm-regalloc flag: ", s])))),
+       (Normal, "vibe-arm-symbols", " {false|true}",
+        "keep a symbol for each block and entry of the vibe-arm codegen",
+        boolRef vibeArmSymbols),
        (Normal, "const", " '<name> <value>'", "set compile-time constant",
         SpaceString (fn s =>
                      case String.tokens (s, Char.isSpace) of
@@ -1448,7 +1451,16 @@ fun commandLine (_: string, args: string list): unit =
                                         | _ => [],
                                        ["-o", output],
                                        inputs,
-                                       linkOpts]))
+                                       linkOpts,
+                                       (* The entry stubs of the vibe-arm
+                                        * codegen need symbols only until
+                                        * the link.
+                                        *)
+                                       if !codegen = VibeArmCodegen
+                                          andalso not (!vibeArmSymbols)
+                                          andalso targetOS = Darwin
+                                          then ["-Wl,-x"]
+                                       else []]))
                               ()
                            (* gcc on Cygwin appends .exe, which I don't want, so
                             * move the output file to it's rightful place.

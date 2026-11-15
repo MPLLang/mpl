@@ -99,6 +99,8 @@ signature CONTROL_FLAGS =
        * the style of the x86/amd64 codegens.
        *)
       val vibeArmLocalRegAlloc: bool ref
+      (* Keep symbols for the blocks and entry stubs of the vibe-arm codegen. *)
+      val vibeArmSymbols: bool ref
 
       val commandLineConsts: StrMap.t
       val setCommandLineConst: {name: string, value: string} -> unit
