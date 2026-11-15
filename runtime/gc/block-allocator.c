@@ -243,7 +243,7 @@ static pointer mmapBlockAligned(GC_state s, size_t length) {
   pointer p = GC_mmapAnon(NULL, length + extra);
   if (MAP_FAILED == p || 0 == extra)
     return p;
-  pointer start = (pointer)align((size_t)p, blockSize);
+  pointer start = (pointer)(uintptr_t)align((size_t)p, blockSize);
   size_t head = (size_t)(start - p);
   if (head > 0)
     GC_release(p, head);
