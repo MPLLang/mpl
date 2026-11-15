@@ -1870,7 +1870,30 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   Operand.Cast (z, _) => strip z
                 | _ => z
             fun default () = store (dst, value (src, dstReg dst, 3))
+            fun inMemory z =
+               case z of
+                  Operand.Global _ => true
+                | Operand.Offset _ => true
+                | Operand.SequenceOffset _ => true
+                | Operand.StackOffset _ => true
+                | _ => false
          in
+            (* A load of a narrow value zero-extends it, so it can go
+             * straight to the home register of a temporary.
+             *)
+            case (localRA,
+                  case strip dst of
+                     Operand.Temporary t => defHome t
+                   | _ => NONE) of
+               (false, SOME h) =>
+                  if size (cty dst) < 4
+                     andalso size (cty src) = size (cty dst)
+                     andalso inMemory (strip src)
+                     andalso not (isSome (home src))
+                     andalso not (isSome (cacheIn src))
+                     then load (src, h, 3)
+                  else default ()
+             | _ =>
             case (localRA, strip dst, strip src) of
                (true, Operand.Temporary td, Operand.Temporary ts) =>
                   let
@@ -2064,6 +2087,49 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                          IntInf.toInt (n mod 16)))
                in
                   if n = 0 then "0x0" else "0x" ^ loop n
+               end
+            (* Can n be the immediate of a logical instruction on N-bit
+             * registers?  It must be a repetition of an e-bit pattern that
+             * is a rotation of a run of ones.
+             *)
+            fun bitmask (n: IntInf.t, N: int): bool =
+               List.exists
+               ([2, 4, 8, 16, 32, 64], fn e =>
+                e <= N
+                andalso
+                let
+                   val m = pow2 e - 1
+                   val p = IntInf.andb (n, m)
+                   fun rep (k, ac) =
+                      if k >= N then ac
+                      else rep (k + e,
+                                IntInf.orb (ac, IntInf.<< (p, Word.fromInt k)))
+                   fun strip q =
+                      if IntInf.andb (q, 1) = 0
+                         then strip (IntInf.~>> (q, 0w1))
+                      else q
+                   fun run q = IntInf.andb (strip q, strip q + 1) = 0
+                in
+                   rep (0, 0) = n andalso p <> 0 andalso p <> m
+                   andalso (run p orelse run (m - p))
+                end)
+            fun logic (opc, ws) =
+               let
+                  val ct = wct ws
+                  fun default () = bin (opc, ct, false)
+               in
+                  case a 1 of
+                     Operand.Const (Const.Word w) =>
+                        let
+                           val n = WordX.toIntInf w
+                        in
+                           if bitmask (n, if size ct = 8 then 64 else 32)
+                              then (i [opc, " ", reg (d, ct), ", ",
+                                       reg (v 0, ct), ", #", hex n]
+                                    ; done ())
+                           else default ()
+                        end
+                   | _ => default ()
                end
             (* Division (quotient or remainder) by a constant: multiply by a
              * precomputed reciprocal, or shift for a power of two.  The
@@ -2290,7 +2356,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   end
              | Word_add ws => addsub (true, wct ws)
              | Word_addCheckP z => chk ("add", "vs", "cs", z, [0, 1])
-             | Word_andb ws => bin ("and", wct ws, false)
+             | Word_andb ws => logic ("and", ws)
              | Word_castToReal (ws, _) => un ("fmov", wct ws)
              | Word_equal ws => cmp ("cmp", wct ws, "eq")
              | Word_extdToWord (ws1, ws2, {signed}) =>
@@ -2306,18 +2372,73 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
              | Word_lshift ws => shift ("lsl", ws, v 0)
              | Word_lt (ws, {signed}) =>
                   let
-                     val r0 = ext (0, ws, signed, false)
-                     val r1 = ext (1, ws, signed, false)
+                     (* a constant that can be an immediate *)
+                     fun imm k =
+                        case a k of
+                           Operand.Const (Const.Word w) =>
+                              let
+                                 val n = if signed then WordX.toIntInfX w
+                                         else WordX.toIntInf w
+                              in
+                                 if ~4096 < n andalso n < 4096 then SOME n
+                                 else NONE
+                              end
+                         | _ => NONE
+                     fun cmpImm (k, n, cond) =
+                        let
+                           val r = reg (ext (k, ws, signed, false), wct ws)
+                        in
+                           if n >= 0
+                              then i ["cmp ", r, ", #", IntInf.toString n]
+                           else i ["cmn ", r, ", #", IntInf.toString (~ n)]
+                           ; cset cond
+                        end
                   in
-                     i ["cmp ", reg (r0, wct ws), ", ", reg (r1, wct ws)]
-                     ; cset (if signed then "lt" else "lo")
+                     case (imm 0, imm 1) of
+                        (_, SOME n) =>
+                           cmpImm (0, n, if signed then "lt" else "lo")
+                      | (SOME n, NONE) =>
+                           cmpImm (1, n, if signed then "gt" else "hi")
+                      | _ =>
+                           let
+                              val r0 = ext (0, ws, signed, false)
+                              val r1 = ext (1, ws, signed, false)
+                           in
+                              i ["cmp ", reg (r0, wct ws), ", ",
+                                 reg (r1, wct ws)]
+                              ; cset (if signed then "lt" else "lo")
+                           end
                   end
-             | Word_mul (ws, _) => bin ("mul", wct ws, false)
+             | Word_mul (ws, _) =>
+                  let
+                     val ct = wct ws
+                     fun default () = bin ("mul", ct, false)
+                  in
+                     (* by 2^k or 2^k + 1: shift, or shift and add *)
+                     case (a 1, bits ws >= 32) of
+                        (Operand.Const (Const.Word w), true) =>
+                           let
+                              val n = WordX.toIntInf w
+                              val r = reg (v 0, ct)
+                           in
+                              case (log2 n, log2 (n - 1)) of
+                                 (SOME k, _) =>
+                                    (i ["lsl ", reg (d, ct), ", ", r, ", #",
+                                        int k]
+                                     ; done ())
+                               | (_, SOME k) =>
+                                    (i ["add ", reg (d, ct), ", ", r, ", ", r,
+                                        ", lsl #", int k]
+                                     ; done ())
+                               | _ => default ()
+                           end
+                      | _ => default ()
+                  end
              | Word_mulCheckP z => chk ("mul", "", "", z, [0, 1])
              | Word_neg ws => un ("neg", wct ws)
              | Word_negCheckP z => chk ("neg", "vs", "cc", z, [0])
              | Word_notb ws => un ("mvn", wct ws)
-             | Word_orb ws => bin ("orr", wct ws, false)
+             | Word_orb ws => logic ("orr", ws)
              | Word_quot (ws, {signed}) =>
                   if divConst (ws, signed, false) then ()
                   else
@@ -2359,11 +2480,27 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   end
              | Word_ror ws => shift ("ror", ws, v 0)
              | Word_rshift (ws, {signed}) =>
+                  if Vector.length args = 3
+                     then
+                        (* a bitfield extract: see "direct", below *)
+                        let
+                           fun const k =
+                              case a k of
+                                 Operand.Const (Const.Word w) => WordX.toIntInf w
+                               | _ => Error.bug "VibeArmCodegen.primApp: extract"
+                           val ct = wct ws
+                        in
+                           i ["ubfx ", reg (d, ct), ", ", reg (v 0, ct), ", #",
+                              IntInf.toString (const 1), ", #",
+                              int (valOf (log2 (const 2 + 1)))]
+                           ; done ()
+                        end
+                  else
                   shift (if signed then "asr" else "lsr", ws,
                          ext (0, ws, signed, false))
              | Word_sub ws => addsub (false, wct ws)
              | Word_subCheckP z => chk ("sub", "vs", "cc", z, [0, 1])
-             | Word_xorb ws => bin ("eor", wct ws, false)
+             | Word_xorb ws => logic ("eor", ws)
              | _ => Error.bug (concat ["VibeArmCodegen.primApp: ",
                                        Prim.toString prim])
          end
@@ -2566,7 +2703,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                       "eq" => "ne" | "ne" => "eq" | "lo" => "hs" | "hs" => "lo"
                     | "lt" => "ge" | "ge" => "lt" | "vs" => "vc" | "vc" => "vs"
                     | "cs" => "cc" | "cc" => "cs" | "mi" => "pl" | "pl" => "mi"
-                    | "ls" => "hi" | "hi" => "ls"
+                    | "ls" => "hi" | "hi" => "ls" | "gt" => "le" | "le" => "gt"
                     | _ => Error.bug "VibeArmCodegen.negate")
           | Z (r, b) => Z (r, not b)
       fun bcond (c, l: string) =
@@ -2596,14 +2733,12 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
              *)
             val () = clearCache ()
             val () = cacheable := []
-            fun select c {dst, src} =
+            (* Set dst with the instruction that set outputs, given dst's
+             * register (which holds dst's value, if old).
+             *)
+            fun setDst (dst, old, set) =
                let
                   val ct = cty dst
-                  (* Select the whole register, because it may be shared
-                   * with a wider temporary that is live when c is false.
-                   *)
-                  val wide = if isReal ct then CType.Real64 else CType.Word64
-                  val s = value (src, scratch (ct, 1), 3)
                   val (d, spilled) =
                      if localRA
                         then (value (dst, scratch (ct, 0), 3), true)
@@ -2613,12 +2748,26 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                         SOME h => (h, false)
                       | NONE => (scratch (ct, 0), true)
                in
-                  if spilled andalso not localRA then load (dst, d, 3) else ()
-                  ; i [if isReal ct then "fcsel " else "csel ",
-                       reg (d, wide), ", ", reg (s, wide), ", ",
-                       reg (d, wide), ", ", c]
+                  if spilled andalso not localRA andalso old
+                     then load (dst, d, 3)
+                  else ()
+                  ; set d
                   ; if spilled then store (dst, d) else ()
                   ; defined dst
+               end
+            fun select c {dst, src} =
+               let
+                  val ct = cty dst
+                  (* Select the whole register, because it may be shared
+                   * with a wider temporary that is live when c is false.
+                   *)
+                  val wide = if isReal ct then CType.Real64 else CType.Word64
+                  val s = value (src, scratch (ct, 1), 3)
+               in
+                  setDst (dst, true, fn d =>
+                          i [if isReal ct then "fcsel " else "csel ",
+                             reg (d, wide), ", ", reg (s, wide), ", ",
+                             reg (d, wide), ", ", c])
                end
             (* the moves of an arm are output in the context of its block *)
             fun arm (l, moves, c) =
@@ -2627,9 +2776,33 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             val c' = case negate (CC c) of
                         CC c' => c'
                       | _ => Error.bug "VibeArmCodegen.selects"
+            fun bool z =
+               case z of
+                  Operand.Const (Const.Word w) =>
+                     (case WordX.toIntInf w of
+                         0 => SOME false
+                       | 1 => SOME true
+                       | _ => NONE)
+                | _ => NONE
          in
-            arm (caseLabel, caseMoves, c)
-            ; arm (defaultLabel, defaultMoves, c')
+            (* a choice between 0 and 1 is the condition itself *)
+            (case (caseMoves, defaultMoves) of
+                ([{dst, src}], [{dst = dst', src = src'}]) =>
+                   (case (Operand.equals (dst, dst'), bool src, bool src') of
+                       (true, SOME b, SOME b') =>
+                          if b <> b'
+                             then (enterBlock caseLabel
+                                   ; setDst (dst, false, fn d =>
+                                             i ["cset ", reg (d, CType.Word64),
+                                                ", ", if b then c else c'])
+                                   ; enterBlock defaultLabel
+                                   ; defined dst')
+                          else (arm (caseLabel, caseMoves, c)
+                                ; arm (defaultLabel, defaultMoves, c'))
+                     | _ => (arm (caseLabel, caseMoves, c)
+                             ; arm (defaultLabel, defaultMoves, c')))
+              | _ => (arm (caseLabel, caseMoves, c)
+                      ; arm (defaultLabel, defaultMoves, c')))
             ; gotoL join
          end
       (* return x0 to the trampoline *)
@@ -3048,9 +3221,67 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                              fn l =>
                              List.exists (liveTemps (labelBlock l), fn e =>
                                           sameEntry (e, entry (!region, t)))))
+            (* A shift right by k and then a mask of the low w bits is a
+             * bitfield extract; the mask becomes a third argument of the
+             * shift (see Word_rshift in primApp).
+             *)
+            fun extract (it, it', rest) =
+               case (it, it') of
+                  (App {args, dst = d, prim = Prim.Word_rshift (ws, {signed = false}),
+                        also = NONE},
+                   App {args = args', dst = d', prim = Prim.Word_andb ws',
+                        also = NONE}) =>
+                     (case (dstTemp d, Vector.sub (args, 1),
+                            dstTemp (Vector.sub (args', 0)),
+                            Vector.sub (args', 1)) of
+                         (SOME t, Operand.Const (Const.Word k), SOME t',
+                          mask as Operand.Const (Const.Word m)) =>
+                            let
+                               val n = Bits.toInt (WordSize.bits ws)
+                               val k = WordX.toIntInf k
+                               val m = WordX.toIntInf m
+                               fun width (w: int) =
+                                  if w > 64 then NONE
+                                  else if IntInf.<< (1, Word.fromInt w) - 1 = m
+                                     then SOME w
+                                  else width (w + 1)
+                               val keep =
+                                  case dstTemp d' of
+                                     SOME t'' => same (t, t'')
+                                   | NONE => false
+                            in
+                               case width 1 of
+                                  SOME w =>
+                                     if n >= 32
+                                        andalso WordSize.equals (ws, ws')
+                                        andalso same (t, t')
+                                        andalso k + IntInf.fromInt w
+                                                <= IntInf.fromInt n
+                                        andalso not (mentions (Vector.sub (args, 0), t))
+                                        andalso (keep orelse dead (t, rest))
+                                        then SOME (App {args = Vector.new3
+                                                               (Vector.sub (args, 0),
+                                                                Vector.sub (args, 1),
+                                                                mask),
+                                                        dst = d',
+                                                        prim = Prim.Word_rshift
+                                                               (ws, {signed = false}),
+                                                        also = NONE}
+                                                   :: (if keep then []
+                                                       else [Defined d]))
+                                     else NONE
+                                | NONE => NONE
+                            end
+                       | _ => NONE)
+                | _ => NONE
          in
             case its of
-               (it as App {args, dst = d, prim, also = NONE})
+               (it as App {prim = Prim.Word_rshift _, ...})
+               :: (it' as App _) :: rest =>
+                  (case extract (it, it', rest) of
+                      SOME its => its @ direct (rest, transfer)
+                    | NONE => it :: direct (it' :: rest, transfer))
+             | (it as App {args, dst = d, prim, also = NONE})
                :: (it' as Move {dst = d', src}) :: rest =>
                   (case (dstTemp d, stripCast d', dstTemp src) of
                       (SOME t, Operand.StackOffset _, SOME t') =>
