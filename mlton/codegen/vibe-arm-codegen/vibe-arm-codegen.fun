@@ -1782,6 +1782,157 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      end
                end
             fun shift (opc, ws, r0) = bin' (opc, wct ws, r0, true)
+            fun pow2 k = IntInf.<< (1, Word.fromInt k)
+            (* k such that n = 2^k *)
+            fun log2 (n: IntInf.t): int option =
+               let
+                  fun loop k =
+                     if k > 64 then NONE
+                     else if pow2 k = n then SOME k
+                     else loop (k + 1)
+               in
+                  loop 0
+               end
+            fun hex (n: IntInf.t): string =
+               let
+                  fun loop n =
+                     if n = 0 then ""
+                     else loop (n div 16)
+                          ^ String.fromChar
+                            (String.sub ("0123456789abcdef",
+                                         IntInf.toInt (n mod 16)))
+               in
+                  if n = 0 then "0x0" else "0x" ^ loop n
+               end
+            (* Division (quotient or remainder) by a constant: multiply by a
+             * precomputed reciprocal, or shift for a power of two.  The
+             * arithmetic is N = 32 or 64 bits wide (narrower values are
+             * extended to 32 bits).  With m = ceil (2^(N+s) / d) such that
+             * m*d - 2^(N+s) <= 2^s, floor (n/d) = floor (m*n / 2^(N+s)) for
+             * all N-bit n; the signed case is similar, with one bit less.
+             * Returns false if it doesn't apply.
+             *)
+            fun divConst (ws, signed, isRem): bool =
+               case a 1 of
+                  Operand.Const (Const.Word w) =>
+                     let
+                        val N = if bits ws = 64 then 64 else 32
+                        val dv = if signed then WordX.toIntInfX w
+                                 else WordX.toIntInf w
+                        fun r k = if N = 64 then x k else "w" ^ int k
+                     in
+                        if dv < 2 then false
+                        else
+                           let
+                              val n = ext (0, ws, signed, false)
+                              (* the quotient is in register q *)
+                              fun finish q =
+                                 (if isRem
+                                     then (movImm (16, dv)
+                                           ; i ["msub ", r d, ", ", r q, ", ",
+                                                r 16, ", ", r n])
+                                  else if q = d then ()
+                                  else i ["mov ", r d, ", ", r q]
+                                  ; done ())
+                              fun shiftBy (opc, k) =
+                                 if k > 0
+                                    then i [opc, " ", r 5, ", ", r 5, ", #", int k]
+                                 else ()
+                           in
+                              (case (log2 dv, signed) of
+                                  (SOME k, false) =>
+                                     (if isRem
+                                         then i ["and ", r d, ", ", r n, ", #",
+                                                 hex (dv - 1)]
+                                      else i ["lsr ", r d, ", ", r n, ", #", int k]
+                                      ; done ())
+                                | (SOME k, true) =>
+                                     (* round toward zero: add 2^k - 1 to a
+                                      * negative dividend
+                                      *)
+                                     (i ["asr ", r 5, ", ", r n, ", #", int (N - 1)]
+                                      ; i ["add ", r 5, ", ", r n, ", ", r 5,
+                                           ", lsr #", int (N - k)]
+                                      ; if isRem
+                                           then (i ["and ", r 5, ", ", r 5, ", #",
+                                                    hex (pow2 N - dv)]
+                                                 ; i ["sub ", r d, ", ", r n, ", ",
+                                                      r 5])
+                                        else i ["asr ", r d, ", ", r 5, ", #",
+                                                int k]
+                                      ; done ())
+                                | (NONE, true) =>
+                                     let
+                                        fun search s =
+                                           let
+                                              val p = pow2 (N - 1 + s)
+                                              val m = p div dv + 1
+                                           in
+                                              if m * dv - p <= pow2 s
+                                                 then (m, s)
+                                              else if s >= N
+                                                 then Error.bug
+                                                      "VibeArmCodegen.divConst"
+                                              else search (s + 1)
+                                           end
+                                        val (m, s) = search 1
+                                     in
+                                        movImm (16, m)
+                                        ; if N = 64
+                                             then i ["smulh x5, ", x n, ", x16"]
+                                          else (i ["smull x5, w", int n, ", w16"]
+                                                ; i ["asr x5, x5, #32"])
+                                        ; if m >= pow2 (N - 1)
+                                             then i ["add ", r 5, ", ", r 5, ", ",
+                                                     r n]
+                                          else ()
+                                        ; shiftBy ("asr", s - 1)
+                                        ; i ["add ", r 5, ", ", r 5, ", ", r n,
+                                             ", lsr #", int (N - 1)]
+                                        ; finish 5
+                                     end
+                                | (NONE, false) =>
+                                     if N = 32
+                                        then
+                                           (* n < 2^32: one 64-bit multiply is
+                                            * exact
+                                            *)
+                                           (movImm (16, pow2 64 div dv + 1)
+                                            ; i ["umulh x5, ", x n, ", x16"]
+                                            ; finish 5)
+                                     else
+                                        let
+                                           fun search s =
+                                              let
+                                                 val p = pow2 (64 + s)
+                                                 val m = (p + dv - 1) div dv
+                                              in
+                                                 if m * dv - p <= pow2 s
+                                                    then (m, s)
+                                                 else if s >= 64
+                                                    then Error.bug
+                                                         "VibeArmCodegen.divConst"
+                                                 else search (s + 1)
+                                              end
+                                           val (m, s) = search 0
+                                        in
+                                           if m < pow2 64
+                                              then (movImm (16, m)
+                                                    ; i ["umulh x5, ", x n, ", x16"]
+                                                    ; shiftBy ("lsr", s))
+                                           else
+                                              (* m needs 65 bits *)
+                                              (movImm (16, m - pow2 64)
+                                               ; i ["umulh x5, ", x n, ", x16"]
+                                               ; i ["sub x6, ", x n, ", x5"]
+                                               ; i ["add x5, x5, x6, lsr #1"]
+                                               ; shiftBy ("lsr", s - 1))
+                                           ; finish 5
+                                        end)
+                              ; true
+                           end
+                     end
+                | _ => false
             (* compare-and-swap; setAddr puts the address in x7 *)
             fun cas (ct, kOld, kNew, obj, setAddr) =
                let
@@ -1907,6 +2058,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
              | Word_notb ws => un ("mvn", wct ws)
              | Word_orb ws => bin ("orr", wct ws, false)
              | Word_quot (ws, {signed}) =>
+                  if divConst (ws, signed, false) then ()
+                  else
                   let
                      val r0 = ext (0, ws, signed, false)
                      val r1 = ext (1, ws, signed, false)
@@ -1916,6 +2069,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      ; done ()
                   end
              | Word_rem (ws, {signed}) =>
+                  if divConst (ws, signed, true) then ()
+                  else
                   let
                      val ct = wct ws
                      val r0 = ext (0, ws, signed, false)
