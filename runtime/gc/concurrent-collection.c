@@ -404,43 +404,6 @@ void forwardPinned(GC_state s, HM_remembered remElem, void* rawArgs) {
   // forwardPtrChunk(s, &dst, rawArgs);
 }
 
-#if 0
-void unmarkPtrChunk(GC_state s, objptr* opp, void* rawArgs) {
-
-#if ASSERT
-  ConcurrentCollectArgs *args = (ConcurrentCollectArgs*)rawArgs;
-#endif
-
-  objptr op = *opp;
-  assert(isObjptr(op));
-
-  pointer p = objptrToPointer (op, NULL);
-  HM_chunk chunk = HM_getChunkOf(p);
-
-  // check that getTransitivePtr can be called.
-  if (!isChunkInToSpace(chunk, rawArgs)) {
-    return;
-  }
-
-  p = getTransitivePtr(p, rawArgs);
-
-  assert(!isChunkInFromSpace(chunk, args));
-
-  if(CC_isPointerMarked (p)) {
-    assert(isChunkInToSpace(chunk, args));
-    // assert(chunk->tmpHeap == ((ConcurrentCollectArgs*)rawArgs)->toHead);
-    markObj(p);
-
-    assert(!CC_isPointerMarked(p));
-
-    struct GC_foreachObjptrClosure unmarkPtrClosure =
-    {.fun = unmarkPtrChunk, .env = rawArgs};
-    foreachObjptrInObject(s, p, &trueObjptrPredicateClosure,
-            &unmarkPtrClosure, FALSE);
-  }
-}
-#endif
-
 // void checkRemEntry(
 //   __attribute__((unused)) GC_state s,
 //   ARG_USED_FOR_ASSERT HM_remembered remElem,
@@ -976,14 +939,14 @@ void CC_collectWithRoots(
 //   }
 // #endif
 
-  /* Unmark everything this collection marked. This used to be done by
-   * tracing again from the same roots, but the mutator runs concurrently and
-   * can rewire the graph between the two traversals: e.g. after `r := x :: !r`
-   * the old (marked) list is reachable only through the new cons cell, which
-   * is out of scope, and the write barrier does not record old values that
-   * are already marked. Such objects stayed marked, and the next collection
-   * of this heap then treated them as already traced and freed the chunks of
-   * their (still live) children. */
+  /* Unmark exactly the objects this collection marked: rememberMarked
+   * recorded each of them once, when it was marked, and nothing else changes
+   * the mark of an object in this collection's scope. Tracing from the roots
+   * again would not find them all, because the mutator can make a marked
+   * object reachable only through objects outside the scope, and the write
+   * barrier does not record old values that are already marked. An object
+   * left marked would be treated as already traced by the next collection of
+   * this heap, which would then free the chunks of its live children. */
   for (HM_chunk chunk = HM_getChunkListFirstChunk(&(lists.markedObjects));
        chunk != NULL;
        chunk = chunk->nextChunk)
@@ -993,9 +956,9 @@ void CC_collectWithRoots(
          q += sizeof(objptr))
     {
       pointer p = objptrToPointer(*(objptr*)q, NULL);
+      assert(CC_isPointerMarked(p));
       if (CC_isPointerMarked(p))
         markObj(p);
-      assert(!CC_isPointerMarked(p));
     }
   }
   HM_freeChunksInListWithInfo(s, &(lists.markedObjects), NULL, BLOCK_FOR_GC_WORKLIST);
