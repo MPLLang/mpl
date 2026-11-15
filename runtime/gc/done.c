@@ -74,6 +74,10 @@ static void displayHHAllocStats(FILE *out, GC_state s) {
 }
 
 
+static uintmax_t timespecToMillis (struct timespec *t) {
+  return (uintmax_t)t->tv_sec * 1000 + (uintmax_t)t->tv_nsec / 1000000;
+}
+
 static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatistics *cumulativeStatistics) {
   struct rusage ru_total;
   uintmax_t totalTime;
@@ -88,10 +92,6 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
   gcTime = rusageTime (&cumulativeStatistics->ru_gc);
   fprintf (out, "GC type\t\ttime ms\t number\t\t  bytes\t      bytes/sec\n");
   fprintf (out, "-------------\t-------\t-------\t---------------\t---------------\n");
-  /* The copying, mark-compact and minor rows and most of the lines that
-   * used to follow (bytes scanned, max HH LC size, cards, hash consing,
-   * sync/crit/bsp times, ...) are MLton statistics that MPL never updates,
-   * so they always printed 0. Print the statistics MPL does maintain. */
   displayCollectionStats
       (out, "HHLocal\t\t",
        &cumulativeStatistics->ru_gcHHLocal,
@@ -109,8 +109,12 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            uintmaxToCommaString (cumulativeStatistics->bytesInScopeForLocal));
   fprintf (out, "local collections: bytes reclaimed: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->bytesReclaimedByLocal));
+  fprintf (out, "local collections: wall time: %s ms\n",
+           uintmaxToCommaString (timespecToMillis (&cumulativeStatistics->timeLocalGC)));
   fprintf (out, "concurrent collections: %s\n",
            uintmaxToCommaString (cumulativeStatistics->numCCs));
+  fprintf (out, "concurrent collections: wall time: %s ms\n",
+           uintmaxToCommaString (timespecToMillis (&cumulativeStatistics->timeCC)));
   fprintf (out, "concurrent collections: bytes in scope: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->bytesInScopeForCC));
   fprintf (out, "concurrent collections: bytes reclaimed: %s bytes\n",
