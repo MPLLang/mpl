@@ -232,6 +232,267 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                (foreachTemp (base, f); foreachTemp (index, f))
           | Operand.Temporary t => f t
           | _ => ()
+      (* Speculation.  If-conversion (below) wants the arms of a two-way
+       * switch to be nothing but moves.  So, when an arm starts with a few
+       * cheap computations that have no effect other than to define
+       * temporaries (as do both arms of "x mod c": the sign of x picks the
+       * formula), hoist them into the block of the switch, ahead of the
+       * comparison.  Both arms' computations then always run, which costs
+       * less than mispredicting a branch that depends on data.  It is safe
+       * when what is hoisted writes only temporaries that are dead in the
+       * other arm and at the join, and can't fault (so: no heap loads).
+       *)
+      val (blocks, labelBlock) =
+         let
+            datatype z = datatype Prim.t
+            val {get = info: Label.t -> {preds: int ref,
+                                         new: Block.t option ref}, ...} =
+               Property.get (Label.plist,
+                             Property.initFun (fn _ => {preds = ref 0,
+                                                        new = ref NONE}))
+            fun block l = case ! (#new (info l)) of
+                             SOME b => b
+                           | NONE => labelBlock l
+            fun key t = (Type.toCType (Temporary.ty t), Temporary.index t)
+            fun temps z =
+               let
+                  val ts = ref []
+               in
+                  foreachTemp (z, fn t => List.push (ts, t)); !ts
+               end
+            fun mem (ts, t) =
+               let
+                  val (ct, k) = key t
+               in
+                  List.exists (ts, fn t' =>
+                               let
+                                  val (ct', k') = key t'
+                               in
+                                  k = k' andalso CType.equals (ct, ct')
+                               end)
+               end
+            fun disjoint (ts, ts') = not (List.exists (ts, fn t => mem (ts', t)))
+            fun liveTs l =
+               case block l of
+                  Block.T {live, ...} =>
+                     Vector.fold (live, [], fn (z, ts) =>
+                                  temps (Live.toOperand z) @ ts)
+            fun okSrc z =
+               case z of
+                  Operand.Cast (z, _) => okSrc z
+                | Operand.Const (Const.Word _) => true
+                | Operand.Global _ => true
+                | Operand.StackOffset _ => true
+                | Operand.Temporary _ => true
+                | _ => false
+            fun isMove s =
+               case s of
+                  Statement.Move {dst = Operand.Temporary _, src} => okSrc src
+                | _ => false
+            fun pure s =
+               isMove s
+               orelse
+               (case s of
+                   Statement.PrimApp {args, dst = SOME (Operand.Temporary _),
+                                      prim} =>
+                      Vector.forall (args, okSrc)
+                      andalso (case prim of
+                                  Word_add _ => true
+                                | Word_andb _ => true
+                                | Word_extdToWord _ => true
+                                | Word_lshift _ => true
+                                | Word_mul _ => true
+                                | Word_neg _ => true
+                                | Word_notb _ => true
+                                | Word_orb _ => true
+                                | Word_quot _ => true
+                                | Word_rem _ => true
+                                | Word_rshift _ => true
+                                | Word_sub _ => true
+                                | Word_xorb _ => true
+                                | _ => false)
+                 | _ => false)
+            fun defs ss =
+               List.fold (ss, [], fn (s, ts) =>
+                          case s of
+                             Statement.Move {dst, ...} => temps dst @ ts
+                           | Statement.PrimApp {dst = SOME dst, ...} =>
+                                temps dst @ ts
+                           | _ => ts)
+            fun uses ss =
+               List.fold (ss, [], fn (s, ts) =>
+                          case s of
+                             Statement.Move {src, ...} => temps src @ ts
+                           | Statement.PrimApp {args, ...} =>
+                                Vector.fold (args, ts, fn (z, ts) =>
+                                             temps z @ ts)
+                           )
+            (* an arm: its label, what to hoist, its moves, and its join *)
+            fun arm l =
+               case block l of
+                  Block.T {kind = Kind.Jump, statements,
+                           transfer = Transfer.Goto j, ...} =>
+                     let
+                        val ss = Vector.toList statements
+                        val n = List.length ss
+                        val k = List.fold (List.rev ss, (0, true), fn (s, (k, b)) =>
+                                           if b andalso isMove s
+                                              then (k + 1, true)
+                                           else (k, false))
+                        val k = #1 k
+                        val pre = List.firstN (ss, n - k)
+                     in
+                        if ! (#preds (info l)) = 1
+                           andalso List.forall (pre, pure)
+                           then SOME (SOME l, pre, List.dropPrefix (ss, n - k),
+                                      j)
+                        else NONE
+                     end
+                | _ => NONE
+            fun hoist (Block.T {kind, label, live, raises, returns, statements,
+                                transfer}) =
+               case transfer of
+                  Transfer.Switch (Switch.T {cases, default, expect = NONE,
+                                             test, ...}) =>
+                     (case (Vector.toList (Vector.map (cases, #2))
+                            @ (case default of NONE => [] | SOME l => [l])) of
+                         [l, l'] =>
+                            let
+                               (* a target that is itself the join *)
+                               fun plain l = (NONE, [], [], l)
+                               fun tri (a as (_, _, _, j), other) =
+                                  if Label.equals (j, other) then SOME a
+                                  else NONE
+                               val a = arm l
+                               val a' = arm l'
+                               val both =
+                                  case (a, a') of
+                                     (SOME (a as (_, _, _, j)),
+                                      SOME (a' as (_, _, _, j'))) =>
+                                        if Label.equals (j, j')
+                                           then SOME (a, a')
+                                        else NONE
+                                   | _ => NONE
+                               val z =
+                                  if Label.equals (l, l') then NONE
+                                  else
+                                  case both of
+                                     SOME z => SOME z
+                                   | NONE =>
+                                        (case (Option.fold
+                                               (a, NONE, fn (a, _) =>
+                                                tri (a, l')),
+                                               Option.fold
+                                               (a', NONE, fn (a', _) =>
+                                                tri (a', l))) of
+                                            (SOME a, _) => SOME (a, plain l')
+                                          | (_, SOME a') => SOME (plain l, a')
+                                          | _ => NONE)
+                            in
+                               case z of
+                                  NONE => ()
+                                | SOME z =>
+                                     try (z, test,
+                                          fn ss =>
+                                          Block.T {kind = kind, label = label,
+                                                   live = live, raises = raises,
+                                                   returns = returns,
+                                                   statements = ss,
+                                                   transfer = transfer},
+                                          Vector.toList statements)
+                            end
+                       | _ => ())
+                | _ => ()
+            and try (((la, pa, ma, j), (lb, pb, mb, _)), test, mk, ss) =
+               let
+                  val (da, db) = (defs pa, defs pb)
+                  val d = da @ db
+                  val liveJ = liveTs j
+                  fun liveOf l = case l of NONE => liveJ | SOME l => liveTs l
+                  val tt = temps test
+                  val n = List.length pa + List.length pb
+                  (* the comparison that the switch tests must stay last *)
+                  val split =
+                     case List.rev ss of
+                        (s as Statement.PrimApp {dst = SOME z, ...}) :: ss' =>
+                           if disjoint (temps z, tt) then SOME (ss, [])
+                           else if disjoint (d, uses [s])
+                                   andalso disjoint (tt, uses (pa @ pb))
+                              then SOME (List.rev ss', [s])
+                           else NONE
+                      | _ => SOME (ss, [])
+                  (* the arm that is hoisted second mustn't clobber what
+                   * the moves of the first read
+                   *)
+                  val pre =
+                     if disjoint (db, uses ma) then SOME (pa @ pb)
+                     else if disjoint (da, uses mb) then SOME (pb @ pa)
+                     else NONE
+                  fun shrink (l, pre, ms) =
+                     case l of
+                        NONE => ()
+                      | SOME l =>
+                           case block l of
+                              Block.T {kind, label, live, raises, returns,
+                                       transfer, ...} =>
+                                 let
+                                    val old = liveTs l
+                                    val us = uses ms
+                                    val more =
+                                       List.removeDuplicates
+                                       (List.keepAll
+                                        (defs pre, fn t =>
+                                         mem (us, t) andalso not (mem (old, t))),
+                                        fn (t, t') => mem ([t], t'))
+                                 in
+                                    #new (info l)
+                                    := SOME (Block.T
+                                             {kind = kind, label = label,
+                                              live = (Vector.concat
+                                                      [live,
+                                                       Vector.fromListMap
+                                                       (more, Live.Temporary)]),
+                                              raises = raises,
+                                              returns = returns,
+                                              statements = Vector.fromList ms,
+                                              transfer = transfer})
+                                 end
+               in
+                  case split of
+                     NONE => ()
+                   | SOME (ss, cmp) =>
+                        if n > 0 andalso n <= 6
+                           andalso List.length ma + List.length mb <= 4
+                           andalso disjoint (d, tt)
+                           andalso disjoint (da, liveOf lb)
+                           andalso disjoint (db, liveOf la)
+                           andalso disjoint (d, liveJ)
+                           andalso isSome pre
+                           then (shrink (la, pa, ma)
+                                 ; shrink (lb, pb, mb)
+                                 ; (case mk (Vector.fromList
+                                             (ss @ valOf pre @ cmp)) of
+                                       b as Block.T {label, ...} =>
+                                          #new (info label) := SOME b))
+                        else ()
+               end
+            fun target l = Int.inc (#preds (info l))
+            val () =
+               Vector.foreach
+               (blocks, fn Block.T {transfer, ...} =>
+                case transfer of
+                   Transfer.CCall {return = SOME {return, ...}, ...} =>
+                      target return
+                 | Transfer.Goto l => target l
+                 | Transfer.Spork {cont, spwn, ...} => (target cont; target spwn)
+                 | Transfer.Switch (Switch.T {cases, default, ...}) =>
+                      (Vector.foreach (cases, target o #2)
+                       ; Option.app (default, target))
+                 | _ => ())
+            val () = Vector.foreach (blocks, hoist)
+         in
+            (Vector.map (blocks, fn Block.T {label, ...} => block label), block)
+         end
       fun isEntry l =
          case labelBlock l of Block.T {kind, ...} => Kind.isEntry kind
       (* View a switch as a list of cases and a default target. *)
