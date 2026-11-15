@@ -2265,7 +2265,13 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                let
                   fun iv k =
                      let
-                        val r = v k
+                        (* A real is moved to x<k> at once, so d16 will do
+                         * for each (scratch 3 would be d19, which isn't a
+                         * scratch register).
+                         *)
+                        val r = if isReal (cty (a k))
+                                   then value (a k, scratch (cty (a k), 0), 3)
+                                else v k
                      in
                         if r >= 32
                            then (i ["fmov ", reg (k, ct), ", ", reg (r, ct)]
@@ -2366,6 +2372,11 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      if signed andalso bits ws1 < bits ws2
                         then i ["sxt", bhw (bits ws1), " ", reg (d, wct ws2),
                                 ", w", int r]
+                     else if bits ws1 = 64 andalso bits ws2 = 32
+                        (* A truncation must clear the upper half of the
+                         * register, even when d = r.
+                         *)
+                        then i ["mov w", int d, ", w", int r]
                      else mov (d, r, wct ws2)
                      ; done ()
                   end
@@ -2478,7 +2489,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                           reg (5, ct)]
                      ; done ()
                   end
-             | Word_ror ws => shift ("ror", ws, v 0)
+             | Word_ror ws =>
+                  (case a 1 of
+                      Operand.Const (Const.Word w) =>
+                         (i ["ror ", reg (d, wct ws), ", ", reg (v 0, wct ws),
+                             ", #",
+                             IntInf.toString (WordX.toIntInf w
+                                              mod IntInf.fromInt (bits ws))]
+                          ; done ())
+                    | _ => shift ("ror", ws, v 0))
              | Word_rshift (ws, {signed}) =>
                   if Vector.length args = 3
                      then
@@ -2748,8 +2767,13 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                         SOME h => (h, false)
                       | NONE => (scratch (ct, 0), true)
                in
+                  (* The old value of a spilled destination is in its slot
+                   * (not where the block finds the temporary on entry,
+                   * which is what load would read).
+                   *)
                   if spilled andalso not localRA andalso old
-                     then load (dst, d, 3)
+                     then i ["ldr", sfx ct, " ", reg (d, ct), ", ",
+                             memOf (dst, 3, ct)]
                   else ()
                   ; set d
                   ; if spilled then store (dst, d) else ()
@@ -3259,7 +3283,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                                 <= IntInf.fromInt n
                                         andalso not (mentions (Vector.sub (args, 0), t))
                                         andalso (keep orelse dead (t, rest))
-                                        then SOME (App {args = Vector.new3
+                                        then SOME ((if keep then [Defined d]
+                                                    else [])
+                                                   @ App {args = Vector.new3
                                                                (Vector.sub (args, 0),
                                                                 Vector.sub (args, 1),
                                                                 mask),
