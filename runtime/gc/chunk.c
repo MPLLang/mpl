@@ -515,17 +515,9 @@ HM_HierarchicalHeap HM_getLevelHead(HM_chunk chunk) {
   return cursor->payload;
 }
 
-/* Path splitting, as in Jayanti and Tarjan, "Concurrent Disjoint Set Union":
- * each step points the current node at its grandparent with a CAS, and then
- * moves to the old parent. The new target is always an ancestor of the node,
- * so this stays correct while other processors query the same set or link
- * its root into another (linkInto).
- *
- * Finding the root first and then pointing every node on the path at it is
- * not safe: another query may have already pointed part of the path at a
- * newer root, and the second pass then walks past the root it found and
- * points the newer root back at it, which creates a cycle. See #227.
- */
+/* Path splitting (Jayanti and Tarjan): point each node at its grandparent
+ * with a CAS. A two-pass "find root, then repoint" can create a cycle when
+ * another processor links the root meanwhile (linkInto). See #227. */
 HM_HierarchicalHeap HM_getLevelHeadPathCompress(HM_chunk chunk) {
   assert(chunk != NULL);
   assert(chunk->levelHead != NULL);

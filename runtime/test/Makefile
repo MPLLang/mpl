@@ -4,11 +4,7 @@
  # See the file MLton-LICENSE for details.
  ##
 
-# Stress tests for the run-time system. They link against the run-time
-# libraries in runtime/, so build those first (e.g. with `make` at the top
-# level), then run:
-#
-#   make -C runtime/test check
+# Stress tests; build the runtime libraries first, then: make -C runtime/test check
 
 CFLAGS := -std=gnu11 -O2 -g -pthread -Wall -Wextra -pedantic -I..
 LIBS := -lgmp -lm

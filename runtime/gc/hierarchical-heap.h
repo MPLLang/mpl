@@ -17,9 +17,7 @@
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
 typedef struct HM_UnionFindNode {
-  /* Atomic because heap queries (HM_getLevelHead and
-   * HM_getLevelHeadPathCompress) can read and update it while another
-   * processor links the node into a new representative (linkInto). */
+  /* Atomic: path compression races with linkInto. */
   _Atomic(struct HM_UnionFindNode *) representative;
   struct HM_HierarchicalHeap *payload;
 

@@ -4,25 +4,14 @@
  * See the file MLton-LICENSE for details.
  */
 
-/* Stress test: heap queries racing with union-find linking (issue #227).
- *
- * HM_getLevelHeadPathCompress may run on one processor while another
- * processor links the representative of the same set into a new
- * representative (as linkInto in gc/hierarchical-heap.c does at a join)
- * and then queries the same set. Each round builds:
+/* Stress test (#227): HM_getLevelHeadPathCompress racing with linkInto.
  *
  *   chunkA -> n[0] -> n[1] -> ... -> n[LEN-1] -> t1        t0
  *                                    ^
  *                                  chunkB
  *
- * Thread A queries chunkA. At a varying moment, thread B links t1 into t0
- * and then queries chunkB. Either answer (t1 or t0) is a correct result
- * for thread A, but afterwards t0 must still be the root and every node
- * must reach t0 without a cycle. A query that does not return within ten
- * seconds, or a crash, is also a failure.
- *
- * Build the runtime first (e.g. with `make` at the top level), then run:
- *   make -C runtime/test check
+ * Thread A queries chunkA while thread B links t1 into t0 and queries chunkB.
+ * A may return t1 or t0, but t0 must stay the root with no cycle.
  */
 
 #define MLTON_GC_INTERNAL_TYPES
@@ -36,8 +25,7 @@
 
 HM_HierarchicalHeap HM_getLevelHeadPathCompress(HM_chunk chunk);
 
-/* The runtime library refers to these symbols, which a compiled program
- * normally provides. They are not used here. */
+/* Symbols the runtime library needs; unused here. */
 C_Pthread_Key_t gcstate_key;
 GC_state MLton_gcState(void) { return NULL; }
 
@@ -51,8 +39,7 @@ static struct HM_UnionFindNode n[LEN], t0, t1;
 static struct HM_HierarchicalHeap hn[LEN], ht0, ht1;
 static struct HM_chunk chunkA, chunkB;
 
-/* Round handshake: main publishes round r in `go`; each thread publishes r
- * in its `done` flag when it has finished round r. */
+/* Round handshake: main sets `go` to r, each thread sets its done flag to r. */
 static atomic_ulong go;
 static atomic_ulong doneA;
 static atomic_ulong doneB;
@@ -102,7 +89,6 @@ static void *threadB(__attribute__ ((unused)) void *arg) {
   for (unsigned long r = 1; ; r++) {
     waitFor(&go, r);
     for (volatile unsigned long i = 0; i < delay; i++) { }
-    /* the link performed by linkInto(s, left = t0's heap, right = t1's heap) */
     t1.representative = &t0;
     resultB = HM_getLevelHeadPathCompress(&chunkB);
     atomic_store_explicit(&doneB, r, memory_order_release);
@@ -127,7 +113,7 @@ static double now(void) {
   return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-/* Every node must reach t0 within LEN+2 steps, and t0 must be the root. */
+/* Every node must reach the root t0 within LEN+2 steps. */
 static const char *checkStructure(void) {
   if (t0.representative != NULL)
     return "t0 is no longer a root (cycle through t0)";
