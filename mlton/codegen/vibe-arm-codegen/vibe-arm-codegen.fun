@@ -2699,8 +2699,36 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   then jump l
                else indJump ()
           | [] => indJump ()
+      (* Runtime functions that are one instruction.  (The C codegen gets
+       * them inline from the C compiler.)  The result goes where the block
+       * that the call returns to expects it.
+       *)
+      fun inlineCCall (args, CFunction.T {prototype = (_, retTy), target, ...},
+                       return) =
+         case (target, Vector.toList args, retTy, return) of
+            (CFunction.Target.Direct name, [z], SOME ct,
+             SOME {return, size = NONE}) =>
+               (case List.peek ([("_realCeil", "frintp "),
+                                 ("_realFloor", "frintm "),
+                                 ("_realTrunc", "frintz ")], fn (f, _) =>
+                                List.exists (["Real32", "Real64"], fn r =>
+                                             name = r ^ f)) of
+                   NONE => false
+                 | SOME (_, opc) =>
+                      let
+                         val r = scratch (ct, 0)
+                      in
+                         load (z, r, 16)
+                         ; i [opc, reg (r, ct), ", ", reg (r, ct)]
+                         ; i ["str ", reg (r, ct), ", [sp, #8]"]
+                         ; gotoL return
+                         ; true
+                      end)
+          | _ => false
       fun ccall (args, func as CFunction.T {prototype = (ctys, retTy),
                                              target, ...}, return) =
+         if inlineCCall (args, func, return) then ()
+         else
          let
             datatype z = datatype CFunction.Target.t
             val args = Vector.toList args
