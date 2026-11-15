@@ -128,6 +128,11 @@ GC_thread newThread(GC_state s, size_t reserved) {
   memset(&(thread->decheckSyncDepths[0]), 0, sizeof(uint32_t) * DECHECK_DEPTHS_LEN);
 #endif
 
+  /* The calling thread needs no bytes once newThread returns (the runtime
+   * calls that create threads ensure none), so don't leave the size of the
+   * new thread and stack, which can exceed a block, as its request. */
+  getThreadCurrent(s)->bytesNeeded = 0;
+
   if (DEBUG_THREADS)
     fprintf (stderr, FMTPTR" = newThreadOfSize (%"PRIuMAX")\n",
              (uintptr_t)thread, (uintmax_t)reserved);;
