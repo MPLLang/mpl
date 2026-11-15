@@ -251,6 +251,14 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
    * stored for the CC. But this is tricky. Much simpler to just avoid CC'ed
    * levels entirely.
    */
+  /* A finished CC stays linked to the leaf heap (as its subHeapForCC) until
+   * something merges it back, and until then minDepthWithoutCC excludes the
+   * leaf's depth. HM_HH_registerCont merges at every promotion, but a thread
+   * that is not promoting again (for example, a sequential loop after the
+   * last par) would never collect its leaf heap. */
+  mergeCompletedCCs(s, hh);
+  assert(hh == thread->hierarchicalHeap);
+
   uint32_t minNoCC = minDepthWithoutCC(thread);
   uint32_t minOkay = desiredScope;
   /* min-collection-depth (default 2) keeps a collection from claiming the
@@ -259,8 +267,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
    * collecting its depth-1 heap claims nothing, so it is just a leaf
    * collection, the same one the scheduler threads already do at depth 1.
    * Without this, sequential code at the top level, including the
-   * unpromoted/unstolen right branch of a top-level par, is never collected
-   * (#115). */
+   * unpromoted/unstolen right branch of a top-level par, is never collected.
+   */
   uint32_t minLocal = thread->minLocalCollectionDepth;
   if (thread->currentDepth == 1)
     minLocal = 1;
@@ -352,7 +360,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       thread->currentDepth,
       s->procNumber,
       s->cumulativeStatistics->numHHLocalGCs,
-      thread->minLocalCollectionDepth,
+      minLocal,
       minNoCC,
       minOkay,
       desiredScope,
