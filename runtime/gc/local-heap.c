@@ -41,6 +41,13 @@ void HM_ensureHierarchicalHeapAssurances(
   size_t heapBytesFree = s->limitPlusSlop - s->frontier;
   bool growStack = FALSE;
 
+  /* Record what this call guarantees: the mutator frontier invariant checks
+   * thread->bytesNeeded, which would otherwise still hold the thread's last
+   * request, possibly larger than what callers such as the joins and
+   * newThread need. Callers that need more after returning (GC_collect,
+   * sequence allocation) pass that amount here. */
+  getThreadCurrent(s)->bytesNeeded = bytesRequested;
+
   LOG(LM_GLOBAL_LOCAL_HEAP, LL_DEBUGMORE,
       "bytesRequested: %zu, heapBytesFree: %zu",
       bytesRequested,
