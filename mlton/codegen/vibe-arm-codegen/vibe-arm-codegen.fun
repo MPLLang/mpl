@@ -371,6 +371,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                       case z of
                          Live.Temporary t => entry (blockRegion label, t) :: es
                        | _ => es)
+      (* all of the loops: their headers, blocks, and nesting depth *)
+      val allLoops: {headers: Label.t list, blocks: Label.t list,
+                     depth: int} list ref = ref []
       (* Loop info, as in the x86/amd64 codegens: compute the loop forest of
        * the control-flow graph of near transfers.
        *)
@@ -401,9 +404,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                  ; List.foreach (nearSuccessors transfer, fn l =>
                                  addEdge {from = labelNode label,
                                           to = labelNode l})))
-            fun walk (forest, headers, path) =
+            fun walk (forest, headers, path): Label.t list =
                let
                   val {loops, notInLoop} = DirectedGraph.LoopForest.dest forest
+                  val inside = ref (Vector.toListKeepAllMap (notInLoop, fn l => l))
                in
                   Vector.foreach
                   (notInLoop, fn l =>
@@ -419,13 +423,24 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                            SOME l' => Label.equals (l, l')
                                          | NONE => false)
                     end))
-                  ; Vector.foreachi (loops, fn (k, {headers, child}) =>
-                                     walk (child, headers, k :: path))
+                  ; Vector.foreachi
+                    (loops, fn (k, {headers, child}) =>
+                     let
+                        val bs = walk (child, headers, k :: path)
+                     in
+                        List.push
+                        (allLoops,
+                         {headers = Vector.toListKeepAllMap (headers, fn l => l),
+                          blocks = bs,
+                          depth = 1 + List.length path})
+                        ; inside := bs @ !inside
+                     end)
+                  ; !inside
                end
          in
-            walk (DirectedGraph.loopForestSteensgaard
-                  (g, {root = root, nodeValue = nodeLabel}),
-                  Vector.new0 (), [])
+            ignore (walk (DirectedGraph.loopForestSteensgaard
+                          (g, {root = root, nodeValue = nodeLabel}),
+                          Vector.new0 (), []))
          end
       (* How much deeper in the loop nest is l' than l?  NONE if either isn't
        * in a loop, or they are in unrelated loops.
@@ -493,16 +508,33 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       datatype event =
          Def of web * web option    (* a copy doesn't interfere with its source *)
        | Use of web
+      (* a stack slot: its offset and type *)
+      fun slotKey (StackOffset.T {offset, ty, ...}) =
+         (Bytes.toInt offset, Type.toCType ty)
+      fun sameSlot ((off, ct), (off', ct')) =
+         off = off' andalso size ct = size ct' andalso isReal ct = isReal ct'
       val {get = blockWebs: Label.t -> {(* at the start of the block *)
                                         segIn: (entry * web) list ref,
                                         (* the definitions, in order *)
                                         defs: (entry * web) list ref,
                                         (* in reverse order *)
-                                        events: event list ref},
+                                        events: event list ref,
+                                        (* the stack slots that are kept in
+                                         * registers throughout the loop that
+                                         * the block is in (see "promotion")
+                                         *)
+                                        promoted: ((int * CType.t) * web) list ref,
+                                        (* which such loop; 0 if none *)
+                                        ploop: int ref,
+                                        (* is the header of such a loop? *)
+                                        pheader: bool ref},
            ...} =
          Property.get (Label.plist,
                        Property.initFun (fn _ => {segIn = ref [], defs = ref [],
-                                                  events = ref []}))
+                                                  events = ref [],
+                                                  promoted = ref [],
+                                                  ploop = ref 0,
+                                                  pheader = ref false}))
       fun sameEntry (e: entry, e': entry) = #live e = #live e'
       fun segIn (l, e: entry, noReg) =
          let
@@ -698,6 +730,223 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                           if !mark = !stamp then ac
                           else (mark := !stamp; w :: ac)
                        end))
+      (* Promotion of stack slots in loops.  Variables that are live across a
+       * call that may collect live in stack slots, including ones that are
+       * only used in a loop that calls nothing but has a limit check.  As
+       * the x86/amd64 codegens do with their live transfers, keep such slots
+       * in registers around the loop: a slot that is read in a loop gets a
+       * web that is live throughout the loop.  Stores still write through to
+       * memory, so nothing needs to happen at exits, calls, or collections;
+       * the registers are loaded in a preheader, which every edge into the
+       * loop from outside goes through (such edges only go to headers).
+       *
+       * A "loop" here is a region: a cycle (strongly connected component)
+       * among the blocks that aren't entry blocks (so StackTop is constant)
+       * and don't end in a C call that uses the stack.  A region may be
+       * entered at several blocks (commonly: the top of the loop, and the
+       * block after its limit check, where it is re-entered after a
+       * collection); each gets a preheader.
+       *)
+      val () =
+         let
+            fun transferOf l =
+               case labelBlock l of Block.T {transfer, ...} => transfer
+            (* a block that can be in a region *)
+            fun good l =
+               not (isEntry l)
+               andalso (case transferOf l of
+                           Transfer.CCall {func, ...} =>
+                              not (CFunction.readsStackTop func
+                                   orelse CFunction.writesStackTop func)
+                         | _ => true)
+            val g = DirectedGraph.new ()
+            val {get = nodeLabel: unit DirectedGraph.Node.t -> Label.t option,
+                 set = setNodeLabel, ...} =
+               Property.getSetOnce
+               (DirectedGraph.Node.plist, Property.initConst NONE)
+            val {get = labelNode: Label.t -> unit DirectedGraph.Node.t option,
+                 ...} =
+               Property.get
+               (Label.plist,
+                Property.initFun
+                (fn l =>
+                 if good l
+                    then let
+                            val n = DirectedGraph.newNode g
+                         in
+                            setNodeLabel (n, SOME l); SOME n
+                         end
+                 else NONE))
+            val () =
+               Vector.foreach
+               (blocks, fn Block.T {label, transfer, ...} =>
+                case labelNode label of
+                   NONE => ()
+                 | SOME n =>
+                      List.foreach
+                      (nearSuccessors transfer, fn l =>
+                       case labelNode l of
+                          NONE => ()
+                        | SOME n' =>
+                             ignore (DirectedGraph.addEdge
+                                     (g, {from = n, to = n'}))))
+            (* the regions: the cycles among the good blocks *)
+            val regions =
+               List.keepAllMap
+               (DirectedGraph.stronglyConnectedComponents g, fn ns =>
+                let
+                   val ls = List.keepAllMap (ns, nodeLabel)
+                in
+                   case ls of
+                      [] => NONE
+                    | [l] =>
+                         if List.exists (nearSuccessors (transferOf l), fn l' =>
+                                         Label.equals (l, l'))
+                            then SOME ls
+                         else NONE
+                    | _ => SOME ls
+                end)
+         in
+            List.foreachi
+            (regions, fn (id, bs) =>
+                   let
+                      val calls =
+                         List.exists (bs, fn l =>
+                                      case transferOf l of
+                                         Transfer.CCall _ => true
+                                       | _ => false)
+                      (* the slots that occur in the loop, with their weighted
+                       * numbers of reads
+                       *)
+                      val slots: ((int * CType.t) * int ref) list ref = ref []
+                      fun note (so, n) =
+                         let
+                            val k = slotKey so
+                         in
+                            case List.peek (!slots, fn (k', _) =>
+                                            sameSlot (k, k')) of
+                               SOME (_, r) => r := !r + n
+                             | NONE => List.push (slots, (k, ref n))
+                         end
+                      fun visit (z, isDst, weight) =
+                         case z of
+                            Operand.Address z => visit (z, true, weight)
+                          | Operand.Cast (z, _) => visit (z, isDst, weight)
+                          | Operand.Offset {base, ...} =>
+                               visit (base, false, weight)
+                          | Operand.SequenceOffset {base, index, ...} =>
+                               (visit (base, false, weight)
+                                ; visit (index, false, weight))
+                          | Operand.StackOffset so =>
+                               note (so, if isDst then 0 else weight)
+                          | _ => ()
+                      val () =
+                            List.foreach
+                            (bs, fn l =>
+                             let
+                                val Block.T {kind, statements, transfer, ...} =
+                                   labelBlock l
+                                val w =
+                                   List.fold
+                                   (! (#loopPath (labelInfo l)), 1, fn (_, w) =>
+                                    if w < 4096 then 8 * w else w)
+                             in
+                                (case kind of
+                                    Kind.CReturn {dst = SOME z, ...} =>
+                                       visit (Live.toOperand z, true, w)
+                                  | _ => ())
+                                ; Vector.foreach
+                                  (statements, fn s =>
+                                   case s of
+                                      Statement.Move {dst, src} =>
+                                         (visit (dst, true, w)
+                                          ; visit (src, false, w))
+                                    | Statement.PrimApp {args, dst, ...} =>
+                                         (Option.app (dst, fn z =>
+                                                      visit (z, true, w))
+                                          ; Vector.foreach (args, fn z =>
+                                                            visit (z, false, w))))
+                                ; Transfer.foldOperands
+                                  (transfer, (), fn (z, ()) =>
+                                   visit (z, false, w))
+                             end)
+                      fun overlaps ((off, ct), (off', ct')) =
+                         not (sameSlot ((off, ct), (off', ct')))
+                         andalso off + size ct > off'
+                         andalso off' + size ct' > off
+                      val candidates =
+                         List.keepAll
+                         (!slots, fn (k, n) =>
+                          !n > 0
+                          andalso not (List.exists (!slots, fn (k', _) =>
+                                                    overlaps (k, k'))))
+                      val candidates =
+                         List.firstN
+                         (QuickSort.sortList (candidates, fn ((_, n), (_, n')) =>
+                                              !n >= !n'),
+                          Int.min (16, List.length candidates))
+                   in
+                      if List.isEmpty candidates then ()
+                      else
+                         let
+                            (* the webs that are live somewhere in the loop *)
+                            val others =
+                               distinct
+                               (List.fold
+                                (bs, [], fn (l, ac) =>
+                                 let
+                                    val {segIn, defs, ...} = blockWebs l
+                                 in
+                                    List.fold (!segIn @ !defs, ac, fn ((_, w), ac) =>
+                                               w :: ac)
+                                 end))
+                            val ps =
+                               List.map
+                               (candidates, fn (k as (_, ct), n) =>
+                                let
+                                   val w as W {count, across, ...} =
+                                      newWeb (ct, false)
+                                in
+                                   count := !n
+                                   ; across := calls
+                                   ; (k, w)
+                                end)
+                            fun edge (w as W {adj, ...}, w' as W {adj = adj', ...}) =
+                               (List.push (adj, w'); List.push (adj', w))
+                         in
+                            List.foreach
+                            (ps, fn (_, w) =>
+                             (List.foreach (others, fn w' => edge (w, w'))
+                              ; List.foreach
+                                (ps, fn (_, w') =>
+                                 if sameWeb (w, w') then () else edge (w, w'))))
+                            ; List.foreach
+                              (bs, fn l =>
+                               let
+                                  val {promoted, ploop, ...} = blockWebs l
+                               in
+                                  promoted := ps
+                                  ; ploop := id + 1
+                               end)
+                         end
+                   end)
+            (* a block with an edge from outside its region needs a preheader *)
+            ; Vector.foreach
+              (blocks, fn Block.T {label, transfer, ...} =>
+               List.foreach
+               (nearSuccessors transfer
+                @ (case ifConvert transfer of
+                      NONE => []
+                    | SOME {join, ...} => [join]),
+                fn l =>
+                let
+                   val {ploop, pheader, ...} = blockWebs l
+                in
+                   if !ploop <> 0 andalso !ploop <> ! (#ploop (blockWebs label))
+                      then pheader := true
+                   else ()
+                end))
+         end
       (* 4. Coalesce: make a copy's source and destination the same web, when
        * they don't interfere and the result is sure to be colorable (it
        * interferes with fewer webs than there are registers).
@@ -777,13 +1026,38 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       val curWebs: (entry * web) list ref = ref []
       (* the definitions that are still to come in the block *)
       val pendingDefs: (entry * web) list ref = ref []
+      (* the promoted stack slots of the block *)
+      val curPromoted: ((int * CType.t) * web) list ref = ref []
+      (* the block that is being output *)
+      val curLabel = ref (Label.newNoname ())
       fun webHome w = let val W {home, ...} = find w in !home end
       fun enterBlock l =
          let
-            val {segIn, defs, ...} = blockWebs l
+            val {segIn, defs, promoted, ...} = blockWebs l
          in
             curWebs := !segIn
             ; pendingDefs := !defs
+            ; curPromoted := !promoted
+         end
+      (* the register of a stack slot, if it is promoted here *)
+      fun promotedHome so =
+         case List.peek (!curPromoted, fn (k, _) => sameSlot (k, slotKey so)) of
+            NONE => NONE
+          | SOME (_, w) => webHome w
+      (* The label to branch to to get to l: the preheader of a loop with
+       * promoted slots, if coming from outside the loop.
+       *)
+      fun target l =
+         let
+            val {ploop, pheader, ...} = blockWebs l
+         in
+            if not localRA
+               andalso !ploop <> 0
+               andalso !ploop <> ! (#ploop (blockWebs (!curLabel)))
+               then if !pheader
+                       then "Lpre_" ^ Label.toString l
+                    else Error.bug "VibeArmCodegen.target: no preheader"
+            else Label.toString l
          end
       (* the register of a temporary that is being used *)
       fun tempHome t =
@@ -852,10 +1126,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
        *)
       val cacheable: (int * CType.t) list ref = ref []
       val freeRegs: int list ref = ref []
-      fun slotKey (StackOffset.T {offset, ty, ...}) =
-         (Bytes.toInt offset, Type.toCType ty)
-      fun sameSlot ((off, ct), (off', ct')) =
-         off = off' andalso size ct = size ct' andalso isReal ct = isReal ct'
       fun cached so =
          List.peek (!cache, fn {off, ct, ...} =>
                     sameSlot ((off, ct), slotKey so))
@@ -922,7 +1192,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             SOME (_, ps) => ps
           | NONE => []
       fun usedLater l = List.exists (occsOf l, fn p => p > !pos)
-      fun isLiveOut l = List.exists (!liveOut, fn l' => sameLoc (l, l'))
+      (* A stack slot that is promoted in the region of the block stays in
+       * its register across the blocks of the region.
+       *)
+      fun loopSlot l =
+         case l of
+            S k => List.exists (!curPromoted, fn (k', _) => sameSlot (k, k'))
+          | T _ => false
+      fun isLiveOut l =
+         loopSlot l orelse List.exists (!liveOut, fn l' => sameLoc (l, l'))
       fun liveLater l = usedLater l orelse isLiveOut l
       val never = 1000000
       (* never: live at the end of the block; never + 1: dead *)
@@ -1009,7 +1287,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             then
                let
                   fun go (l, ct, (b, off)) =
-                     if usedLater l
+                     if usedLater l orelse loopSlot l
                         then
                            let
                               val r = allocReg l
@@ -1063,7 +1341,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           | Operand.StackOffset so =>
                if localRA
                   then pinnedReg (inReg (S (slotKey so)))
-               else Option.map (cached so, #reg)
+               else (case promotedHome so of
+                        SOME r => SOME r
+                      | NONE => Option.map (cached so, #reg))
           | Operand.StackTop => SOME 20
           | Operand.Temporary t =>
                if localRA then pinnedReg (inReg (tloc t)) else tempHome t
@@ -1224,7 +1504,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                            (case inReg (S k) of
                                SOME {reg, ...} => set reg
                              | NONE =>
-                                  if usedLater (S k)
+                                  if usedLater (S k) orelse loopSlot (S k)
                                      then
                                         let
                                            val h = allocReg (S k)
@@ -1235,9 +1515,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                         end
                                   else ())
                      else
-                     case cached so of
-                        SOME {reg, ...} => set reg
-                      | NONE =>
+                     case (promotedHome so, cached so) of
+                        (SOME r, _) => set r
+                      | (_, SOME {reg, ...}) => set reg
+                      | _ =>
                            (case cacheReg k of
                                NONE => ()
                              | SOME h =>
@@ -1532,7 +1813,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                *)
                               val saves =
                                  if localRA then []
-                                 else callerSaves (List.map (!curWebs, #2))
+                                 else callerSaves (List.map (!curWebs, #2)
+                                                   @ List.map (!curPromoted, #2))
                            in
                               mov (0, obj, ct)
                               ; i ["mov x1, x5"]
@@ -1682,7 +1964,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          case !next of
             SOME l' => Label.equals (l, l')
           | NONE => false
-      fun goto l = if isNext l then () else i ["b ", Label.toString l]
+      fun goto l =
+         if isNext l andalso target l = Label.toString l
+            then ()
+         else i ["b ", target l]
       (* (Local allocator.)  Live transfers: what registers hold at the start
        * of a block is fixed by the first of its predecessors to be output;
        * the others conform.
@@ -1703,11 +1988,24 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                NONE =>
                   (state := SOME (List.keepAllMap
                                   (!regs, fn {reg, loc, dirty} =>
-                                   if isT loc andalso member (lin, loc)
+                                   if (case loc of
+                                          S k =>
+                                             List.exists
+                                             (! (#promoted (blockWebs l)),
+                                              fn (k', _) => sameSlot (k, k'))
+                                        | T _ => member (lin, loc))
                                       then SOME (loc, reg, not (!dirty))
                                    else NONE))
                    ; false)
              | SOME m =>
+                  List.exists
+                  (m, fn (l, r, _) =>
+                   case l of
+                      S _ => (case inReg l of
+                                 NONE => true
+                               | SOME {reg, ...} => reg <> r)
+                    | T _ => false)
+                  orelse
                   List.exists
                   (lin, fn l =>
                    case (List.peek (m, fn (l', _, _) => sameLoc (l, l')),
@@ -1773,7 +2071,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             ; List.foreach
               (loads, fn (l, r) =>
                case l of
-                  S _ => ()
+                  S (off, ct) =>
+                     i ["ldr", sfx ct, " ", reg (r, ct), ", ", mem (20, off, ct)]
                 | T (ct, n) =>
                      let
                         val (b, off) = homeOf (ct, n)
@@ -1800,10 +2099,43 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                      {reg = reg, loc = loc, dirty = ref (!dirty)})))
                   ; name
                end
-         else Label.toString l
+         else target l
       (* go to l at the end of a block *)
       fun gotoL l =
-         (if localRA andalso edgeNeedsCode l then conform l else ()
+         (if localRA
+             then
+                let
+                   val {promoted, ploop, ...} = blockWebs l
+                   (* On entering a region whose blocks haven't been output:
+                    * load its promoted stack slots into registers that are
+                    * free, so that they are in registers around the loop.
+                    *)
+                   val () =
+                      if !ploop <> 0
+                         andalso !ploop <> ! (#ploop (blockWebs (!curLabel)))
+                         andalso not (Option.isSome (! (entryState l)))
+                         then
+                            List.foreach
+                            (!promoted, fn (k as (off, ct), _) =>
+                             if Option.isSome (inReg (S k)) then ()
+                             else
+                                case List.peek
+                                     (if isReal ct then fcaller @ fcallee
+                                      else caller @ callee,
+                                      fn r =>
+                                      not (List.exists (!regs, fn {reg, ...} =>
+                                                        reg = r))) of
+                                   NONE => ()
+                                 | SOME r =>
+                                      (i ["ldr", sfx ct, " ", reg (r, ct), ", ",
+                                          mem (20, off, ct)]
+                                       ; List.push (regs, {reg = r, loc = S k,
+                                                           dirty = ref false})))
+                      else ()
+                in
+                   if edgeNeedsCode l then conform l else ()
+                end
+          else ()
           ; goto l)
       (* Conditional branches only reach +-1MB. *)
       val far =
@@ -1967,7 +2299,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                case (localRA, return) of
                   (false, SOME {return, ...}) =>
                      callerSaves (List.map (liveTemps (labelBlock return),
-                                            fn e => segIn (return, e, false)))
+                                            fn e => segIn (return, e, false))
+                                  @ List.map (!curPromoted, #2))
                 | _ => []
             val () = commit ("str", saves)
             val () =
@@ -2174,6 +2507,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                  prim: Type.t Prim.t,
                  also: (Operand.t * bool) option}
        | Move of {dst: Operand.t, src: Operand.t}
+         (* a definition that was folded into the previous item *)
+       | Defined of Operand.t
       fun items (ss: Statement.t list): item list =
          case ss of
             [] => []
@@ -2231,9 +2566,65 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                end
       fun outputApp {args, dst, prim, also = a} =
          (also := a; primApp (prim, args, dst); also := NONE)
+      (* When the result of a primitive is only copied to a stack slot,
+       * compute it into the slot (which may be in a register).
+       *)
+      fun direct (its: item list, transfer): item list =
+         let
+            fun same (t, t') =
+               sameEntry (entry (!region, t), entry (!region, t'))
+            fun mentions (z, t) =
+               let
+                  val r = ref false
+               in
+                  foreachTemp (z, fn t' => if same (t, t') then r := true else ())
+                  ; !r
+               end
+            fun dead (t, rest) =
+               not (List.exists
+                    (rest, fn it =>
+                     case it of
+                        App {args, dst, also, ...} =>
+                           mentions (dst, t)
+                           orelse (case also of
+                                      NONE => false
+                                    | SOME (z, _) => mentions (z, t))
+                           orelse Vector.exists (args, fn z => mentions (z, t))
+                      | Defined _ => false
+                      | Move {dst, src} =>
+                           mentions (dst, t) orelse mentions (src, t)))
+               andalso not (Transfer.foldOperands
+                            (transfer, false, fn (z, b) =>
+                             b orelse mentions (z, t)))
+               andalso not (List.exists
+                            (nearSuccessors transfer
+                             @ (case ifConvert transfer of
+                                   NONE => []
+                                 | SOME {join, ...} => [join]),
+                             fn l =>
+                             List.exists (liveTemps (labelBlock l), fn e =>
+                                          sameEntry (e, entry (!region, t)))))
+         in
+            case its of
+               (it as App {args, dst = d, prim, also = NONE})
+               :: (it' as Move {dst = d', src}) :: rest =>
+                  (case (dstTemp d, stripCast d', dstTemp src) of
+                      (SOME t, Operand.StackOffset _, SOME t') =>
+                         if same (t, t')
+                            andalso CType.equals (cty d, cty d')
+                            andalso dead (t, rest)
+                            then App {args = args, dst = d', prim = prim,
+                                      also = NONE}
+                                 :: Defined d :: direct (rest, transfer)
+                         else it :: direct (it' :: rest, transfer)
+                    | _ => it :: direct (it' :: rest, transfer))
+             | it :: rest => it :: direct (rest, transfer)
+             | [] => []
+         end
       fun outputItem it =
          case it of
             App z => outputApp z
+          | Defined _ => ()
           | Move z => move z
       (* Is this a block that ends by computing a boolean temporary that is
        * only used to choose between two successors?  If so, return the
@@ -2273,9 +2664,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             (* the registers of the webs that are live somewhere in the block *)
             val busy =
                let
-                  val {segIn, defs, ...} = blockWebs label
+                  val {segIn, defs, promoted, ...} = blockWebs label
                in
                   List.keepAllMap (!segIn @ !defs, fn (_, w) => webHome w)
+                  @ List.keepAllMap (!promoted, fn (_, w) => webHome w)
                end
             fun temp (_: Temporary.t) = ()
             val reads: ((int * CType.t) * int ref) list ref = ref []
@@ -2352,6 +2744,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                       (visit (dst, true, k)
                        ; Option.app (also, fn (z, _) => visit (z, true, k))
                        ; Vector.foreach (args, fn z => visit (z, false, k)))
+                 | Defined _ => ()
                  | Move {dst, src} =>
                       (visit (dst, true, k); visit (src, false, k)))
             val () =
@@ -2401,6 +2794,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          (case it of
              App {dst, also, ...} =>
                 (defined dst; Option.app (also, fn (z, _) => defined z))
+           | Defined z => defined z
            | Move {dst, ...} => defined dst
           ; endItem ())
       fun outputItems (its, k0) =
@@ -2408,7 +2802,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                         (beginItem (k0 + k); outputItem it; afterItem it))
       fun outputBlock (b as Block.T {kind, label = l, statements, transfer,
                                      ...}) =
-         (if Kind.isEntry kind
+         (curLabel := l
+          ; if Kind.isEntry kind
              then (i [".globl ", sym (entryStub l)]
                    ; i [if darwin then ".private_extern " else ".hidden ",
                         sym (entryStub l)]
@@ -2420,7 +2815,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           ; enterBlock l
           ; setupCache b
           ; if localRA
-               then setupLocal (b, items (Vector.toList statements))
+               then setupLocal (b, direct (items (Vector.toList statements),
+                                           transfer))
             else ()
           ; (case kind of
                 Kind.Cont {frameInfo, ...} => pop (frameInfo, {promo = true})
@@ -2444,7 +2840,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
               | Kind.SporkSpwn {frameInfo, ...} =>
                    pop (frameInfo, {promo = false}))
           ; let
-               val its = items (Vector.toList statements)
+               val its = direct (items (Vector.toList statements), transfer)
                val n = List.length its
                val () = endItem ()
             in
@@ -2597,6 +2993,26 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       ; i ["ldp x29, x30, [sp], #160"]
       ; i ["ret"]
       ; outputBlocks (List.rev (!order))
+      (* the preheaders (out of line, so that nothing falls through them):
+       * load the promoted stack slots
+       *)
+      ; List.foreach
+        (List.rev (!order), fn Block.T {label = l, ...} =>
+         let
+            val {pheader, promoted, ...} = blockWebs l
+         in
+            if !pheader andalso not localRA
+               then (label ("Lpre_" ^ Label.toString l)
+                     ; List.foreach
+                       (!promoted, fn ((off, ct), w) =>
+                        case webHome w of
+                           NONE => ()
+                         | SOME r =>
+                              i ["ldr", sfx ct, " ", reg (r, ct), ", ",
+                                 mem (20, off, ct)])
+                     ; i ["b ", Label.toString l])
+            else ()
+         end)
       (* the compensation blocks of the local register allocator *)
       ; List.foreach
         (List.rev (!comps), fn (name, l, state) =>
