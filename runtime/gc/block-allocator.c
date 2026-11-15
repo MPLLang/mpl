@@ -233,6 +233,26 @@ static void setSuperBlockSizeClass(GC_state s, SuperBlock sb, int sizeClass) {
 }
 
 
+/* mmap only guarantees page alignment, but blocks must start at multiples
+ * of the block size (blockOf rounds a pointer down to one), which can be a
+ * larger power of two than the page size. Map enough extra to find an
+ * aligned start, and unmap the excess on either side. */
+static pointer mmapBlockAligned(GC_state s, size_t length) {
+  size_t blockSize = s->controls->blockSize;
+  size_t extra = blockSize - s->sysvals.pageSize;
+  pointer p = GC_mmapAnon(NULL, length + extra);
+  if (MAP_FAILED == p || 0 == extra)
+    return p;
+  pointer start = (pointer)align((size_t)p, blockSize);
+  size_t head = (size_t)(start - p);
+  if (head > 0)
+    GC_release(p, head);
+  if (extra > head)
+    GC_release(start + length, extra - head);
+  return start;
+}
+
+
 static void mmapNewSuperBlocks(
   GC_state s,
   BlockAllocator ball)
@@ -240,11 +260,11 @@ static void mmapNewSuperBlocks(
   size_t oneWidth = s->controls->blockSize * (1 + SUPERBLOCK_SIZE(s));
   size_t count = 1 + (s->controls->allocBlocksMinSize-1) / oneWidth;
   assert(count * oneWidth >= s->controls->allocBlocksMinSize);
-  pointer start = GC_mmapAnon(NULL, count * oneWidth);
+  pointer start = mmapBlockAligned(s, count * oneWidth);
   if (MAP_FAILED == start) {
     /** Try again, but the minimum amount of space we actually need. */
     count = 1;
-    start = GC_mmapAnon(NULL, oneWidth);
+    start = mmapBlockAligned(s, oneWidth);
     if (MAP_FAILED == start)
       DIE("ran out of space!");
   }
@@ -502,7 +522,7 @@ static MegaBlock tryFindMegaBlock(
 
 static MegaBlock mmapNewMegaBlock(GC_state s, size_t numBlocks, enum BlockPurpose purpose)
 {
-  pointer start = GC_mmapAnon(NULL, s->controls->blockSize * numBlocks);
+  pointer start = mmapBlockAligned(s, s->controls->blockSize * numBlocks);
   if (MAP_FAILED == start) {
     return NULL;
   }

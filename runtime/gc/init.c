@@ -662,6 +662,9 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   unless (isAligned(s->controls->blockSize, s->sysvals.pageSize))
     die ("block-size must be a multiple of the system page size (%zu)", s->sysvals.pageSize);
+  /* blockOf rounds pointers down to a multiple of the block size. */
+  unless (s->controls->blockSize == (s->controls->blockSize & -s->controls->blockSize))
+    die ("block-size must be a power of two");
 
   if (s->controls->allocChunkSize == 0) {
     /* user didn't specify a specify alloc-chunk size, so set a default. */
