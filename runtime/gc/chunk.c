@@ -246,8 +246,6 @@ HM_chunk HM_allocateChunkWithPurpose(
     return NULL;
   }
 
-  s->cumulativeStatistics->bytesAllocated += HM_getChunkSize(chunk);
-
   assert(chunk->frontier == HM_getChunkStart(chunk));
   assert(chunk->mightContainMultipleObjects);
   assert((size_t)(chunk->limit - chunk->frontier) >= bytesRequested);
