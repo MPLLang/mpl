@@ -78,6 +78,15 @@ void HM_ensureHierarchicalHeapAssurances(
    * be larger than thread->currentDepth, indicating that we should
    * NOT collect right now.
    */
+  /* A finished CC stays linked to the leaf heap (as its subHeapForCC) until
+   * something merges it back, and until then minDepthWithoutCC keeps the
+   * leaf's depth out of local collection. HM_HH_registerCont merges when it
+   * registers a new CC, but a thread that registers no more (for example, a
+   * sequential loop after the last top-level par) would never collect its
+   * leaf heap. Merge here, before computing the scope, so that the budget
+   * sees the heap that a collection would copy. */
+  mergeCompletedCCs(s, thread->hierarchicalHeap);
+
   uint32_t desiredScope = 1;
   if (!forceGC) desiredScope = HM_HH_desiredCollectionScope(s, thread);
 
