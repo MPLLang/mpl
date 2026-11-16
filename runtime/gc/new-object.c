@@ -151,8 +151,8 @@ GC_thread newThreadWithHeap(
 
   if (reserved > s->cumulativeStatistics->maxStackSize)
     s->cumulativeStatistics->maxStackSize = reserved;
-  /* The thread and stack are built in chunks of their own, outside the
-   * current chunk, so count them here. */
+  /* The thread and stack go into new chunks whose frontiers are set
+   * directly, not through HM_HH_updateValues, so count them here. */
   s->cumulativeStatistics->bytesAllocated += totalSize;
 
   /* Allocate and initialize the heap that will be assigned to this thread.
