@@ -940,8 +940,8 @@ void CC_collectWithRoots(
 // #endif
 
   /* Unmark exactly the objects this collection marked: rememberMarked
-   * recorded each of them once, when it was marked, and nothing else changes
-   * the mark of an object in this collection's scope. Tracing from the roots
+   * recorded each of them once, when it was marked, and no other collector
+   * marks objects in this collection's scope while it runs. Tracing from the roots
    * again would not find them all, because the mutator can make a marked
    * object reachable only through objects outside the scope, and the write
    * barrier does not record old values that are already marked. An object
