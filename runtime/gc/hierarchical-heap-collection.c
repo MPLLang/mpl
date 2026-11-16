@@ -969,7 +969,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
       top = top->nextAncestor;
     size_t topSurvived = 0;
     if (NULL != top && HM_HH_getDepth(top) == 1) {
-      topSurvived = HM_getChunkListSize(HM_HH_getChunkList(top));
+      topSurvived = HM_getChunkListUsedSize(HM_HH_getChunkList(top));
       HM_HH_getConcurrentPack(top)->bytesSurvivedLastCollection = topSurvived;
     }
     thread->bytesSurvivedLastCollection -=
