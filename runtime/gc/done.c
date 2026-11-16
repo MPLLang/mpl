@@ -168,8 +168,6 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
             "\"maxGlobalHeapOccupancy\" : %"PRIuMAX,
             s->globalCumulativeStatistics->maxHeapOccupancy);
 
-    fprintf(out, ", ");
-
     // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
     // fprintf(out,
     //         "\"maxChunkPoolOccupancy\" : %"PRIuMAX,
