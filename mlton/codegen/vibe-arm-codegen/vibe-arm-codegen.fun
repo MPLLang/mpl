@@ -2885,13 +2885,16 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      val pst = gcField GCField.PromoStackTop
                      val psb = gcField GCField.PromoStackBot
                   in
-                     load (pst, 0, 3)
-                     ; i ["sub x0, x0, #8"]
-                     ; store (pst, 0)
-                     ; load (psb, 1, 3)
-                     ; i ["cmp x1, x0"]
+                     (* not x0: a C call's result may be in it (see
+                      * directReturn)
+                      *)
+                     load (pst, 5, 3)
+                     ; i ["sub x5, x5, #8"]
+                     ; store (pst, 5)
+                     ; load (psb, 6, 3)
+                     ; i ["cmp x6, x5"]
                      ; i ["b.ls 1f"]
-                     ; store (psb, 0)
+                     ; store (psb, 5)
                      ; label "1"
                   end
             else ())
@@ -2908,6 +2911,36 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   then jump l
                else indJump ()
           | [] => indJump ()
+      (* Where a C call leaves its result for the block that it returns to:
+       * in x0/d0 if directReturn, else in the frame, at [sp] or [sp, #8].
+       *
+       * A CReturn block is reached only as the return of a C call to its
+       * function (the Machine IR allows Goto and Switch only to Jump
+       * blocks): directly from the call, or, if the function may switch
+       * threads, through the entry table.  When neither the call nor the
+       * block goes through the entry table, every predecessor arrives with
+       * the result still in x0/d0.  Nothing that is output between the call
+       * and the block's use of the result touches x0 or d0:
+       *  - after the call: the adjustment of sp (x17), the reloads of the
+       *    caller-save registers (x8-x15, d19-d31), of Frontier and of
+       *    StackTop;
+       *  - the preheader of the block, if it heads a loop with promoted
+       *    slots: loads into allocated registers (and x17);
+       *  - pop, in the header: x5, x6 and x17.
+       * That a call may collect doesn't matter: it still returns to its
+       * call site.
+       *
+       * The local register allocator outputs code on edges and at the start
+       * of a block that hasn't been checked against this, so it keeps to the
+       * frame.
+       *)
+      fun directReturn (l: Label.t): bool =
+         not localRA
+         andalso (case labelBlock l of
+                     Block.T {kind as Kind.CReturn {func, ...}, ...} =>
+                        not (CFunction.maySwitchThreadsFrom func)
+                        andalso not (Kind.isEntry kind)
+                   | _ => false)
       (* Runtime functions that are one instruction.  (The C codegen gets
        * them inline from the C compiler.)  The result goes where the block
        * that the call returns to expects it.
@@ -2927,9 +2960,12 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                       let
                          val r = scratch (ct, 0)
                       in
-                         load (z, r, 16)
-                         ; i [opc, reg (r, ct), ", ", reg (r, ct)]
-                         ; i ["str ", reg (r, ct), ", [sp, #8]"]
+                         if directReturn return
+                            then i [opc, reg (32, ct), ", ",
+                                    reg (value (z, r, 16), ct)]
+                         else (load (z, r, 16)
+                               ; i [opc, reg (r, ct), ", ", reg (r, ct)]
+                               ; i ["str ", reg (r, ct), ", [sp, #8]"])
                          ; gotoL return
                          ; true
                       end)
@@ -3026,11 +3062,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             val () = dropCallerSaves ()
             val () = addImm (31, 31, stk)
             val () =
-               case retTy of
-                  NONE => ()
-                | SOME ct => if isReal ct
-                                then i ["str d0, [sp, #8]"]
-                             else i ["str x0, [sp]"]
+               case (retTy, return) of
+                  (NONE, _) => ()
+                | (SOME ct, SOME {return, ...}) =>
+                     if directReturn return
+                        then ()
+                     else if isReal ct
+                             then i ["str d0, [sp, #8]"]
+                          else i ["str x0, [sp]"]
+                | (SOME _, NONE) => ()
             val () = commit ("ldr", saves)
             val () =
                if CFunction.modifiesFrontier func
@@ -3540,11 +3580,18 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                        let
                           val dst = Live.toOperand dst
                           val ct = cty dst
-                          val d = dstReg dst
                        in
-                          i ["ldr", sfx ct, " ", reg (d, ct),
-                             if isReal ct then ", [sp, #8]" else ", [sp]"]
-                          ; store (dst, d)
+                          if directReturn l
+                             (* store keeps a narrow value zero-extended *)
+                             then store (dst, if isReal ct then 32 else 0)
+                          else
+                             let
+                                val d = dstReg dst
+                             in
+                                i ["ldr", sfx ct, " ", reg (d, ct),
+                                   if isReal ct then ", [sp, #8]" else ", [sp]"]
+                                ; store (dst, d)
+                             end
                           ; defined dst
                        end))
               | Kind.Func _ => ()
