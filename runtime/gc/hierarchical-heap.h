@@ -8,6 +8,8 @@
 #ifndef HIERARCHICAL_HEAP_H_
 #define HIERARCHICAL_HEAP_H_
 
+#include <stdatomic.h>
+
 #include "chunk.h"
 #include "concurrent-collection.h"
 #include "remembered-set.h"
@@ -15,7 +17,8 @@
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
 typedef struct HM_UnionFindNode {
-  struct HM_UnionFindNode *representative;
+  /* Atomic: path compression races with linkInto. */
+  _Atomic(struct HM_UnionFindNode *) representative;
   struct HM_HierarchicalHeap *payload;
 
   /* In the union-find tree of HH records, any node that is not a representative

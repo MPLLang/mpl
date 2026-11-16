@@ -515,40 +515,42 @@ HM_HierarchicalHeap HM_getLevelHead(HM_chunk chunk) {
   return cursor->payload;
 }
 
+/* Path splitting (Jayanti and Tarjan): point each node at its grandparent
+ * with a CAS. A two-pass "find root, then repoint" can create a cycle when
+ * another processor links the root meanwhile (linkInto). See #227. */
 HM_HierarchicalHeap HM_getLevelHeadPathCompress(HM_chunk chunk) {
-  HM_HierarchicalHeap levelHead = HM_getLevelHead(chunk);
-  assert(levelHead != NULL);
-  HM_UnionFindNode topNode = HM_HH_getUFNode(levelHead);
-  assert(topNode != NULL);
+  assert(chunk != NULL);
+  assert(chunk->levelHead != NULL);
+  assert(chunk->magic == CHUNK_MAGIC);
 
-  /* fast path */
-  if (chunk->levelHead == topNode) {
-    return levelHead;
+  HM_UnionFindNode start = chunk->levelHead;
+  HM_UnionFindNode cursor = start;
+  while (true) {
+    HM_UnionFindNode parent =
+      atomic_load_explicit(&(cursor->representative), memory_order_acquire);
+    if (NULL == parent)
+      break;
+
+    HM_UnionFindNode grandparent =
+      atomic_load_explicit(&(parent->representative), memory_order_acquire);
+    if (NULL == grandparent) {
+      cursor = parent;
+      break;
+    }
+
+    HM_UnionFindNode expected = parent;
+    atomic_compare_exchange_strong_explicit(
+      &(cursor->representative), &expected, grandparent,
+      memory_order_release, memory_order_relaxed);
+    cursor = parent;
   }
 
-  HM_UnionFindNode cursor = chunk->levelHead;
-  chunk->levelHead = topNode;
-
-  while (cursor != topNode) {
-    assert(cursor != NULL);
-    HM_UnionFindNode representative = cursor->representative;
-    cursor->representative = topNode;
-
-    // if (representative == NULL) {
-    //   DIE("whoops HM_getLevelHeadPathCompress:\ncursor %p\ncursor->payload  %p\ntopNode %p\nlevelHead %p\nchunk %p\ndepth %zu\nthread %p",
-    //     (void*)cursor,
-    //     (void*)cursor->payload,
-    //     (void*)topNode,
-    //     (void*)levelHead,
-    //     (void*)chunk,
-    //     (size_t)HM_HH_getDepth(levelHead),
-    //     (void*)getThreadCurrent((GC_state)pthread_getspecific(gcstate_key)));
-    // }
-
-    cursor = representative;
+  if (cursor != start) {
+    chunk->levelHead = cursor;
   }
 
-  return levelHead;
+  assert(NULL != cursor->payload);
+  return cursor->payload;
 }
 
 
