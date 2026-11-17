@@ -5,18 +5,23 @@
 (* Access to the operands of the Machine IR, for the vibe-arm codegen: where
  * the value of an operand is as a block is output (a register, the frame,
  * the ML stack, the heap), and the instructions that read and write it.
- * Everything that differs between the two register allocators is in here;
- * what uses this (the primitives, the transfers) is the same for both.
+ * That is what differs between the two register allocators, and each
+ * implements the operations here (the type t); what uses them (the
+ * primitives, the transfers) is the same for both.
  *
- *  - The graph allocator: a temporary is in the register of its web (see
- *    VibeArmAnalysis), or, if it has none, in the frame.  Within a block, a
- *    stack slot that is read more than once is cached in a register that
- *    no web is using there.
- *  - The local allocator: every temporary has a home in the frame, and the
- *    registers are a cache of temporaries and stack slots that is filled
- *    on demand as a block is output.  What the registers hold at the start
- *    of a block is fixed by the first of its predecessors to be output;
- *    the other predecessors conform, with code on the edge if need be.
+ *  - The graph allocator (VibeArmAccessGraph): a temporary is in the
+ *    register of its web (see VibeArmAnalysis), or, if it has none, in the
+ *    frame.  Within a block, a stack slot that is read more than once is
+ *    cached in a register that no web is using there.
+ *  - The local allocator (VibeArmAccessLocal): every temporary has a home
+ *    in the frame, and the registers are a cache of temporaries and stack
+ *    slots that is filled on demand as a block is output.  What the
+ *    registers hold at the start of a block is fixed by the first of its
+ *    predecessors to be output; the other predecessors conform, with code
+ *    on the edge if need be.
+ *
+ * What the two share is here too: the frame, and the reading of an operand
+ * given where the allocator says that it is.
  *
  * The frame of a chunk: [sp] and [sp, #8] hold the int/real result of the
  * last C call; then the temporaries; then an area in which to save the
@@ -45,9 +50,6 @@ signature VIBE_ARM_ACCESS =
 
       val cty: Emit.Machine.Operand.t -> Emit.Machine.CType.t
 
-      (* (Local allocator.)  What the registers hold. *)
-      type regs
-
       type t =
          {(* the size of the frame, in bytes *)
           frameSize: int,
@@ -75,21 +77,18 @@ signature VIBE_ARM_ACCESS =
            * x<t> and up.
            *)
           load: Emit.Machine.Operand.t * int * int -> unit,
-          (* memOf (z, t, ct): an addressing mode for a memory operand that
-           * is accessed at type ct.  May clobber x<t> and up.
-           *)
-          memOf: (Emit.Machine.Operand.t * int * Emit.Machine.CType.t
-                  -> Emit.Arm64.Addr.t),
           (* a register in which to compute the value of a destination *)
           dstReg: Emit.Machine.Operand.t -> int,
-          (* (Graph allocator.)  The register of a temporary that is
-           * about to be defined.
-           *)
-          defHome: Emit.Machine.Temporary.t -> int option,
           (* store (dst, r): set dst to the value in register r *)
           store: Emit.Machine.Operand.t * int -> unit,
           move: {dst: Emit.Machine.Operand.t,
                  src: Emit.Machine.Operand.t} -> unit,
+          (* setDst (dst, old, set): set dst with the instruction that set
+           * outputs, given a register for dst; if old, the register holds
+           * the value of dst, for an instruction that may keep it.  Also
+           * does "defined dst".
+           *)
+          setDst: Emit.Machine.Operand.t * bool * (int -> unit) -> unit,
 
           (* Forget which registers hold stack slots: StackTop is about to
            * change, or their registers are about to be written.
@@ -116,8 +115,7 @@ signature VIBE_ARM_ACCESS =
            *)
           callRuntime: string -> unit,
 
-          (* (Local allocator; with the graph allocator, these do nothing,
-           * and edgeNeedsCode is false.)
+          (* (With the graph allocator, edges never need code.)
            *
            * Does the edge from here to a block need code, to make the
            * registers be what the block expects?  If nothing has fixed
@@ -128,16 +126,59 @@ signature VIBE_ARM_ACCESS =
            * code.
            *)
           beforeGoto: Emit.Machine.Label.t -> unit,
-          (* a copy of what the registers hold now *)
-          copyRegs: unit -> regs,
-          (* output that code elsewhere: from when the registers held this *)
-          conformFrom: regs * Emit.Machine.Label.t -> unit}
+          (* For an edge that isn't the end of the block (an arm of a
+           * switch): the result outputs that code, as it is from here,
+           * when it is called; the code goes in a block of its own.
+           *)
+          edgeCode: Emit.Machine.Label.t -> unit -> unit}
 
-      val new: {analysis: Items.Analysis.t,
-                emit: Emit.t,
-                labelIndex: Emit.Machine.Label.t -> int,
-                (* which register allocator *)
-                localRA: bool,
-                (* the number of temporaries of each type *)
-                tempsMax: Emit.Machine.CType.t -> int} -> t
+      (* What an allocator is given, to make a t for a chunk. *)
+      type args = {analysis: Items.Analysis.t,
+                   emit: Emit.t,
+                   labelIndex: Emit.Machine.Label.t -> int,
+                   (* the number of temporaries of each type *)
+                   tempsMax: Emit.Machine.CType.t -> int}
+
+      (* What follows is for the allocators. *)
+
+      (* The frame of a chunk. *)
+      val frame:
+         {emit: Emit.t,
+          tempsMax: Emit.Machine.CType.t -> int}
+         -> {frameSize: int,
+             (* the home of temporary n of a type: a base register and an
+              * offset
+              *)
+             homeOf: Emit.Machine.CType.t * int -> int * int,
+             setSpAdj: int -> unit,
+             (* commit (f, rs): store or load (f is str or ldr of Emit)
+              * the caller-save registers rs to or from the save area
+              *)
+             commit: ((Emit.Machine.CType.t * int * Emit.Arm64.Addr.t
+                       -> unit) * int list) -> unit}
+
+      (* Reading an operand, given where the allocator has it. *)
+      val operands:
+         {emit: Emit.t,
+          labelIndex: Emit.Machine.Label.t -> int,
+          homeOf: Emit.Machine.CType.t * int -> int * int,
+          (* the register that an operand is in, if it is in one *)
+          home: Emit.Machine.Operand.t -> int option,
+          (* Put an operand that is in memory in a register to keep it
+           * there, if that is worth it.
+           *)
+          cacheIn: Emit.Machine.Operand.t -> int option}
+         -> {(* as in t *)
+             value: Emit.Machine.Operand.t * int * int -> int,
+             load: Emit.Machine.Operand.t * int * int -> unit,
+             (* memOf (z, t, ct): an addressing mode for a memory operand
+              * that is accessed at type ct.  May clobber x<t> and up.
+              *)
+             memOf: (Emit.Machine.Operand.t * int * Emit.Machine.CType.t
+                     -> Emit.Arm64.Addr.t),
+             (* setReg (ct, h, r): set register h, which is where an
+              * operand of type ct lives, to the value in r; a narrow
+              * value is kept zero-extended.
+              *)
+             setReg: Emit.Machine.CType.t * int * int -> unit}
    end

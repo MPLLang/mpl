@@ -39,7 +39,7 @@
  * That is the default ("graph") register allocator.  There is a second,
  * "local", allocator, selected by `-vibe-arm-regalloc local`, that is
  * modeled on the allocator of the x86/amd64 codegens; see "The local
- * register allocator", in vibe-arm-access.fun.
+ * register allocator", in vibe-arm-access-local.fun.
  *
  * The regions, the webs of temporaries and (for the graph allocator) their
  * registers are computed for a whole chunk before any of its code is
@@ -49,8 +49,9 @@
  * (see arm64.sig); printing them as assembly is the business of Arm64.
  *
  * The parts: VibeArmEmit collects the instructions; VibeArmAccess reads
- * and writes the operands of the Machine IR (the register allocators are
- * in there); VibeArmPrim outputs the primitives; VibeArmItems combines
+ * and writes the operands of the Machine IR, as VibeArmAccessGraph or
+ * VibeArmAccessLocal (one for each register allocator) implements it;
+ * VibeArmPrim outputs the primitives; VibeArmItems combines
  * statements; VibeArmLayout orders the blocks.  What is here is the frame
  * of a chunk function, the transfers, and the loop over the blocks.
  *)
@@ -78,8 +79,9 @@ structure Emit = VibeArmEmit (structure Arm64 = Asm
                               structure Machine = Machine)
 structure Access = VibeArmAccess (structure Emit = Emit
                                   structure Items = Items)
+structure AccessGraph = VibeArmAccessGraph (structure Access = Access)
+structure AccessLocal = VibeArmAccessLocal (structure Access = Access)
 structure PrimApp = VibeArmPrim (structure Access = Access)
-val dstTemp = Analysis.dstTemp
 val isReal = Analysis.isReal
 val size = Analysis.size
 val switchCases = Analysis.switchCases
@@ -159,12 +161,12 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
          Analysis.analyze {blocks = blocks, labelBlock = labelBlock,
                            localRA = localRA}
       val access as {frameSize, startBlock, curBlock, enterBlock, beginItem,
-                     endItem, defined, value, load, memOf, dstReg, defHome,
-                     store, move, clearCache, noCache, setSpAdj, saveForCall,
-                     afterCall, edgeNeedsCode, beforeGoto, copyRegs,
-                     conformFrom, ...} =
-         Access.new {analysis = analysis, emit = e, labelIndex = labelIndex,
-                     localRA = localRA, tempsMax = tempsMax}
+                     endItem, defined, value, load, dstReg, store, move,
+                     setDst, clearCache, noCache, setSpAdj, saveForCall,
+                     afterCall, edgeNeedsCode, beforeGoto, edgeCode, ...} =
+         (if localRA then AccessLocal.new else AccessGraph.new)
+         {analysis = analysis, emit = e, labelIndex = labelIndex,
+          tempsMax = tempsMax}
       val prim = {access = access, emit = e}
       val webHome = Web.home
       (* The label to branch to to get to l: the preheader of a loop with
@@ -205,7 +207,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
       (* compensation blocks, for edges that need code: output at the end of
        * the chunk
        *)
-      val comps: (Lbl.t * Label.t * Access.regs) list ref = ref []
+      val comps: (Lbl.t * Label.t * (unit -> unit)) list ref = ref []
       (* the label to branch to in order to get to l *)
       fun edge l =
          if edgeNeedsCode l
@@ -216,7 +218,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                      (concat [if symbols then "edge_" else "Ledge_",
                               self, "_", int (List.length (!comps))])
                in
-                  List.push (comps, (name, l, copyRegs ()))
+                  List.push (comps, (name, l, edgeCode l))
                   ; name
                end
          else target l
@@ -262,32 +264,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
              * the cache may be using.
              *)
             val () = noCache ()
-            (* Set dst with the instruction that set outputs, given dst's
-             * register (which holds dst's value, if old).
-             *)
-            fun setDst (dst, old, set) =
-               let
-                  val ct = cty dst
-                  val (d, spilled) =
-                     if localRA
-                        then (value (dst, scratch (ct, 0), 3), true)
-                     else
-                     case Option.fold (dstTemp dst, NONE, fn (t, _) =>
-                                       defHome t) of
-                        SOME h => (h, false)
-                      | NONE => (scratch (ct, 0), true)
-               in
-                  (* The old value of a spilled destination is in its slot
-                   * (not where the block finds the temporary on entry,
-                   * which is what load would read).
-                   *)
-                  if spilled andalso not localRA andalso old
-                     then ldr (ct, d, memOf (dst, 3, ct))
-                  else ()
-                  ; set d
-                  ; if spilled then store (dst, d) else ()
-                  ; defined dst
-               end
             fun select c {dst, src} =
                let
                   val ct = cty dst
@@ -836,9 +812,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
          end)
       (* the compensation blocks of the local register allocator *)
       ; List.foreach
-        (List.rev (!comps), fn (name, l, state) =>
+        (List.rev (!comps), fn (name, l, conform) =>
          (label name
-          ; conformFrom (state, l)
+          ; conform ()
           ; branch (blockLabel l)))
       ; instrs ()
    end
