@@ -9,7 +9,8 @@
 CFLAGS := -std=gnu11 -O2 -g -pthread -Wall -Wextra -pedantic -I..
 LIBS := -lgmp -lm
 
-TESTS := hh-union-find-stress hh-union-find-stress-dbgdetect
+TESTS := hh-union-find-stress hh-union-find-stress-dbgdetect \
+	cc-stack-try-close cc-stack-try-close-dbgdetect
 
 .PHONY: all check clean
 all: $(TESTS)
@@ -21,6 +22,13 @@ hh-union-find-stress: hh-union-find-stress.c ../libmlton.a ../libgdtoa.a
 	$(CC) $(CFLAGS) -o $@ $< ../libmlton.a ../libgdtoa.a $(LIBS)
 
 hh-union-find-stress-dbgdetect: hh-union-find-stress.c ../libmlton-dbgdetect.a ../libgdtoa-dbgdetect.a
+	$(CC) $(CFLAGS) -O0 -DASSERT=1 -DDETECT_ENTANGLEMENT -o $@ $< \
+		../libmlton-dbgdetect.a ../libgdtoa-dbgdetect.a $(LIBS)
+
+cc-stack-try-close: cc-stack-try-close.c ../libmlton.a ../libgdtoa.a
+	$(CC) $(CFLAGS) -o $@ $< ../libmlton.a ../libgdtoa.a $(LIBS)
+
+cc-stack-try-close-dbgdetect: cc-stack-try-close.c ../libmlton-dbgdetect.a ../libgdtoa-dbgdetect.a
 	$(CC) $(CFLAGS) -O0 -DASSERT=1 -DDETECT_ENTANGLEMENT -o $@ $< \
 		../libmlton-dbgdetect.a ../libgdtoa-dbgdetect.a $(LIBS)
 
