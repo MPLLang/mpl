@@ -13,6 +13,12 @@ local
    vibe-arm-items.fun
    vibe-arm-layout.sig
    vibe-arm-layout.fun
+   vibe-arm-emit.sig
+   vibe-arm-emit.fun
+   vibe-arm-access.sig
+   vibe-arm-access.fun
+   vibe-arm-prim.sig
+   vibe-arm-prim.fun
    vibe-arm-codegen.sig
    vibe-arm-codegen.fun
 in
