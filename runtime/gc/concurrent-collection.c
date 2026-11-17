@@ -940,13 +940,16 @@ void CC_collectWithRoots(
 // #endif
 
   /* Unmark exactly the objects this collection marked: rememberMarked
-   * recorded each of them once, when it was marked, and no other collector
-   * marks objects in this collection's scope while it runs. Tracing from the roots
-   * again would not find them all, because the mutator can make a marked
-   * object reachable only through objects outside the scope, and the write
-   * barrier does not record old values that are already marked. An object
-   * left marked would be treated as already traced by the next collection of
-   * this heap, which would then free the chunks of its live children. */
+   * recorded each of them once, when it was marked. Nothing else sets or
+   * clears the mark of an object in this collection's scope until here:
+   * local collections skip levels with a collection in progress
+   * (minDepthWithoutCC), and other concurrent collections only mark objects
+   * in chunks they have claimed. Tracing from the roots again would not find
+   * them all, because the mutator can make a marked object reachable only
+   * through objects outside the scope, and the write barrier does not record
+   * old values that are already marked. An object left marked would be
+   * treated as already traced by the next collection of this heap, which
+   * could then free the chunks of its live children. */
   for (HM_chunk chunk = HM_getChunkListFirstChunk(&(lists.markedObjects));
        chunk != NULL;
        chunk = chunk->nextChunk)
