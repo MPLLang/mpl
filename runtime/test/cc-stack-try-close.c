@@ -17,6 +17,7 @@ void HM_initChunkList(HM_chunkList list);
 void HM_appendChunk(HM_chunkList list, HM_chunk chunk);
 pointer HM_getChunkStart(HM_chunk chunk);
 void CC_stack_init(GC_state s, CC_stack* stack);
+bool CC_stack_push(GC_state s, CC_stack* stack, void* datum);
 bool CC_stack_try_close(CC_stack* stack, HM_chunkList removed);
 
 C_Pthread_Key_t gcstate_key;
@@ -31,8 +32,9 @@ typedef union {
   uint8_t bytes[256];
 } FakeChunk;
 
+static struct GC_state proc0;
 static CC_stack stack;
-static FakeChunk rootChunk;
+static FakeChunk rootChunk, spareChunk;
 static struct HM_chunkList removed;
 static atomic_int closeResult = -1;
 
@@ -84,6 +86,8 @@ int main(void) {
   init.numberOfProcs = NUM_PROCS;
   CC_stack_init(&init, &stack);
   HM_initChunkList(&removed);
+  memset(&proc0, 0, sizeof(proc0));
+  proc0.procNumber = 0;
 
   CC_stack_data *filled = &(stack.stacks[FILLED_BAG]);
   pthread_mutex_lock(&(filled->mutex));
@@ -132,15 +136,25 @@ int main(void) {
       pthread_mutex_unlock(&(stack.stacks[i].mutex));
   }
 
+  HM_appendChunk(&(stack.stacks[0].storage), initChunk(&spareChunk, FALSE));
+  void *root = (void*)0x1000;
+  bool pushed = CC_stack_push(&proc0, &stack, root);
+  CHECK(pushed, "push on processor 0 was refused after the failed close "
+        "(bag 0 stayed closed; the root is dropped)");
+
   HM_initChunkList(&removed);
   int attempts = 0;
   while (!CC_stack_try_close(&stack, &removed) && attempts < 10)
     attempts++;
   CHECK(stack.allClosed, "the stack did not close once every bag was empty");
+  if (pushed)
+    CHECK(removed.firstChunk == &spareChunk.chunk
+          && *(void**)HM_getChunkStart(&spareChunk.chunk) == root,
+          "the root pushed on processor 0 was not handed back");
 
   if (failures > 0)
     return 1;
-  printf("OK: failed close released every lock; "
+  printf("OK: failed close released every lock and kept the bags open; "
          "the next close took %d more call(s)\n", attempts + 1);
   return 0;
 }

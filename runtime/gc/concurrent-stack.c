@@ -215,6 +215,7 @@ bool CC_stack_try_close(CC_stack* stack, HM_chunkList removed) {
 
     // Otherwise, we failed to close. Unlock everything before continuing.
     for (size_t j = 0; j <= i; j++) {
+      stack->stacks[j].isClosed = FALSE;
       pthread_mutex_unlock(&(stack->stacks[j].mutex));
     }
   }
