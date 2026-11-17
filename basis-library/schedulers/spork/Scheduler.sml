@@ -424,11 +424,21 @@ struct
 
   val workerLocalData = Vector.tabulate (P, wldInit)
 
+  (* gcTask hands a GC task from a worker's task thread to its scheduler
+   * thread: syncGC stores it, and afterReturnToSched reads and clears it.
+   * workerLocalData is allocated at boot, at depth 0. For a depth-0 ref the
+   * write barrier does nothing but pin the stored task with unpin depth 0 and
+   * remember it, and nothing unpins at depth 0, so each task handed over this
+   * way stayed pinned and remembered for good. Skip the barrier, as for
+   * taskBoxes above. Until the read, the task's heap has a registered CC that
+   * hasn't started (afterReturnToSched starts it, after the read), and local
+   * collections skip that depth and the ones above it, so nothing moves or
+   * frees the task in between. *)
   fun setGCTask p data =
-    #gcTask (vectorSub (workerLocalData, p)) := data
+    HM.refAssignNoBarrier (#gcTask (vectorSub (workerLocalData, p)), data)
 
   fun getGCTask p =
-    ! (#gcTask (vectorSub (workerLocalData, p)))
+    HM.refDerefNoBarrier (#gcTask (vectorSub (workerLocalData, p)))
 
   fun getSchedThread () =
     let
