@@ -12,5 +12,7 @@ is
 
 arm64.sig
 arm64.fun
+vibe-arm-analysis.sig
+vibe-arm-analysis.fun
 vibe-arm-codegen.sig
 vibe-arm-codegen.fun
