@@ -68,18 +68,18 @@ structure Analysis = VibeArmAnalysis (structure Machine = Machine)
 structure Region = Analysis.Region
 structure Temp = Analysis.Temp
 structure Web = Analysis.Web
+structure Items = VibeArmItems (structure Analysis = Analysis)
+structure Layout = VibeArmLayout (structure Analysis = Analysis)
 val caller = Analysis.caller
 val callee = Analysis.callee
 val fcaller = Analysis.fcaller
 val fcallee = Analysis.fcallee
 val callerSave = Analysis.callerSave
 val dstTemp = Analysis.dstTemp
-val foreachTemp = Analysis.foreachTemp
 val isReal = Analysis.isReal
 val sameSlot = Analysis.sameSlot
 val size = Analysis.size
 val slotKey = Analysis.slotKey
-val stripCast = Analysis.stripCast
 val switchCases = Analysis.switchCases
 
 structure GCField = Runtime.GCField
@@ -234,8 +234,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
        * webs of temporaries and of promoted stack slots.  The blocks that
        * it returns are the ones to output.
        *)
-      val {blocks, labelBlock, blockRegion, blockWebs, ifConvert, liveTemps,
-           loopDistance, nearSuccessors, segIn} =
+      val analysis as {blocks, labelBlock, blockRegion, blockWebs, ifConvert,
+                       liveTemps, nearSuccessors, segIn, ...} =
          Analysis.analyze {blocks = blocks, labelBlock = labelBlock,
                            localRA = localRA}
       (* the region of the block that is being output *)
@@ -2190,225 +2190,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                                  ; gotoL default)
                         end
                end
-      (* The statements of a block, with each adjacent pair of an operation
-       * and its overflow check (on the same arguments) combined, so that
-       * the arithmetic is only done once.
-       *)
-      datatype item =
-         App of {args: Operand.t vector,
-                 dst: Operand.t,
-                 prim: Type.t Prim.t,
-                 also: (Operand.t * bool) option}
-       | Move of {dst: Operand.t, src: Operand.t}
-         (* a definition that was folded into the previous item *)
-       | Defined of Operand.t
-      fun items (ss: Statement.t list): item list =
-         case ss of
-            [] => []
-          | Statement.Move z :: ss => Move z :: items ss
-          | Statement.PrimApp {dst = NONE, ...} :: ss =>
-               (* all primitives are pure *)
-               items ss
-          | Statement.PrimApp {args, dst = SOME dst, prim} :: ss =>
-               let
-                  datatype z = datatype Prim.t
-                  fun single () =
-                     App {args = args, dst = dst, prim = prim, also = NONE}
-                     :: items ss
-                  (* is q the overflow check for p? *)
-                  fun checks (p, q) =
-                     case (p, q) of
-                        (Word_add s, Word_addCheckP (s', _)) =>
-                           WordSize.equals (s, s')
-                      | (Word_mul (s, _), Word_mulCheckP (s', _)) =>
-                           WordSize.equals (s, s')
-                      | (Word_neg s, Word_negCheckP (s', _)) =>
-                           WordSize.equals (s, s')
-                      | (Word_sub s, Word_subCheckP (s', _)) =>
-                           WordSize.equals (s, s')
-                      | _ => false
-                  fun simple z =
-                     case z of
-                        Operand.StackOffset _ => true
-                      | Operand.Temporary _ => true
-                      | _ => false
-               in
-                  case ss of
-                     Statement.PrimApp {args = args', dst = SOME dst',
-                                        prim = prim'} :: ss' =>
-                        if Vector.equals (args, args', Operand.equals)
-                           andalso simple dst andalso simple dst'
-                           andalso not (Operand.interfere (dst, dst'))
-                           andalso not (Vector.exists
-                                        (args, fn z =>
-                                         Operand.interfere (dst, z)
-                                         orelse Operand.interfere (dst', z)))
-                           then if checks (prim, prim')
-                                   then App {args = args, dst = dst',
-                                             prim = prim',
-                                             also = SOME (dst, false)}
-                                        :: items ss'
-                                else if checks (prim', prim)
-                                   then App {args = args, dst = dst,
-                                             prim = prim,
-                                             also = SOME (dst', true)}
-                                        :: items ss'
-                                else single ()
-                        else single ()
-                   | _ => single ()
-               end
+      (* the statements of a block, as they are output *)
+      datatype item = datatype Items.t
       fun outputApp {args, dst, prim, also = a} =
          (also := a; primApp (prim, args, dst); also := NONE)
-      (* When the result of a primitive is only copied to a stack slot,
-       * compute it into the slot (which may be in a register).
-       *)
-      fun direct (its: item list, transfer): item list =
-         let
-            fun same (t, t') =
-               Temp.equals (temp t, temp t')
-            fun mentions (z, t) =
-               let
-                  val r = ref false
-               in
-                  foreachTemp (z, fn t' => if same (t, t') then r := true else ())
-                  ; !r
-               end
-            fun dead (t, rest) =
-               not (List.exists
-                    (rest, fn it =>
-                     case it of
-                        App {args, dst, also, ...} =>
-                           mentions (dst, t)
-                           orelse (case also of
-                                      NONE => false
-                                    | SOME (z, _) => mentions (z, t))
-                           orelse Vector.exists (args, fn z => mentions (z, t))
-                      | Defined _ => false
-                      | Move {dst, src} =>
-                           mentions (dst, t) orelse mentions (src, t)))
-               andalso not (Transfer.foldOperands
-                            (transfer, false, fn (z, b) =>
-                             b orelse mentions (z, t)))
-               andalso not (List.exists
-                            (nearSuccessors transfer
-                             @ (case ifConvert transfer of
-                                   NONE => []
-                                 | SOME {join, ...} => [join]),
-                             fn l =>
-                             List.exists (liveTemps (labelBlock l), fn e =>
-                                          Temp.equals (e, temp t))))
-            (* A shift right by k and then a mask of the low w bits is a
-             * bitfield extract; the mask becomes a third argument of the
-             * shift (see Word_rshift in primApp).
-             *)
-            fun extract (it, it', rest) =
-               case (it, it') of
-                  (App {args, dst = d, prim = Prim.Word_rshift (ws, {signed = false}),
-                        also = NONE},
-                   App {args = args', dst = d', prim = Prim.Word_andb ws',
-                        also = NONE}) =>
-                     (case (dstTemp d, Vector.sub (args, 1),
-                            dstTemp (Vector.sub (args', 0)),
-                            Vector.sub (args', 1)) of
-                         (SOME t, Operand.Const (Const.Word k), SOME t',
-                          mask as Operand.Const (Const.Word m)) =>
-                            let
-                               val n = Bits.toInt (WordSize.bits ws)
-                               val k = WordX.toIntInf k
-                               val m = WordX.toIntInf m
-                               fun width (w: int) =
-                                  if w > 64 then NONE
-                                  else if IntInf.<< (1, Word.fromInt w) - 1 = m
-                                     then SOME w
-                                  else width (w + 1)
-                               val keep =
-                                  case dstTemp d' of
-                                     SOME t'' => same (t, t'')
-                                   | NONE => false
-                            in
-                               case width 1 of
-                                  SOME w =>
-                                     if n >= 32
-                                        andalso WordSize.equals (ws, ws')
-                                        andalso same (t, t')
-                                        andalso k + IntInf.fromInt w
-                                                <= IntInf.fromInt n
-                                        andalso not (mentions (Vector.sub (args, 0), t))
-                                        andalso (keep orelse dead (t, rest))
-                                        then SOME ((if keep then [Defined d]
-                                                    else [])
-                                                   @ App {args = Vector.new3
-                                                               (Vector.sub (args, 0),
-                                                                Vector.sub (args, 1),
-                                                                mask),
-                                                        dst = d',
-                                                        prim = Prim.Word_rshift
-                                                               (ws, {signed = false}),
-                                                        also = NONE}
-                                                   :: (if keep then []
-                                                       else [Defined d]))
-                                     else NONE
-                                | NONE => NONE
-                            end
-                       | _ => NONE)
-                | _ => NONE
-         in
-            case its of
-               (it as App {prim = Prim.Word_rshift _, ...})
-               :: (it' as App _) :: rest =>
-                  (case extract (it, it', rest) of
-                      SOME its => its @ direct (rest, transfer)
-                    | NONE => it :: direct (it' :: rest, transfer))
-             | (it as App {args, dst = d, prim, also = NONE})
-               :: (it' as Move {dst = d', src}) :: rest =>
-                  (case (dstTemp d, stripCast d', dstTemp src) of
-                      (SOME t, Operand.StackOffset _, SOME t') =>
-                         if same (t, t')
-                            andalso CType.equals (cty d, cty d')
-                            andalso dead (t, rest)
-                            then App {args = args, dst = d', prim = prim,
-                                      also = NONE}
-                                 :: Defined d :: direct (rest, transfer)
-                         else it :: direct (it' :: rest, transfer)
-                    | _ => it :: direct (it' :: rest, transfer))
-             | it :: rest => it :: direct (rest, transfer)
-             | [] => []
-         end
       fun outputItem it =
          case it of
             App z => outputApp z
           | Defined _ => ()
           | Move z => move z
-      (* Is this a block that ends by computing a boolean temporary that is
-       * only used to choose between two successors?  If so, return the
-       * other items, the final one, and the targets for true and false.
-       *)
-      fun fusable (its, transfer) =
-         case (transfer, its) of
-            (_, []) => NONE
-          | (Transfer.Switch (Switch.T {cases, default,
-                                        test = Operand.Temporary t, ...}),
-             _) =>
-               (case (List.splitLast its, switchCases (cases, default)) of
-                   ((its, App (a as {dst = Operand.Temporary t', ...})),
-                    ([(w, l)], l')) =>
-                      let
-                         val e = temp t
-                         fun dead l =
-                            not (List.exists (liveTemps (labelBlock l), fn e' =>
-                                              Temp.equals (e, e')))
-                      in
-                         if Temporary.equals (t, t')
-                            andalso dead l andalso dead l'
-                            then if WordX.isOne w
-                                    then SOME (its, a, l, l')
-                                 else if WordX.isZero w
-                                    then SOME (its, a, l', l)
-                                 else NONE
-                         else NONE
-                      end
-                 | _ => NONE)
-          | _ => NONE
       (* Find the stack slots that are read more than once in a block, and
        * the registers that no temporary uses in the block.
        *)
@@ -2553,8 +2343,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
       fun outputItems (its, k0) =
          List.foreachi (its, fn (k, it) =>
                         (beginItem (k0 + k); outputItem it; afterItem it))
-      fun outputBlock (b as Block.T {kind, label = l, statements, transfer,
-                                     ...}) =
+      fun outputBlock (b as Block.T {kind, label = l, transfer, ...}) =
          (curLabel := l
           ; if Kind.isEntry kind
              then let
@@ -2571,8 +2360,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
           ; enterBlock l
           ; setupCache b
           ; if localRA
-               then setupLocal (b, direct (items (Vector.toList statements),
-                                           transfer))
+               then setupLocal (b, Items.ofBlock (analysis, b))
             else ()
           ; (case kind of
                 Kind.Cont {frameInfo, ...} => pop (frameInfo, {promo = true})
@@ -2605,11 +2393,11 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
               | Kind.SporkSpwn {frameInfo, ...} =>
                    pop (frameInfo, {promo = false}))
           ; let
-               val its = direct (items (Vector.toList statements), transfer)
+               val its = Items.ofBlock (analysis, b)
                val n = List.length its
                val () = endItem ()
             in
-               case fusable (its, transfer) of
+               case Items.fusable (analysis, b, its) of
                   NONE => (outputItems (its, 0)
                            ; beginItem n
                            ; outputTransfer transfer)
@@ -2635,84 +2423,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                                        z))))
             end)
 
-      (* Block layout: greedily extend a trace with the successor that is
-       * most likely to be next.  For a two-way switch, that is the target
-       * that the backend expects, else the one that is deeper in the loop
-       * nest, else the one that isn't cold, else the default.
-       *)
-      val order: Block.t list ref = ref []
-      val pending: Label.t list ref = ref []
-      val {get = placedRef: Label.t -> bool ref, ...} =
-         Property.get (Label.plist, Property.initFun (fn _ => ref false))
-      fun placed l = ! (placedRef l)
-      fun cold (l, depth) =
-         case labelBlock l of
-            Block.T {transfer, ...} =>
-               (case transfer of
-                   Transfer.CCall {return = NONE, ...} => true
-                 | Transfer.CCall {return = SOME {size = SOME _, ...}, ...} =>
-                      true
-                 | Transfer.Goto l => depth > 0 andalso cold (l, depth - 1)
-                 | Transfer.Raise _ => true
-                 | _ => false)
-      fun trace from =
-         if placed from then ()
-         else
-            let
-               val l = from
-               val b as Block.T {transfer, ...} = labelBlock l
-               val () = placedRef l := true
-               val () = List.push (order, b)
-               (* the successors that could fall through, best first *)
-               val succs =
-                  case transfer of
-                     Transfer.CCall {return = SOME {return, ...}, ...} =>
-                        [return]
-                   | Transfer.Call {label, ...} =>
-                        if ChunkLabel.equals (labelChunk label, chunkLabel)
-                           then [label]
-                        else []
-                   | Transfer.Goto l => [l]
-                   | Transfer.Spork {cont, ...} => [cont]
-                   | Transfer.Switch (Switch.T {cases, default, expect, ...}) =>
-                        (case (ifConvert transfer,
-                               switchCases (cases, default)) of
-                            (SOME {join, ...}, _) => [join]
-                          | (NONE, ([(w, l)], l')) =>
-                               let
-                                  fun byCold () =
-                                     cold (l', 2) andalso not (cold (l, 2))
-                                  (* prefer to stay in, or go deeper into,
-                                   * a loop
-                                   *)
-                                  fun byLoop () =
-                                     case (loopDistance (from, l),
-                                           loopDistance (from, l')) of
-                                        (SOME _, NONE) => true
-                                      | (NONE, SOME _) => false
-                                      | (SOME d, SOME d') =>
-                                           if d = d' then byCold () else d > d'
-                                      | (NONE, NONE) => byCold ()
-                               in
-                                  if (case expect of
-                                         SOME w' => WordX.equals (w, w')
-                                       | NONE => byLoop ())
-                                     then [l, l']
-                                  else [l', l]
-                               end
-                          | (NONE, (cases, l)) => l :: List.map (cases, #2))
-                   | _ => []
-            in
-               case List.peek (succs, not o placed) of
-                  NONE => ()
-                | SOME l => (List.foreach (succs, fn l =>
-                                           List.push (pending, l))
-                             ; trace l)
-            end
-      fun drain () =
-         case !pending of
-            [] => ()
-          | l :: ls => (pending := ls; trace l; drain ())
+      (* the blocks, in the order to output them *)
+      val order =
+         Layout.layout {analysis = analysis, chunkLabel = chunkLabel,
+                        labelChunk = labelChunk, labelIndex = labelIndex}
       fun outputBlocks bs =
          case bs of
             [] => ()
@@ -2725,17 +2439,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
       fun pair (opc, (r1, r2), k) =
          emit (I.Pair (opc, reg (r1, CType.Word64), reg (r2, CType.Word64),
                        Addr.Offset (R.SP, 16 * (k + 1))))
-      val entries =
-         List.insertionSort
-         (Vector.fold (blocks, [], fn (Block.T {kind, label, ...}, es) =>
-                       if Kind.isEntry kind
-                          then (labelIndex label, label) :: es
-                       else es),
-          fn ((i1, _), (i2, _)) => i1 <= i2)
-      (* Blocks that aren't reachable from an entry (such as the arms of
-       * if-converted switches) are not output.
-       *)
-      val () = List.foreach (entries, fn (_, l) => (trace l; drain ()))
    in
       emit (I.Section Asm.Section.Text)
       ; emit (I.P2align 2)
@@ -2758,12 +2461,12 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
       ; List.foreachi (saved, fn (k, rs) => pair (I.LDP, rs, k))
       ; emit (I.Pair (I.LDP, R.X 29, R.X 30, Addr.PostIndex (R.SP, 160)))
       ; emit I.Ret
-      ; outputBlocks (List.rev (!order))
+      ; outputBlocks order
       (* the preheaders (out of line, so that nothing falls through them):
        * load the promoted stack slots
        *)
       ; List.foreach
-        (List.rev (!order), fn Block.T {label = l, ...} =>
+        (order, fn Block.T {label = l, ...} =>
          let
             val {pheader, promoted, ...} = blockWebs l
          in

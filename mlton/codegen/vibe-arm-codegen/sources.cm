@@ -14,5 +14,9 @@ arm64.sig
 arm64.fun
 vibe-arm-analysis.sig
 vibe-arm-analysis.fun
+vibe-arm-items.sig
+vibe-arm-items.fun
+vibe-arm-layout.sig
+vibe-arm-layout.fun
 vibe-arm-codegen.sig
 vibe-arm-codegen.fun
