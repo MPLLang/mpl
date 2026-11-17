@@ -5,6 +5,8 @@ local
    ../../backend/sources.mlb
    ../c-codegen/sources.mlb
 
+   arm64.sig
+   arm64.fun
    vibe-arm-codegen.sig
    vibe-arm-codegen.fun
 in

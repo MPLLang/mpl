@@ -10,5 +10,7 @@ is
 ../../control/sources.cm
 ../c-codegen/sources.cm
 
+arm64.sig
+arm64.fun
 vibe-arm-codegen.sig
 vibe-arm-codegen.fun

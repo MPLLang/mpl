@@ -40,6 +40,9 @@
  * "local", allocator, selected by `-vibe-arm-regalloc local`, that is
  * modeled on the allocator of the x86/amd64 codegens; see "The local
  * register allocator", below.
+ *
+ * Output.  The codegen builds a list of ARM64 instructions for each chunk
+ * (see arm64.sig); printing them as assembly is the business of Arm64.
  *)
 
 functor VibeArmCodegen (S: VIBE_ARM_CODEGEN_STRUCTS): VIBE_ARM_CODEGEN =
@@ -47,6 +50,15 @@ struct
 
 open S
 open Machine
+
+structure Asm = Arm64 ()
+structure Addr = Asm.Addr
+structure Cond = Asm.Cond
+structure I = Asm.Instr
+structure Lbl = Asm.Label
+structure Opnd = Asm.Operand
+structure R = Asm.Reg
+structure Tgt = Asm.Target
 
 structure GCField = Runtime.GCField
 
@@ -82,19 +94,20 @@ fun implementsPrim (p: 'a Prim.t): bool =
 fun entryStub l = "vibeArmEntry_" ^ Label.toString l
 val entryTable = "vibeArmEntries"
 
-fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
+fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                  {labelBlock: Label.t -> Block.t,
                   labelChunk: Label.t -> ChunkLabel.t,
-                  labelIndex: Label.t -> int}) =
+                  labelIndex: Label.t -> int}): I.t list =
    let
       val int = CCodegen.C.int
       val darwin = !Control.Target.os = MLton.Platform.OS.Darwin
-      fun sym s = if !Control.labelsHaveExtra_ then "_" ^ s else s
-      (* emit an instruction *)
-      fun i ss = (print "\t"; List.foreach (ss, print); print "\n")
-      fun label s = (print s; print ":\n")
+      (* the instructions of the chunk, the most recent first *)
+      val code: I.t list ref = ref []
+      fun emit ins = List.push (code, ins)
+      fun label l = emit (I.Label l)
+      fun branch l = emit (I.B (Tgt.Label l))
       val self = ChunkLabel.toString chunkLabel
-      val leave = "Lleave_" ^ self
+      val leave = Lbl.Plain ("Lleave_" ^ self)
       (* which register allocator: see "Register allocation", above *)
       val localRA = !Control.vibeArmLocalRegAlloc
       (* The label of a block, and of the preheader that loads its promoted
@@ -104,27 +117,36 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
        *)
       val symbols = !Control.vibeArmSymbols
       fun blockLabel l =
-         if symbols then sym (Label.toString l)
-         else (if darwin then "L" else ".L") ^ Label.toString l
+         if symbols then Lbl.Sym (Label.toString l)
+         else Lbl.Local (Label.toString l)
       fun preLabel l =
-         if symbols then sym ("pre_" ^ Label.toString l)
-         else "Lpre_" ^ Label.toString l
+         if symbols then Lbl.Sym ("pre_" ^ Label.toString l)
+         else Lbl.Plain ("Lpre_" ^ Label.toString l)
 
       (* Registers: 0-31 are x0-x30,sp; 32-63 are d0-d31. *)
       fun isReal ct =
          case ct of CType.Real32 => true | CType.Real64 => true | _ => false
       fun size ct = Bytes.toInt (CType.size ct)
-      fun sfx ct = case size ct of 1 => "b" | 2 => "h" | _ => ""
-      fun x r = if r = 31 then "sp" else "x" ^ int r
+      fun x r = if r = 31 then R.SP else R.X r
+      (* register r, at the width of a value of type ct *)
       fun reg (r, ct) =
          if r >= 32
-            then (if size ct = 4 then "s" else "d") ^ int (r - 32)
-         else if size ct = 8 then x r else "w" ^ int r
+            then (if size ct = 4 then R.S (r - 32) else R.D (r - 32))
+         else if size ct = 8 then x r else R.W r
+      val regOp = Opnd.Reg
+      fun immOp n = Opnd.Imm (IntInf.fromInt n)
       fun scratch (ct, k) = if isReal ct then 48 + k else k
+      (* load/store register r, as a value of type ct *)
+      fun ldr (ct, r, a) =
+         emit (I.Load (case size ct of 1 => I.LDRB | 2 => I.LDRH | _ => I.LDR,
+                       reg (r, ct), a))
+      fun str (ct, r, a) =
+         emit (I.Store (case size ct of 1 => I.STRB | 2 => I.STRH | _ => I.STR,
+                        reg (r, ct), a))
       fun mov (d, s, ct) =
          if d = s then ()
-         else i [if d >= 32 then "fmov " else "mov ",
-                 reg (d, ct), ", ", reg (s, ct)]
+         else emit (I.Un (if d >= 32 then I.FMOV else I.MOV,
+                          reg (d, ct), reg (s, ct)))
 
       fun movImm (r, n: IntInf.t) =
          let
@@ -133,50 +155,45 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             fun chunk k =
                IntInf.toInt (IntInf.andb (IntInf.~>> (n, Word.fromInt (16 * k)),
                                           0xFFFF))
-            fun mk (opc, k) =
-               i [opc, x r, ", #", int (chunk k), ", lsl #", int (16 * k)]
+            fun mk (opc, k) = emit (opc (x r, chunk k, 16 * k))
          in
             if n >= top - 0x10000
-               then i ["mov ", x r, ", #-", IntInf.toString (top - n)]
+               then emit (I.MovImm (x r, n - top))
             else (case List.keepAll ([0, 1, 2, 3], fn k => chunk k <> 0) of
-                     [] => i ["mov ", x r, ", #0"]
-                   | k :: ks => (mk ("movz ", k)
-                                 ; List.foreach (ks, fn k => mk ("movk ", k))))
+                     [] => emit (I.MovImm (x r, 0))
+                   | k :: ks => (mk (I.Movz, k)
+                                 ; List.foreach (ks, fn k => mk (I.Movk, k))))
          end
       fun movInt (r, n) = movImm (r, IntInf.fromInt n)
       (* d = s + n; may clobber x17 *)
       fun addImm (d, s, n) =
-         if n = 0 then (if d = s then () else i ["mov ", x d, ", ", x s])
+         if n = 0 then (if d = s then () else emit (I.Un (I.MOV, x d, x s)))
          else
             let
-               val opc = if n > 0 then "add " else "sub "
+               val opc = if n > 0 then I.ADD else I.SUB
                val n = Int.abs n
             in
                if n < 4096
-                  then i [opc, x d, ", ", x s, ", #", int n]
-               else (movInt (17, n); i [opc, x d, ", ", x s, ", x17"])
+                  then emit (I.Bin (opc, x d, x s, immOp n))
+               else (movInt (17, n)
+                     ; emit (I.Bin (opc, x d, x s, regOp (R.X 17))))
             end
       (* an addressing mode for [b + off]; may clobber x17 *)
       fun mem (b, off, ct) =
          if (~256 <= off andalso off < 256)
             orelse (off >= 0 andalso off mod size ct = 0
                     andalso off div size ct < 4096)
-            then concat ["[", x b, ", #", int off, "]"]
-         else (movInt (17, off); concat ["[", x b, ", x17]"])
+            then Addr.Offset (x b, off)
+         else (movInt (17, off); Addr.Index (x b, R.X 17, 0))
+      (* the address of a symbol, directly or from the global offset table *)
       fun symAddr (r, s, {got}) =
          let
-            val s = sym s
-            val (hi, lo) =
-               case (darwin, got) of
-                  (true, true) => (s ^ "@GOTPAGE", s ^ "@GOTPAGEOFF")
-                | (true, false) => (s ^ "@PAGE", s ^ "@PAGEOFF")
-                | (false, true) => (":got:" ^ s, ":got_lo12:" ^ s)
-                | (false, false) => (s, ":lo12:" ^ s)
+            val s = Lbl.Sym s
          in
-            i ["adrp ", x r, ", ", hi]
-            ; if got
-                 then i ["ldr ", x r, ", [", x r, ", ", lo, "]"]
-              else i ["add ", x r, ", ", x r, ", ", lo]
+            emit (I.Adrp (x r, s, {got = got}))
+            ; emit (if got
+                       then I.LoadGot (x r, x r, s)
+                    else I.AddLo (x r, x r, s))
          end
 
       (* Frame: [sp, #0] and [sp, #8] hold the int/real result of the last
@@ -1372,15 +1389,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                        then r :: ac
                     else ac)
       (* store/load registers to/from the save area of the frame *)
-      fun commit (opc, rs) =
+      fun commit (f, rs) =
          List.foreach
          (rs, fn r =>
           let
              val ct = if r >= 32 then CType.Real64 else CType.Word64
           in
-             i [opc, " ", reg (r, ct), ", ",
+             f (ct, r,
                 mem (31, saveBase + 8 * (if r >= 32 then r - 43 else r - 8),
-                     ct)]
+                     ct))
           end)
       (* ----------------------------------------------------- *)
 
@@ -1491,8 +1508,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   then let
                           val (b, off) = homeOf (ct, n)
                        in
-                          i ["str ", reg (r, wideCt ct), ", ",
-                             mem (b, off, wideCt ct)]
+                          str (wideCt ct, r, mem (b, off, wideCt ct))
                           ; dirty := false
                        end
                else ()
@@ -1565,8 +1581,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                            let
                               val r = allocReg l
                            in
-                              i ["ldr", sfx ct, " ", reg (r, ct), ", ",
-                                 mem (b, off, ct)]
+                              ldr (ct, r, mem (b, off, ct))
                               ; List.push (regs, {reg = r, loc = l,
                                                   dirty = ref false})
                               ; SOME r
@@ -1600,8 +1615,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   case cacheReg k of
                      NONE => NONE
                    | SOME r =>
-                        (i ["ldr", sfx ct, " ", reg (r, ct), ", ",
-                            mem (20, off, ct)]
+                        (ldr (ct, r, mem (20, off, ct))
                          ; List.push (cache, {off = off, ct = ct, reg = r})
                          ; SOME r)
                end
@@ -1651,7 +1665,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                               Scale.One => 0 | Scale.Two => 1
                             | Scale.Four => 2 | Scale.Eight => 3
                in
-                  i ["add ", x t, ", ", x b, ", ", x ix, ", lsl #", int lg]
+                  emit (I.Bin (I.ADD, x t, x b,
+                               Opnd.Shifted (x ix, Opnd.LSL, lg)))
                   ; (t, Bytes.toInt offset)
                end
           | Operand.StackOffset (StackOffset.T {offset, ...}) =>
@@ -1678,7 +1693,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                              NONE => Error.bug "VibeArmCodegen.load: Real"
                            | SOME w =>
                                 (movImm (17, WordX.toIntInf w)
-                                 ; i ["fmov ", reg (d, ct), ", ", reg (17, ct)]))
+                                 ; emit (I.Un (I.FMOV, reg (d, ct),
+                                               reg (17, ct)))))
                     | Const.Word w => movImm (d, WordX.toIntInf w)
                     | _ => Error.bug "VibeArmCodegen.load: Const")
              | Operand.Label l => movInt (d, labelIndex l)
@@ -1693,14 +1709,13 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                          (case cacheIn z of
                              SOME r => mov (d, r, ct)
                            | NONE =>
-                                i ["ldr", sfx ct, " ", reg (d, ct), ", ",
-                                   memOf (z, t, ct)]))
+                                ldr (ct, d, memOf (z, t, ct))))
          end
       (* An addressing mode for a memory operand that is accessed at type ct.
        * A sequence element is addressed as [base, index, lsl #s] when it can
        * be: no offset, and a scale that is 1 or the size of the access.
        *)
-      and memOf (z, t, ct): string =
+      and memOf (z, t, ct): Addr.t =
          let
             fun default () =
                let val (b, off) = addr (z, t) in mem (b, off, ct) end
@@ -1719,12 +1734,12 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                               val b = value (base, t, t)
                               val ix = value (index, t + 1, t + 1)
                            in
-                              concat ["[", x b, ", ", x ix,
-                                      case n of
-                                         1 => "]"
-                                       | 2 => ", lsl #1]"
-                                       | 4 => ", lsl #2]"
-                                       | _ => ", lsl #3]"]
+                              Addr.Index (x b, x ix,
+                                          case n of
+                                             1 => 0
+                                           | 2 => 1
+                                           | 4 => 2
+                                           | _ => 3)
                            end
                      else default ()
                   end
@@ -1743,8 +1758,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             (* set a register home, keeping narrow values zero-extended *)
             fun set h =
                case size ct of
-                  1 => i ["and w", int h, ", w", int r, ", #0xff"]
-                | 2 => i ["and w", int h, ", w", int r, ", #0xffff"]
+                  1 => emit (I.Bin (I.AND, R.W h, R.W r, immOp 0xff))
+                | 2 => emit (I.Bin (I.AND, R.W h, R.W r, immOp 0xffff))
                 | _ => mov (h, r, ct)
             fun strip z =
                case z of
@@ -1756,8 +1771,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   let
                      val k as (off, _) = slotKey so
                      val () =
-                        i ["str", sfx ct, " ", reg (r, ct), ", ",
-                           mem (20, off, ct)]
+                        str (ct, r, mem (20, off, ct))
                      (* drop other views of the bytes that were written *)
                      fun other (off', ct') =
                         not (sameSlot (k, (off', ct')))
@@ -1827,11 +1841,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   else (case defHome t of
                            SOME h => set h
                          | NONE =>
-                              i ["str", sfx ct, " ", reg (r, ct), ", ",
-                                 memOf (dst, 3, ct)])
+                              str (ct, r, memOf (dst, 3, ct)))
              | (_, SOME h) => set h
              | (_, NONE) =>
-                  i ["str", sfx ct, " ", reg (r, ct), ", ", memOf (dst, 3, ct)]
+                  str (ct, r, memOf (dst, 3, ct))
          end
       (* A register in which to compute the value of dst. *)
       fun dstReg dst =
@@ -1956,7 +1969,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
        * flags (and reports it in fused) rather than computing dst.
        *)
       val fusing = ref false
-      val fused: string option ref = ref NONE
+      val fused: Cond.t option ref = ref NONE
       (* When set, an overflow-checking primitive also stores the result of
        * the operation itself to the given operand; the bool is true if the
        * check originally came before the operation.
@@ -1974,32 +1987,32 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                case (immOk, a k) of
                   (true, Operand.Const (Const.Word w)) =>
                      if WordX.toIntInf w < 4096
-                        then "#" ^ IntInf.toString (WordX.toIntInf w)
-                     else reg (v k, ct)
-                | _ => reg (v k, ct)
+                        then Opnd.Imm (WordX.toIntInf w)
+                     else regOp (reg (v k, ct))
+                | _ => regOp (reg (v k, ct))
             fun done () = store (dst, d)
             fun un (opc, ct) =
-               (i [opc, " ", reg (d, dct), ", ", reg (v 0, ct)]; done ())
+               (emit (I.Un (opc, reg (d, dct), reg (v 0, ct))); done ())
             fun bin' (opc, ct, r0, immOk) =
-               (i [opc, " ", reg (d, ct), ", ", reg (r0, ct), ", ",
-                   opnd (1, ct, immOk)]
+               (emit (I.Bin (opc, reg (d, ct), reg (r0, ct),
+                             opnd (1, ct, immOk)))
                 ; done ())
             fun bin (opc, ct, immOk) = bin' (opc, ct, v 0, immOk)
             fun tern (opc, ct) =
-               (i [opc, " ", reg (d, ct), ", ", reg (v 0, ct), ", ",
-                   reg (v 1, ct), ", ", reg (v 2, ct)]
+               (emit (I.Tern (opc, reg (d, ct), reg (v 0, ct), reg (v 1, ct),
+                              reg (v 2, ct)))
                 ; done ())
             fun cset cond =
                if !fusing
                   then fused := SOME cond
-               else (i ["cset ", reg (d, dct), ", ", cond]; done ())
+               else (emit (I.Cset (reg (d, dct), cond)); done ())
             fun cmp' (opc, ct, r0, cond) =
-               (i [opc, " ", reg (r0, ct), ", ", opnd (1, ct, opc = "cmp")]
+               (emit (I.Cmp (opc, reg (r0, ct), opnd (1, ct, opc = I.CMP)))
                 ; cset cond)
             fun cmp (opc, ct, cond) = cmp' (opc, ct, v 0, cond)
             fun addsub (isAdd, ct) =
                let
-                  fun opc b = if b then "add" else "sub"
+                  fun opc b = if b then I.ADD else I.SUB
                   fun default () = bin (opc isAdd, ct, true)
                in
                   case a 1 of
@@ -2008,8 +2021,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                            val n = WordX.toIntInfX w
                         in
                            if size ct = 8 andalso ~4096 < n andalso n < 0
-                              then (i [opc (not isAdd), " ", reg (d, ct), ", ",
-                                       reg (v 0, ct), ", #", IntInf.toString (~ n)]
+                              then (emit (I.Bin (opc (not isAdd), reg (d, ct),
+                                                 reg (v 0, ct), Opnd.Imm (~ n)))
                                     ; done ())
                            else default ()
                         end
@@ -2019,7 +2032,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             val rct = CType.real
             fun wct ws = CType.word (ws, {signed = false})
             fun bits ws = Bits.toInt (WordSize.bits ws)
-            fun bhw n = case n of 8 => "b" | 16 => "h" | _ => "w"
+            (* sign extension from n bits *)
+            fun sxt n = case n of 8 => I.SXTB | 16 => I.SXTH | _ => I.SXTW
             (* A register holding argument k (of size ws), sign extended (if
              * signed) to 32 or 64 bits.
              *)
@@ -2030,20 +2044,43 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   val s = k
                in
                   if signed andalso (n < 32 orelse (to64 andalso n < 64))
-                     then (i ["sxt", bhw n, " ",
-                              if to64 then x s else "w" ^ int s, ", w", int r]
+                     then (emit (I.Un (sxt n, if to64 then x s else R.W s,
+                                       R.W r))
                            ; s)
                   else r
                end
-            fun chk (opc, sCond, uCond, (ws, {signed}), ks) =
+            datatype arith = Add | Mul | Neg | Sub
+            (* an overflow check for the operation opc on arguments ks *)
+            fun chk (opc: arith, (ws, {signed}), ks) =
                let
                   val n = bits ws
-                  val ops =
-                     if n = 64 andalso (opc = "add" orelse opc = "sub")
-                        then concat [", ", x (v 0), ", ",
-                                     opnd (1, wct ws, true)]
-                     else concat (List.map (ks, fn k =>
-                                            ", " ^ x (ext (k, ws, signed, true))))
+                  (* the operands of the operation *)
+                  val (r0, z1) =
+                     if n = 64 andalso (opc = Add orelse opc = Sub)
+                        then
+                           let
+                              val r0 = x (v 0)
+                           in
+                              (r0, SOME (opnd (1, wct ws, true)))
+                           end
+                     else (case List.map (ks, fn k =>
+                                          x (ext (k, ws, signed, true))) of
+                              [r0] => (r0, NONE)
+                            | [r0, r1] => (r0, SOME (regOp r1))
+                            | _ => Error.bug "VibeArmCodegen.chk: operands")
+                  (* a binary instruction on the operands *)
+                  fun binary (opc, d) =
+                     case z1 of
+                        SOME z => emit (I.Bin (opc, d, r0, z))
+                      | NONE => Error.bug "VibeArmCodegen.chk: binary"
+                  (* the operation itself, which may also set the flags *)
+                  fun arith (d, {flags}) =
+                     case opc of
+                        Add => binary (if flags then I.ADDS else I.ADD, d)
+                      | Mul => binary (I.MUL, d)
+                      | Neg => emit (I.Un (if flags then I.NEGS else I.NEG,
+                                           d, r0))
+                      | Sub => binary (if flags then I.SUBS else I.SUB, d)
                   (* r holds the result of the operation itself *)
                   fun finish (r, cond) =
                      case !also of
@@ -2054,27 +2091,41 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                            else (store (z, r); cset cond)
                in
                   if n < 64
-                     then (i [opc, " x5", ops]
-                           ; i ["cmp x5, w5, ", if signed then "s" else "u",
-                                "xt", bhw n]
-                           ; finish (5, "ne"))
-                  else if opc = "mul"
-                     then (i [if signed then "smulh" else "umulh", " x5", ops]
+                     then (arith (R.X 5, {flags = false})
+                           ; emit (I.Cmp
+                                   (I.CMP, R.X 5,
+                                    Opnd.Extended
+                                    (R.W 5,
+                                     case (signed, n) of
+                                        (true, 8) => Opnd.SXTB
+                                      | (true, 16) => Opnd.SXTH
+                                      | (true, _) => Opnd.SXTW
+                                      | (false, 8) => Opnd.UXTB
+                                      | (false, 16) => Opnd.UXTH
+                                      | (false, _) => Opnd.UXTW)))
+                           ; finish (5, Cond.NE))
+                  else if opc = Mul
+                     then (binary (if signed then I.SMULH else I.UMULH, R.X 5)
                            ; if signed orelse Option.isSome (!also)
-                                then i ["mul x6", ops]
+                                then arith (R.X 6, {flags = false})
                              else ()
                            ; if signed
-                                then i ["cmp x5, x6, asr #63"]
-                             else i ["cmp x5, #0"]
-                           ; finish (6, "ne"))
+                                then emit (I.Cmp (I.CMP, R.X 5,
+                                                  Opnd.Shifted (R.X 6, Opnd.ASR,
+                                                                63)))
+                             else emit (I.Cmp (I.CMP, R.X 5, immOp 0))
+                           ; finish (6, Cond.NE))
                   else
                      let
                         val r = case !also of
                                    SOME (z, false) => dstReg z
                                  | _ => 5
                      in
-                        i [opc, "s ", x r, ops]
-                        ; finish (r, if signed then sCond else uCond)
+                        arith (x r, {flags = true})
+                        ; finish (r, case (signed, opc) of
+                                        (true, _) => Cond.VS
+                                      | (false, Add) => Cond.CS
+                                      | (false, _) => Cond.CC)
                      end
                end
             fun shift (opc, ws, r0) = bin' (opc, wct ws, r0, true)
@@ -2088,17 +2139,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      else loop (k + 1)
                in
                   loop 0
-               end
-            fun hex (n: IntInf.t): string =
-               let
-                  fun loop n =
-                     if n = 0 then ""
-                     else loop (n div 16)
-                          ^ String.fromChar
-                            (String.sub ("0123456789abcdef",
-                                         IntInf.toInt (n mod 16)))
-               in
-                  if n = 0 then "0x0" else "0x" ^ loop n
                end
             (* Can n be the immediate of a logical instruction on N-bit
              * registers?  It must be a repetition of an e-bit pattern that
@@ -2136,8 +2176,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                            val n = WordX.toIntInf w
                         in
                            if bitmask (n, if size ct = 8 then 64 else 32)
-                              then (i [opc, " ", reg (d, ct), ", ",
-                                       reg (v 0, ct), ", #", hex n]
+                              then (emit (I.Bin (opc, reg (d, ct),
+                                                 reg (v 0, ct), Opnd.Imm n))
                                     ; done ())
                            else default ()
                         end
@@ -2158,7 +2198,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                         val N = if bits ws = 64 then 64 else 32
                         val dv = if signed then WordX.toIntInfX w
                                  else WordX.toIntInf w
-                        fun r k = if N = 64 then x k else "w" ^ int k
+                        fun r k = if N = 64 then x k else R.W k
+                        fun ins (opc, d, s, z) = emit (I.Bin (opc, d, s, z))
+                        fun lsr (r, k) = Opnd.Shifted (r, Opnd.LSR, k)
                      in
                         if dv < 2 then false
                         else
@@ -2168,37 +2210,38 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                               fun finish q =
                                  (if isRem
                                      then (movImm (16, dv)
-                                           ; i ["msub ", r d, ", ", r q, ", ",
-                                                r 16, ", ", r n])
+                                           ; emit (I.Tern (I.MSUB, r d, r q,
+                                                           r 16, r n)))
                                   else if q = d then ()
-                                  else i ["mov ", r d, ", ", r q]
+                                  else emit (I.Un (I.MOV, r d, r q))
                                   ; done ())
                               fun shiftBy (opc, k) =
                                  if k > 0
-                                    then i [opc, " ", r 5, ", ", r 5, ", #", int k]
+                                    then ins (opc, r 5, r 5, immOp k)
                                  else ()
+                              (* x5 = the high half of n * x16 *)
+                              fun umulh () =
+                                 ins (I.UMULH, R.X 5, x n, regOp (R.X 16))
                            in
                               (case (log2 dv, signed) of
                                   (SOME k, false) =>
                                      (if isRem
-                                         then i ["and ", r d, ", ", r n, ", #",
-                                                 hex (dv - 1)]
-                                      else i ["lsr ", r d, ", ", r n, ", #", int k]
+                                         then ins (I.AND, r d, r n,
+                                                   Opnd.Imm (dv - 1))
+                                      else ins (I.LSR, r d, r n, immOp k)
                                       ; done ())
                                 | (SOME k, true) =>
                                      (* round toward zero: add 2^k - 1 to a
                                       * negative dividend
                                       *)
-                                     (i ["asr ", r 5, ", ", r n, ", #", int (N - 1)]
-                                      ; i ["add ", r 5, ", ", r n, ", ", r 5,
-                                           ", lsr #", int (N - k)]
+                                     (ins (I.ASR, r 5, r n, immOp (N - 1))
+                                      ; ins (I.ADD, r 5, r n, lsr (r 5, N - k))
                                       ; if isRem
-                                           then (i ["and ", r 5, ", ", r 5, ", #",
-                                                    hex (pow2 N - dv)]
-                                                 ; i ["sub ", r d, ", ", r n, ", ",
-                                                      r 5])
-                                        else i ["asr ", r d, ", ", r 5, ", #",
-                                                int k]
+                                           then (ins (I.AND, r 5, r 5,
+                                                      Opnd.Imm (pow2 N - dv))
+                                                 ; ins (I.SUB, r d, r n,
+                                                        regOp (r 5)))
+                                        else ins (I.ASR, r d, r 5, immOp k)
                                       ; done ())
                                 | (NONE, true) =>
                                      let
@@ -2218,16 +2261,18 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                      in
                                         movImm (16, m)
                                         ; if N = 64
-                                             then i ["smulh x5, ", x n, ", x16"]
-                                          else (i ["smull x5, w", int n, ", w16"]
-                                                ; i ["asr x5, x5, #32"])
+                                             then ins (I.SMULH, R.X 5, x n,
+                                                       regOp (R.X 16))
+                                          else (ins (I.SMULL, R.X 5, R.W n,
+                                                     regOp (R.W 16))
+                                                ; ins (I.ASR, R.X 5, R.X 5,
+                                                       immOp 32))
                                         ; if m >= pow2 (N - 1)
-                                             then i ["add ", r 5, ", ", r 5, ", ",
-                                                     r n]
+                                             then ins (I.ADD, r 5, r 5,
+                                                       regOp (r n))
                                           else ()
-                                        ; shiftBy ("asr", s - 1)
-                                        ; i ["add ", r 5, ", ", r 5, ", ", r n,
-                                             ", lsr #", int (N - 1)]
+                                        ; shiftBy (I.ASR, s - 1)
+                                        ; ins (I.ADD, r 5, r 5, lsr (r n, N - 1))
                                         ; finish 5
                                      end
                                 | (NONE, false) =>
@@ -2237,7 +2282,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                             * exact
                                             *)
                                            (movImm (16, pow2 64 div dv + 1)
-                                            ; i ["umulh x5, ", x n, ", x16"]
+                                            ; umulh ()
                                             ; finish 5)
                                      else
                                         let
@@ -2257,15 +2302,17 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                         in
                                            if m < pow2 64
                                               then (movImm (16, m)
-                                                    ; i ["umulh x5, ", x n, ", x16"]
-                                                    ; shiftBy ("lsr", s))
+                                                    ; umulh ()
+                                                    ; shiftBy (I.LSR, s))
                                            else
                                               (* m needs 65 bits *)
                                               (movImm (16, m - pow2 64)
-                                               ; i ["umulh x5, ", x n, ", x16"]
-                                               ; i ["sub x6, ", x n, ", x5"]
-                                               ; i ["add x5, x5, x6, lsr #1"]
-                                               ; shiftBy ("lsr", s - 1))
+                                               ; umulh ()
+                                               ; ins (I.SUB, R.X 6, x n,
+                                                      regOp (R.X 5))
+                                               ; ins (I.ADD, R.X 5, R.X 5,
+                                                      lsr (R.X 6, 1))
+                                               ; shiftBy (I.LSR, s - 1))
                                            ; finish 5
                                         end)
                               ; true
@@ -2286,21 +2333,27 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                 else v k
                      in
                         if r >= 32
-                           then (i ["fmov ", reg (k, ct), ", ", reg (r, ct)]
+                           then (emit (I.Un (I.FMOV, reg (k, ct), reg (r, ct)))
                                  ; k)
                         else r
                      end
                   val old = iv kOld
                   val new = iv kNew
                   val () = setAddr ()
+                  val (ldaxr, stlxr) =
+                     case size ct of
+                        1 => (I.LDAXRB, I.STLXRB)
+                      | 2 => (I.LDAXRH, I.STLXRH)
+                      | _ => (I.LDAXR, I.STLXR)
                in
-                  label "1"
-                  ; i ["ldaxr", sfx ct, " ", reg (5, ct), ", [x7]"]
-                  ; i ["cmp ", reg (5, ct), ", ", reg (old, ct)]
-                  ; i ["b.ne 2f"]
-                  ; i ["stlxr", sfx ct, " w6, ", reg (new, ct), ", [x7]"]
-                  ; i ["cbnz w6, 1b"]
-                  ; label "2"
+                  emit (I.LocalLabel 1)
+                  ; emit (I.Load (ldaxr, reg (5, ct), Addr.Base (R.X 7)))
+                  ; emit (I.Cmp (I.CMP, reg (5, ct), regOp (reg (old, ct))))
+                  ; emit (I.Bcond (Cond.NE, Tgt.Forward 2))
+                  ; emit (I.StoreX (stlxr, R.W 6, reg (new, ct),
+                                    Addr.Base (R.X 7)))
+                  ; emit (I.Cbnz (R.W 6, Tgt.Backward 1))
+                  ; emit (I.LocalLabel 2)
                   ; (case ct of
                         CType.Objptr =>
                            let
@@ -2313,16 +2366,17 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                                    @ List.map (!curPromoted, #2))
                            in
                               mov (0, obj, ct)
-                              ; i ["mov x1, x5"]
-                              ; commit ("str", saves)
+                              ; emit (I.Un (I.MOV, R.X 1, R.X 5))
+                              ; commit (str, saves)
                               ; flushCallerSaves (fn _ => true)
-                              ; i ["bl ", sym "Assignable_decheckObjptr"]
+                              ; emit (I.Bl (Lbl.Sym "Assignable_decheckObjptr"))
                               ; clearCache ()
-                              ; commit ("ldr", saves)
+                              ; commit (ldr, saves)
                               ; mov (d, 0, ct)
                            end
                       | _ => if isReal ct
-                                then i ["fmov ", reg (d, ct), ", ", reg (5, ct)]
+                                then emit (I.Un (I.FMOV, reg (d, ct),
+                                                 reg (5, ct)))
                              else mov (d, 5, ct))
                   ; done ()
                end
@@ -2335,37 +2389,39 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      val lg = case size ct of 1 => 0 | 2 => 1 | 4 => 2 | _ => 3
                   in
                      cas (ct, 2, 3, obj, fn () =>
-                          i ["add x7, ", x obj, ", ", x ix, ", lsl #", int lg])
+                          emit (I.Bin (I.ADD, R.X 7, x obj,
+                                       Opnd.Shifted (x ix, Opnd.LSL, lg))))
                   end
              | CPointer_add => addsub (true, ptr)
-             | CPointer_diff => bin ("sub", ptr, false)
-             | CPointer_equal => cmp ("cmp", ptr, "eq")
+             | CPointer_diff => bin (I.SUB, ptr, false)
+             | CPointer_equal => cmp (I.CMP, ptr, Cond.EQ)
              | CPointer_fromWord => move {dst = dst, src = a 0}
-             | CPointer_lt => cmp ("cmp", ptr, "lo")
+             | CPointer_lt => cmp (I.CMP, ptr, Cond.LO)
              | CPointer_sub => addsub (false, ptr)
              | CPointer_toWord => move {dst = dst, src = a 0}
-             | Real_Math_sqrt rs => un ("fsqrt", rct rs)
-             | Real_abs rs => un ("fabs", rct rs)
-             | Real_add rs => bin ("fadd", rct rs, false)
-             | Real_castToWord (rs, _) => un ("fmov", rct rs)
-             | Real_div rs => bin ("fdiv", rct rs, false)
-             | Real_equal rs => cmp ("fcmp", rct rs, "eq")
-             | Real_le rs => cmp ("fcmp", rct rs, "ls")
-             | Real_lt rs => cmp ("fcmp", rct rs, "mi")
-             | Real_mul rs => bin ("fmul", rct rs, false)
-             | Real_muladd rs => tern ("fmadd", rct rs)
-             | Real_mulsub rs => tern ("fnmsub", rct rs)
-             | Real_neg rs => un ("fneg", rct rs)
+             | Real_Math_sqrt rs => un (I.FSQRT, rct rs)
+             | Real_abs rs => un (I.FABS, rct rs)
+             | Real_add rs => bin (I.FADD, rct rs, false)
+             | Real_castToWord (rs, _) => un (I.FMOV, rct rs)
+             | Real_div rs => bin (I.FDIV, rct rs, false)
+             | Real_equal rs => cmp (I.FCMP, rct rs, Cond.EQ)
+             | Real_le rs => cmp (I.FCMP, rct rs, Cond.LS)
+             | Real_lt rs => cmp (I.FCMP, rct rs, Cond.MI)
+             | Real_mul rs => bin (I.FMUL, rct rs, false)
+             | Real_muladd rs => tern (I.FMADD, rct rs)
+             | Real_mulsub rs => tern (I.FNMSUB, rct rs)
+             | Real_neg rs => un (I.FNEG, rct rs)
              | Real_qequal rs =>
-                  (i ["fcmp ", reg (v 0, rct rs), ", ", reg (v 1, rct rs)]
-                   ; i ["cset w5, eq"]
-                   ; i ["csinc ", reg (d, dct), ", w5, wzr, vc"]
+                  (emit (I.Cmp (I.FCMP, reg (v 0, rct rs),
+                                regOp (reg (v 1, rct rs))))
+                   ; emit (I.Cset (R.W 5, Cond.EQ))
+                   ; emit (I.Sel (I.CSINC, reg (d, dct), R.W 5, R.WZR, Cond.VC))
                    ; done ())
-             | Real_rndToReal (rs, _) => un ("fcvt", rct rs)
+             | Real_rndToReal (rs, _) => un (I.FCVT, rct rs)
              | Real_rndToWord (rs, _, {signed}) =>
-                  un (if signed then "fcvtzs" else "fcvtzu", rct rs)
-             | Real_round rs => un ("frintx", rct rs)
-             | Real_sub rs => bin ("fsub", rct rs, false)
+                  un (if signed then I.FCVTZS else I.FCVTZU, rct rs)
+             | Real_round rs => un (I.FRINTX, rct rs)
+             | Real_sub rs => bin (I.FSUB, rct rs, false)
              | Ref_cas (SOME ct) =>
                   let
                      val obj = v 0
@@ -2373,26 +2429,26 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      cas (ct, 1, 2, obj, fn () => mov (7, obj, ptr))
                   end
              | Word_add ws => addsub (true, wct ws)
-             | Word_addCheckP z => chk ("add", "vs", "cs", z, [0, 1])
-             | Word_andb ws => logic ("and", ws)
-             | Word_castToReal (ws, _) => un ("fmov", wct ws)
-             | Word_equal ws => cmp ("cmp", wct ws, "eq")
+             | Word_addCheckP z => chk (Add, z, [0, 1])
+             | Word_andb ws => logic (I.AND, ws)
+             | Word_castToReal (ws, _) => un (I.FMOV, wct ws)
+             | Word_equal ws => cmp (I.CMP, wct ws, Cond.EQ)
              | Word_extdToWord (ws1, ws2, {signed}) =>
                   let
                      val r = v 0
                   in
                      if signed andalso bits ws1 < bits ws2
-                        then i ["sxt", bhw (bits ws1), " ", reg (d, wct ws2),
-                                ", w", int r]
+                        then emit (I.Un (sxt (bits ws1), reg (d, wct ws2),
+                                         R.W r))
                      else if bits ws1 = 64 andalso bits ws2 = 32
                         (* A truncation must clear the upper half of the
                          * register, even when d = r.
                          *)
-                        then i ["mov w", int d, ", w", int r]
+                        then emit (I.Un (I.MOV, R.W d, R.W r))
                      else mov (d, r, wct ws2)
                      ; done ()
                   end
-             | Word_lshift ws => shift ("lsl", ws, v 0)
+             | Word_lshift ws => shift (I.LSL, ws, v 0)
              | Word_lt (ws, {signed}) =>
                   let
                      (* a constant that can be an immediate *)
@@ -2412,30 +2468,30 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                            val r = reg (ext (k, ws, signed, false), wct ws)
                         in
                            if n >= 0
-                              then i ["cmp ", r, ", #", IntInf.toString n]
-                           else i ["cmn ", r, ", #", IntInf.toString (~ n)]
+                              then emit (I.Cmp (I.CMP, r, Opnd.Imm n))
+                           else emit (I.Cmp (I.CMN, r, Opnd.Imm (~ n)))
                            ; cset cond
                         end
                   in
                      case (imm 0, imm 1) of
                         (_, SOME n) =>
-                           cmpImm (0, n, if signed then "lt" else "lo")
+                           cmpImm (0, n, if signed then Cond.LT else Cond.LO)
                       | (SOME n, NONE) =>
-                           cmpImm (1, n, if signed then "gt" else "hi")
+                           cmpImm (1, n, if signed then Cond.GT else Cond.HI)
                       | _ =>
                            let
                               val r0 = ext (0, ws, signed, false)
                               val r1 = ext (1, ws, signed, false)
                            in
-                              i ["cmp ", reg (r0, wct ws), ", ",
-                                 reg (r1, wct ws)]
-                              ; cset (if signed then "lt" else "lo")
+                              emit (I.Cmp (I.CMP, reg (r0, wct ws),
+                                           regOp (reg (r1, wct ws))))
+                              ; cset (if signed then Cond.LT else Cond.LO)
                            end
                   end
              | Word_mul (ws, _) =>
                   let
                      val ct = wct ws
-                     fun default () = bin ("mul", ct, false)
+                     fun default () = bin (I.MUL, ct, false)
                   in
                      (* by 2^k or 2^k + 1: shift, or shift and add *)
                      case (a 1, bits ws >= 32) of
@@ -2446,22 +2502,23 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                            in
                               case (log2 n, log2 (n - 1)) of
                                  (SOME k, _) =>
-                                    (i ["lsl ", reg (d, ct), ", ", r, ", #",
-                                        int k]
+                                    (emit (I.Bin (I.LSL, reg (d, ct), r,
+                                                  immOp k))
                                      ; done ())
                                | (_, SOME k) =>
-                                    (i ["add ", reg (d, ct), ", ", r, ", ", r,
-                                        ", lsl #", int k]
+                                    (emit (I.Bin (I.ADD, reg (d, ct), r,
+                                                  Opnd.Shifted (r, Opnd.LSL,
+                                                                k)))
                                      ; done ())
                                | _ => default ()
                            end
                       | _ => default ()
                   end
-             | Word_mulCheckP z => chk ("mul", "", "", z, [0, 1])
-             | Word_neg ws => un ("neg", wct ws)
-             | Word_negCheckP z => chk ("neg", "vs", "cc", z, [0])
-             | Word_notb ws => un ("mvn", wct ws)
-             | Word_orb ws => logic ("orr", ws)
+             | Word_mulCheckP z => chk (Mul, z, [0, 1])
+             | Word_neg ws => un (I.NEG, wct ws)
+             | Word_negCheckP z => chk (Neg, z, [0])
+             | Word_notb ws => un (I.MVN, wct ws)
+             | Word_orb ws => logic (I.ORR, ws)
              | Word_quot (ws, {signed}) =>
                   if divConst (ws, signed, false) then ()
                   else
@@ -2469,8 +2526,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      val r0 = ext (0, ws, signed, false)
                      val r1 = ext (1, ws, signed, false)
                   in
-                     i [if signed then "sdiv " else "udiv ", reg (d, wct ws),
-                        ", ", reg (r0, wct ws), ", ", reg (r1, wct ws)]
+                     emit (I.Bin (if signed then I.SDIV else I.UDIV,
+                                  reg (d, wct ws), reg (r0, wct ws),
+                                  regOp (reg (r1, wct ws))))
                      ; done ()
                   end
              | Word_rem (ws, {signed}) =>
@@ -2481,35 +2539,38 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      val r0 = ext (0, ws, signed, false)
                      val r1 = ext (1, ws, signed, false)
                   in
-                     i [if signed then "sdiv " else "udiv ", reg (5, ct),
-                        ", ", reg (r0, ct), ", ", reg (r1, ct)]
-                     ; i ["msub ", reg (d, ct), ", ", reg (5, ct), ", ",
-                          reg (r1, ct), ", ", reg (r0, ct)]
+                     emit (I.Bin (if signed then I.SDIV else I.UDIV,
+                                  reg (5, ct), reg (r0, ct),
+                                  regOp (reg (r1, ct))))
+                     ; emit (I.Tern (I.MSUB, reg (d, ct), reg (5, ct),
+                                     reg (r1, ct), reg (r0, ct)))
                      ; done ()
                   end
              | Word_rndToReal (ws, _, {signed}) =>
-                  (i [if signed then "scvtf " else "ucvtf ", reg (d, dct), ", ",
-                      reg (ext (0, ws, signed, false), wct ws)]
+                  (emit (I.Un (if signed then I.SCVTF else I.UCVTF,
+                               reg (d, dct),
+                               reg (ext (0, ws, signed, false), wct ws)))
                    ; done ())
              | Word_rol ws =>
                   let
                      val ct = wct ws
                      val r0 = v 0
                   in
-                     i ["neg ", reg (5, ct), ", ", reg (v 1, ct)]
-                     ; i ["ror ", reg (d, ct), ", ", reg (r0, ct), ", ",
-                          reg (5, ct)]
+                     emit (I.Un (I.NEG, reg (5, ct), reg (v 1, ct)))
+                     ; emit (I.Bin (I.ROR, reg (d, ct), reg (r0, ct),
+                                    regOp (reg (5, ct))))
                      ; done ()
                   end
              | Word_ror ws =>
                   (case a 1 of
                       Operand.Const (Const.Word w) =>
-                         (i ["ror ", reg (d, wct ws), ", ", reg (v 0, wct ws),
-                             ", #",
-                             IntInf.toString (WordX.toIntInf w
-                                              mod IntInf.fromInt (bits ws))]
+                         (emit (I.Bin (I.ROR, reg (d, wct ws),
+                                       reg (v 0, wct ws),
+                                       Opnd.Imm
+                                       (WordX.toIntInf w
+                                        mod IntInf.fromInt (bits ws))))
                           ; done ())
-                    | _ => shift ("ror", ws, v 0))
+                    | _ => shift (I.ROR, ws, v 0))
              | Word_rshift (ws, {signed}) =>
                   if Vector.length args = 3
                      then
@@ -2521,17 +2582,17 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                | _ => Error.bug "VibeArmCodegen.primApp: extract"
                            val ct = wct ws
                         in
-                           i ["ubfx ", reg (d, ct), ", ", reg (v 0, ct), ", #",
-                              IntInf.toString (const 1), ", #",
-                              int (valOf (log2 (const 2 + 1)))]
+                           emit (I.Ubfx (reg (d, ct), reg (v 0, ct),
+                                         IntInf.toInt (const 1),
+                                         valOf (log2 (const 2 + 1))))
                            ; done ()
                         end
                   else
-                  shift (if signed then "asr" else "lsr", ws,
+                  shift (if signed then I.ASR else I.LSR, ws,
                          ext (0, ws, signed, false))
              | Word_sub ws => addsub (false, wct ws)
-             | Word_subCheckP z => chk ("sub", "vs", "cc", z, [0, 1])
-             | Word_xorb ws => logic ("eor", ws)
+             | Word_subCheckP z => chk (Sub, z, [0, 1])
+             | Word_xorb ws => logic (I.EOR, ws)
              | _ => Error.bug (concat ["VibeArmCodegen.primApp: ",
                                        Prim.toString prim])
          end
@@ -2549,9 +2610,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             SOME l' => Label.equals (l, l')
           | NONE => false
       fun goto l =
-         if isNext l andalso target l = blockLabel l
+         if isNext l andalso Lbl.equals (target l, blockLabel l)
             then ()
-         else i ["b ", target l]
+         else branch (target l)
       (* (Local allocator.)  Live transfers: what registers hold at the start
        * of a block is fixed by the first of its predecessors to be output;
        * the others conform.
@@ -2605,15 +2666,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             [] => ()
           | (d, s) :: _ =>
                let
-                  fun emit (d, s) =
+                  fun mv (d, s) =
                      if d >= 32
-                        then i ["fmov d", int (d - 32), ", d", int (s - 32)]
-                     else i ["mov ", x d, ", ", x s]
+                        then emit (I.Un (I.FMOV, R.D (d - 32), R.D (s - 32)))
+                     else emit (I.Un (I.MOV, x d, x s))
                in
                   case List.peek (ms, fn (d, _) =>
                                   not (List.exists (ms, fn (_, s) => s = d))) of
                      SOME (d, s) =>
-                        (emit (d, s)
+                        (mv (d, s)
                          ; parallelMove (List.keepAll (ms, fn (d', _) =>
                                                        d' <> d)))
                    | NONE =>
@@ -2621,7 +2682,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                         let
                            val t = if d >= 32 then 48 else 16
                         in
-                           emit (t, s)
+                           mv (t, s)
                            ; parallelMove (List.map (ms, fn (d', s') =>
                                                      (d', if s' = s then t
                                                           else s')))
@@ -2656,26 +2717,27 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
               (loads, fn (l, r) =>
                case l of
                   S (off, ct) =>
-                     i ["ldr", sfx ct, " ", reg (r, ct), ", ", mem (20, off, ct)]
+                     ldr (ct, r, mem (20, off, ct))
                 | T (ct, n) =>
                      let
                         val (b, off) = homeOf (ct, n)
                      in
-                        i ["ldr", sfx ct, " ", reg (r, ct), ", ",
-                           mem (b, off, ct)]
+                        ldr (ct, r, mem (b, off, ct))
                      end)
          end
       (* compensation blocks, for edges that need code: output at the end of
        * the chunk
        *)
-      val comps: (string * Label.t * rentry list) list ref = ref []
+      val comps: (Lbl.t * Label.t * rentry list) list ref = ref []
       (* the label to branch to in order to get to l *)
       fun edge l =
          if localRA andalso edgeNeedsCode l
             then
                let
-                  val name = concat [if symbols then sym "edge_" else "Ledge_",
-                                     self, "_", int (List.length (!comps))]
+                  val name =
+                     (if symbols then Lbl.Sym else Lbl.Plain)
+                     (concat [if symbols then "edge_" else "Ledge_",
+                              self, "_", int (List.length (!comps))])
                in
                   List.push
                   (comps, (name, l,
@@ -2711,8 +2773,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                                         reg = r))) of
                                    NONE => ()
                                  | SOME r =>
-                                      (i ["ldr", sfx ct, " ", reg (r, ct), ", ",
-                                          mem (20, off, ct)]
+                                      (ldr (ct, r, mem (20, off, ct))
                                        ; List.push (regs, {reg = r, loc = S k,
                                                            dirty = ref false})))
                       else ()
@@ -2726,27 +2787,24 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          Vector.fold (blocks, 0, fn (Block.T {statements, ...}, n) =>
                       n + 1 + Vector.length statements) > 8000
       datatype cond =
-         CC of string           (* condition code *)
-       | Z of string * bool     (* register is (true) or isn't (false) zero *)
+         CC of Cond.t           (* condition code *)
+       | Z of R.t * bool        (* register is (true) or isn't (false) zero *)
       val negate =
-         fn CC c =>
-               CC (case c of
-                      "eq" => "ne" | "ne" => "eq" | "lo" => "hs" | "hs" => "lo"
-                    | "lt" => "ge" | "ge" => "lt" | "vs" => "vc" | "vc" => "vs"
-                    | "cs" => "cc" | "cc" => "cs" | "mi" => "pl" | "pl" => "mi"
-                    | "ls" => "hi" | "hi" => "ls" | "gt" => "le" | "le" => "gt"
-                    | _ => Error.bug "VibeArmCodegen.negate")
+         fn CC c => CC (Cond.negate c)
           | Z (r, b) => Z (r, not b)
-      fun bcond (c, l: string) =
+      fun bcond (c, l: Lbl.t) =
          let
-            fun br (c, l) =
-               case c of
-                  CC c => i ["b.", c, " ", l]
-                | Z (r, b) => i [if b then "cbz " else "cbnz ", r, ", ", l]
+            fun br (c, t) =
+               emit (case c of
+                        CC c => I.Bcond (c, t)
+                      | Z (r, true) => I.Cbz (r, t)
+                      | Z (r, false) => I.Cbnz (r, t))
          in
             if far
-               then (br (negate c, "1f"); i ["b ", l]; label "1")
-            else br (c, l)
+               then (br (negate c, Tgt.Forward 1)
+                     ; branch l
+                     ; emit (I.LocalLabel 1))
+            else br (c, Tgt.Label l)
          end
       (* if c then goto l else goto l' *)
       fun twoWay (c, l, l') =
@@ -2784,8 +2842,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                    * which is what load would read).
                    *)
                   if spilled andalso not localRA andalso old
-                     then i ["ldr", sfx ct, " ", reg (d, ct), ", ",
-                             memOf (dst, 3, ct)]
+                     then ldr (ct, d, memOf (dst, 3, ct))
                   else ()
                   ; set d
                   ; if spilled then store (dst, d) else ()
@@ -2801,17 +2858,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                   val s = value (src, scratch (ct, 1), 3)
                in
                   setDst (dst, true, fn d =>
-                          i [if isReal ct then "fcsel " else "csel ",
-                             reg (d, wide), ", ", reg (s, wide), ", ",
-                             reg (d, wide), ", ", c])
+                          emit (I.Sel (if isReal ct then I.FCSEL else I.CSEL,
+                                       reg (d, wide), reg (s, wide),
+                                       reg (d, wide), c)))
                end
             (* the moves of an arm are output in the context of its block *)
             fun arm (l, moves, c) =
                if List.isEmpty moves then ()
                else (enterBlock l; List.foreach (moves, select c))
-            val c' = case negate (CC c) of
-                        CC c' => c'
-                      | _ => Error.bug "VibeArmCodegen.selects"
+            val c' = Cond.negate c
             fun bool z =
                case z of
                   Operand.Const (Const.Word w) =>
@@ -2829,8 +2884,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                           if b <> b'
                              then (enterBlock caseLabel
                                    ; setDst (dst, false, fn d =>
-                                             i ["cset ", reg (d, CType.Word64),
-                                                ", ", if b then c else c'])
+                                             emit (I.Cset
+                                                   (reg (d, CType.Word64),
+                                                    if b then c else c')))
                                    ; enterBlock defaultLabel
                                    ; defined dst')
                           else (arm (caseLabel, caseMoves, c)
@@ -2842,7 +2898,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             ; gotoL join
          end
       (* return x0 to the trampoline *)
-      fun leaveChunk () = (flushFrontier (); flushStackTop (); i ["b ", leave])
+      fun leaveChunk () = (flushFrontier (); flushStackTop (); branch leave)
       (* Transfers between chunks don't go through the trampoline: a
        * transfer to a known entry block of another chunk branches to its
        * entry stub.  This relies on every chunk running in the same frame
@@ -2851,7 +2907,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
       fun jump l =
          if ChunkLabel.equals (labelChunk l, chunkLabel)
             then gotoL l
-         else i ["b ", sym (entryStub l)]
+         else branch (Lbl.Sym (entryStub l))
       fun push (return, size) =
          let
             val size = Bytes.toInt size
@@ -2860,7 +2916,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             clearCache ()
             ; addImm (20, 20, size)
             ; movInt (17, labelIndex return)
-            ; i ["str x17, [x20, #-8]"]
+            ; emit (I.Store (I.STR, R.X 17, Addr.Offset (R.X 20, ~8)))
             ; (case labelBlock return of
                   Block.T {kind, ...} =>
                      (case Option.map (Kind.frameInfoOpt kind,
@@ -2871,7 +2927,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                val pst = gcField GCField.PromoStackTop
                             in
                                load (pst, 17, 17)
-                               ; i ["str x20, [x17], #8"]
+                               ; emit (I.Store (I.STR, R.X 20,
+                                                Addr.PostIndex (R.X 17, 8)))
                                ; store (pst, 17)
                             end
                        | _ => ()))
@@ -2889,21 +2946,21 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                       * directReturn)
                       *)
                      load (pst, 5, 3)
-                     ; i ["sub x5, x5, #8"]
+                     ; emit (I.Bin (I.SUB, R.X 5, R.X 5, immOp 8))
                      ; store (pst, 5)
                      ; load (psb, 6, 3)
-                     ; i ["cmp x6, x5"]
-                     ; i ["b.ls 1f"]
+                     ; emit (I.Cmp (I.CMP, R.X 6, regOp (R.X 5)))
+                     ; emit (I.Bcond (Cond.LS, Tgt.Forward 1))
                      ; store (psb, 5)
-                     ; label "1"
+                     ; emit (I.LocalLabel 1)
                   end
             else ())
       (* transfer to the entry block whose index is on top of the stack *)
       fun indJump () =
-         (i ["ldr x16, [x20, #-8]"]
+         (emit (I.Load (I.LDR, R.X 16, Addr.Offset (R.X 20, ~8)))
           ; symAddr (17, entryTable, {got = false})
-          ; i ["ldr x16, [x17, x16, lsl #3]"]
-          ; i ["br x16"])
+          ; emit (I.Load (I.LDR, R.X 16, Addr.Index (R.X 17, R.X 16, 3)))
+          ; emit (I.Br (R.X 16)))
       fun rtrans rsTo =
          case rsTo of
             l :: rsTo' =>
@@ -2950,9 +3007,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
          case (target, Vector.toList args, retTy, return) of
             (CFunction.Target.Direct name, [z], SOME ct,
              SOME {return, size = NONE}) =>
-               (case List.peek ([("_realCeil", "frintp "),
-                                 ("_realFloor", "frintm "),
-                                 ("_realTrunc", "frintz ")], fn (f, _) =>
+               (case List.peek ([("_realCeil", I.FRINTP),
+                                 ("_realFloor", I.FRINTM),
+                                 ("_realTrunc", I.FRINTZ)], fn (f, _) =>
                                 List.exists (["Real32", "Real64"], fn r =>
                                              name = r ^ f)) of
                    NONE => false
@@ -2961,11 +3018,11 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                          val r = scratch (ct, 0)
                       in
                          if directReturn return
-                            then i [opc, reg (32, ct), ", ",
-                                    reg (value (z, r, 16), ct)]
+                            then emit (I.Un (opc, reg (32, ct),
+                                             reg (value (z, r, 16), ct)))
                          else (load (z, r, 16)
-                               ; i [opc, reg (r, ct), ", ", reg (r, ct)]
-                               ; i ["str ", reg (r, ct), ", [sp, #8]"])
+                               ; emit (I.Un (opc, reg (r, ct), reg (r, ct)))
+                               ; str (ct, r, Addr.Offset (R.SP, 8)))
                          ; gotoL return
                          ; true
                       end)
@@ -2991,7 +3048,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                             fn e => segIn (return, e, false))
                                   @ List.map (!curPromoted, #2))
                 | _ => []
-            val () = commit ("str", saves)
+            val () = commit (str, saves)
             val () =
                let
                   val live = case return of
@@ -3031,13 +3088,12 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                    val () = load (z, r, 16)
                    val () =
                       case ct of
-                         CType.Int8 => i ["sxtb w", int r, ", w", int r]
-                       | CType.Int16 => i ["sxth w", int r, ", w", int r]
+                         CType.Int8 => emit (I.Un (I.SXTB, R.W r, R.W r))
+                       | CType.Int16 => emit (I.Un (I.SXTH, R.W r, R.W r))
                        | _ => ()
                 in
                    if loc >= 64
-                      then i ["str", sfx ct, " ", reg (r, ct), ", ",
-                              mem (31, loc - 64, ct)]
+                      then str (ct, r, mem (31, loc - 64, ct))
                    else ()
                 end)
             val () = Option.app (fptr, fn z => load (z, 16, 16))
@@ -3051,13 +3107,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             val () =
                case target of
                   Direct name =>
-                     i ["bl ",
-                        sym (case name of
-                                (* static inline wrappers in c-chunk.h *)
-                                "GC_readBarrier" => "Assignable_readBarrier"
-                              | "GC_writeBarrier" => "Assignable_writeBarrier"
-                              | _ => name)]
-                | Indirect => i ["blr x16"]
+                     emit
+                     (I.Bl
+                      (Lbl.Sym
+                       (case name of
+                           (* static inline wrappers in c-chunk.h *)
+                           "GC_readBarrier" => "Assignable_readBarrier"
+                         | "GC_writeBarrier" => "Assignable_writeBarrier"
+                         | _ => name)))
+                | Indirect => emit (I.Blr (R.X 16))
             val () = clearCache ()
             val () = dropCallerSaves ()
             val () = addImm (31, 31, stk)
@@ -3068,10 +3126,11 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                      if directReturn return
                         then ()
                      else if isReal ct
-                             then i ["str d0, [sp, #8]"]
-                          else i ["str x0, [sp]"]
+                             then emit (I.Store (I.STR, R.D 0,
+                                                 Addr.Offset (R.SP, 8)))
+                          else emit (I.Store (I.STR, R.X 0, Addr.Base R.SP))
                 | (SOME _, NONE) => ()
-            val () = commit ("ldr", saves)
+            val () = commit (ldr, saves)
             val () =
                if CFunction.modifiesFrontier func
                   then move {dst = Operand.Frontier,
@@ -3086,7 +3145,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
             if CFunction.maySwitchThreadsFrom func
                then indJump ()
             else (case return of
-                     NONE => (movInt (0, ~2); i ["b ", leave])
+                     NONE => (movInt (0, ~2); branch leave)
                    | SOME {return, ...} => gotoL return)
          end
       fun outputTransfer t =
@@ -3104,9 +3163,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           | Transfer.Goto l => gotoL l
           | Transfer.Raise {raisesTo} =>
                (clearCache ()
-                ; i ["add x20, ",
-                   x (value (gcField GCField.StackBottom, 0, 3)), ", ",
-                   x (value (gcField GCField.ExnStack, 1, 3))]
+                ; emit (I.Bin
+                        (I.ADD, R.X 20,
+                         x (value (gcField GCField.StackBottom, 0, 3)),
+                         regOp (x (value (gcField GCField.ExnStack, 1, 3)))))
                 ; rtrans raisesTo)
           | Transfer.Return {returnsTo} => rtrans returnsTo
           | Transfer.Spork {cont, ...} => gotoL cont
@@ -3122,9 +3182,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                         if n = 0
                            then Z (x r, true)
                         else (if n < 4096
-                                 then i ["cmp ", x r, ", #", IntInf.toString n]
-                              else (movImm (16, n); i ["cmp ", x r, ", x16"])
-                              ; CC "eq")
+                                 then emit (I.Cmp (I.CMP, x r, Opnd.Imm n))
+                              else (movImm (16, n)
+                                    ; emit (I.Cmp (I.CMP, x r, regOp (R.X 16))))
+                              ; CC Cond.EQ)
                      end
                in
                   case cases of
@@ -3135,8 +3196,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                selects (case eq w of
                                            CC c => c
                                          | Z (r, b) =>
-                                              (i ["cmp ", r, ", #0"]
-                                               ; if b then "eq" else "ne"),
+                                              (emit (I.Cmp (I.CMP, r, immOp 0))
+                                               ; if b then Cond.EQ
+                                                 else Cond.NE),
                                         z))
                    | _ =>
                         let
@@ -3157,33 +3219,41 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                     val span = IntInf.toInt (hi - lo)
                                     val () = Int.inc jumpTables
                                     val table =
-                                       concat ["Ljump_", self, "_",
-                                               int (!jumpTables)]
+                                       Lbl.Plain
+                                       (concat ["Ljump_", self, "_",
+                                                int (!jumpTables)])
                                  in
                                     if lo < 4096
                                        then addImm (16, r, ~ (IntInf.toInt lo))
                                     else (movImm (17, lo)
-                                          ; i ["sub x16, ", x r, ", x17"])
+                                          ; emit (I.Bin (I.SUB, R.X 16, x r,
+                                                         regOp (R.X 17))))
                                     ; if span < 4096
-                                         then i ["cmp x16, #", int span]
+                                         then emit (I.Cmp (I.CMP, R.X 16,
+                                                           immOp span))
                                       else (movInt (17, span)
-                                            ; i ["cmp x16, x17"])
-                                    ; bcond (CC "hi", edge default)
-                                    ; i ["adr x17, ", table]
-                                    ; i ["ldrsw x16, [x17, x16, lsl #2]"]
-                                    ; i ["add x17, x17, x16"]
-                                    ; i ["br x17"]
+                                            ; emit (I.Cmp (I.CMP, R.X 16,
+                                                           regOp (R.X 17))))
+                                    ; bcond (CC Cond.HI, edge default)
+                                    ; emit (I.Adr (R.X 17, table))
+                                    ; emit (I.Load (I.LDRSW, R.X 16,
+                                                    Addr.Index (R.X 17, R.X 16,
+                                                                2)))
+                                    ; emit (I.Bin (I.ADD, R.X 17, R.X 17,
+                                                   regOp (R.X 16)))
+                                    ; emit (I.Br (R.X 17))
                                     ; label table
                                     ; Int.for
                                       (0, span + 1, fn k =>
-                                       i [".long ",
-                                          edge
-                                          (case List.peek
-                                                (cases', fn (m, _) =>
-                                                 m = lo + IntInf.fromInt k) of
-                                              SOME (_, l) => l
-                                            | NONE => default),
-                                          " - ", table])
+                                       emit
+                                       (I.Long
+                                        (edge
+                                         (case List.peek
+                                               (cases', fn (m, _) =>
+                                                m = lo + IntInf.fromInt k) of
+                                             SOME (_, l) => l
+                                           | NONE => default),
+                                         table)))
                                  end
                            else (List.foreach (cases, fn (w, l) =>
                                                bcond (eq w, edge l))
@@ -3557,11 +3627,14 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                      ...}) =
          (curLabel := l
           ; if Kind.isEntry kind
-             then (i [".globl ", sym (entryStub l)]
-                   ; i [if darwin then ".private_extern " else ".hidden ",
-                        sym (entryStub l)]
-                   ; label (sym (entryStub l))
-                   ; addImm (31, 29, ~ frameSize))
+             then let
+                     val stub = Lbl.Sym (entryStub l)
+                  in
+                     emit (I.Globl stub)
+                     ; emit (I.Hidden stub)
+                     ; label stub
+                     ; addImm (31, 29, ~ frameSize)
+                  end
           else ()
           ; label (blockLabel l)
           ; region := blockRegion l
@@ -3588,8 +3661,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                              let
                                 val d = dstReg dst
                              in
-                                i ["ldr", sfx ct, " ", reg (d, ct),
-                                   if isReal ct then ", [sp, #8]" else ", [sp]"]
+                                ldr (ct, d,
+                                     if isReal ct
+                                        then Addr.Offset (R.SP, 8)
+                                     else Addr.Base R.SP)
                                 ; store (dst, d)
                              end
                           ; defined dst
@@ -3626,9 +3701,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                                       selects
                                       (if Label.equals (l, caseLabel)
                                           then c
-                                       else (case negate (CC c) of
-                                                CC c => c
-                                              | _ => Error.bug "VibeArmCodegen"),
+                                       else Cond.negate c,
                                        z))))
             end)
 
@@ -3718,8 +3791,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                 ; outputBlock b
                 ; outputBlocks bs)
       fun pair (opc, (r1, r2), k) =
-         i [opc, reg (r1, CType.Word64), ", ", reg (r2, CType.Word64),
-            ", [sp, #", int (16 * (k + 1)), "]"]
+         emit (I.Pair (opc, reg (r1, CType.Word64), reg (r2, CType.Word64),
+                       Addr.Offset (R.SP, 16 * (k + 1))))
       val entries =
          List.insertionSort
          (Vector.fold (blocks, [], fn (Block.T {kind, label, ...}, es) =>
@@ -3732,26 +3805,27 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
        *)
       val () = List.foreach (entries, fn (_, l) => (trace l; drain ()))
    in
-      print "\t.text\n\t.p2align 2\n"
-      ; i [".globl ", sym self]
-      ; i [if darwin then ".private_extern " else ".hidden ", sym self]
-      ; label (sym self)
-      ; i ["stp x29, x30, [sp, #-160]!"]
-      ; i ["mov x29, sp"]
-      ; List.foreachi (saved, fn (k, rs) => pair ("stp ", rs, k))
-      ; i ["mov x19, x0"]
-      ; i ["mov x20, x1"]
-      ; i ["mov x21, x2"]
+      emit (I.Section Asm.Section.Text)
+      ; emit (I.P2align 2)
+      ; emit (I.Globl (Lbl.Sym self))
+      ; emit (I.Hidden (Lbl.Sym self))
+      ; label (Lbl.Sym self)
+      ; emit (I.Pair (I.STP, R.X 29, R.X 30, Addr.PreIndex (R.SP, ~160)))
+      ; emit (I.Un (I.MOV, R.X 29, R.SP))
+      ; List.foreachi (saved, fn (k, rs) => pair (I.STP, rs, k))
+      ; emit (I.Un (I.MOV, R.X 19, R.X 0))
+      ; emit (I.Un (I.MOV, R.X 20, R.X 1))
+      ; emit (I.Un (I.MOV, R.X 21, R.X 2))
       (* jump to the entry block with index x3 *)
       ; symAddr (17, entryTable, {got = false})
-      ; i ["ldr x16, [x17, x3, lsl #3]"]
-      ; i ["br x16"]
+      ; emit (I.Load (I.LDR, R.X 16, Addr.Index (R.X 17, R.X 3, 3)))
+      ; emit (I.Br (R.X 16))
       (* return x0 to the trampoline *)
       ; label leave
-      ; i ["mov sp, x29"]
-      ; List.foreachi (saved, fn (k, rs) => pair ("ldp ", rs, k))
-      ; i ["ldp x29, x30, [sp], #160"]
-      ; i ["ret"]
+      ; emit (I.Un (I.MOV, R.SP, R.X 29))
+      ; List.foreachi (saved, fn (k, rs) => pair (I.LDP, rs, k))
+      ; emit (I.Pair (I.LDP, R.X 29, R.X 30, Addr.PostIndex (R.SP, 160)))
+      ; emit I.Ret
       ; outputBlocks (List.rev (!order))
       (* the preheaders (out of line, so that nothing falls through them):
        * load the promoted stack slots
@@ -3768,9 +3842,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
                         case webHome w of
                            NONE => ()
                          | SOME r =>
-                              i ["ldr", sfx ct, " ", reg (r, ct), ", ",
-                                 mem (20, off, ct)])
-                     ; i ["b ", blockLabel l])
+                              ldr (ct, r, mem (20, off, ct)))
+                     ; branch (blockLabel l))
             else ()
          end)
       (* the compensation blocks of the local register allocator *)
@@ -3780,7 +3853,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax}, print,
           ; regs := state
           ; pinned := []
           ; conform l
-          ; i ["b ", blockLabel l]))
+          ; branch (blockLabel l)))
+      ; List.rev (!code)
    end
 
 fun output {program as Program.T {chunks, frameInfos, ...}, outputC,
@@ -3792,8 +3866,6 @@ fun output {program as Program.T {chunks, frameInfos, ...}, outputC,
       val () =
          let
             val {print, done, ...} = outputS ()
-            val darwin = !Control.Target.os = MLton.Platform.OS.Darwin
-            fun sym s = if !Control.labelsHaveExtra_ then "_" ^ s else s
             val entries = Array.new (Vector.length frameInfos, NONE)
             val () =
                List.foreach
@@ -3806,23 +3878,17 @@ fun output {program as Program.T {chunks, frameInfos, ...}, outputC,
                           FrameInfo.index (valOf (Kind.frameInfoOpt kind)),
                           SOME label)
                  else ()))
+            val table = Lbl.Sym entryTable
+            val code = ref [I.Label table, I.Hidden table, I.Globl table,
+                            I.P2align 3, I.Section Asm.Section.RelRo]
+            val () =
+               Array.foreach
+               (entries, fn lo =>
+                List.push (code,
+                           I.Quad (Option.map (lo, fn l =>
+                                               Lbl.Sym (entryStub l)))))
          in
-            print (if darwin
-                      then "\t.section __DATA,__const\n"
-                   else "\t.section .data.rel.ro,\"aw\"\n")
-            ; print "\t.p2align 3\n"
-            ; print (concat ["\t.globl ", sym entryTable, "\n"])
-            ; print (concat [if darwin then "\t.private_extern "
-                             else "\t.hidden ",
-                             sym entryTable, "\n"])
-            ; print (concat [sym entryTable, ":\n"])
-            ; Array.foreach
-              (entries, fn lo =>
-               print (concat ["\t.quad ",
-                              case lo of
-                                 NONE => "0"
-                               | SOME l => sym (entryStub l),
-                              "\n"]))
+            Asm.output (List.rev (!code), print)
             ; done ()
          end
    in
@@ -3836,9 +3902,10 @@ fun output {program as Program.T {chunks, frameInfos, ...}, outputC,
           in
              List.foreach
              (chunks, fn chunk =>
-              outputChunk (chunk, print, {labelBlock = labelBlock,
-                                          labelChunk = labelChunk,
-                                          labelIndex = labelIndex}))
+              Asm.output (outputChunk (chunk, {labelBlock = labelBlock,
+                                               labelChunk = labelChunk,
+                                               labelIndex = labelIndex}),
+                          print))
              ; done ()
           end)}
    end
