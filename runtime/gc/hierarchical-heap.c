@@ -1157,8 +1157,11 @@ void HM_HH_updateValues(GC_thread thread, pointer frontier) {
   /* Count the program's allocation here: every frontier advance in the
    * thread's current chunk, whether by the mutator (synced on entry to the
    * runtime) or by the runtime on the program's behalf (sequences), is
-   * recorded through this function. Chunks the runtime uses for itself
-   * (to-space, work lists, metadata, stacks) are not. */
+   * recorded through this function. Stack growth is counted where the stack
+   * grows (growStackCurrent); new threads' stacks are counted with the
+   * frontier, or in newThreadWithHeap.
+   * Chunks the runtime uses for itself (to-space, work lists, metadata, the
+   * stack snapshots of concurrent collections) are not counted. */
   HM_chunk chunk = thread->currentChunk;
   pointer oldFrontier = HM_getChunkFrontier(chunk);
   if (oldFrontier < frontier && frontier <= HM_getChunkLimit(chunk)) {
