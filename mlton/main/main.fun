@@ -1214,7 +1214,25 @@ fun commandLine (_: string, args: string list): unit =
                                 " target"])
          else ()
       val () =
-         Control.labelsHaveExtra_ := (case (targetOS, targetArch) of
+         if !codegen = VibeArmCodegen
+            then
+               let
+                  (* in yellow, if it goes to a terminal *)
+                  val (on, off) =
+                     if (Posix.ProcEnv.isatty Posix.FileSys.stderr
+                         handle _ => false)
+                        then ("\027[33m", "\027[0m")
+                     else ("", "")
+               in
+                  Out.output
+                  (Out.error,
+                   concat [on,
+                           "Warning: the vibe-arm codegen is an experimental native code generator for ARM64/AArch64. It can generate more efficient code than `-codegen c`, but has not been tested as thoroughly.",
+                           off, "\n"])
+               end
+         else ()
+      val () =
+         Control.labelsHaveExtra_ :=(case (targetOS, targetArch) of
                                          (Cygwin, X86) => true
                                        | (Darwin, _) => true
                                        | (MinGW, X86) => true
