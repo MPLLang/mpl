@@ -36,9 +36,9 @@ if [ ! -d "$targets/fakelinux" ]; then
   echo linux > "$targets/fakelinux/os"
 fi
 
-all="graph local sym linux linuxlocal"
-most="graph local"
-rest="sym linux linuxlocal"
+all="plain sym linux"
+most="plain"
+rest="sym linux"
 jobs="$out/jobs.txt"
 : > "$jobs"
 
@@ -77,11 +77,9 @@ run () {
   IFS='|' read -r set name file cfg <<< "$1"
   flags=(-codegen vibe-arm)
   case $cfg in
-    graph) ;;
-    local) flags+=(-vibe-arm-regalloc local) ;;
+    plain) ;;
     sym) flags+=(-vibe-arm-symbols true) ;;
     linux) flags+=(-target fakelinux) ;;
-    linuxlocal) flags+=(-target fakelinux -vibe-arm-regalloc local) ;;
   esac
   case $set in
     reg) ;;

@@ -5,23 +5,13 @@
 (* Access to the operands of the Machine IR, for the vibe-arm codegen: where
  * the value of an operand is as a block is output (a register, the frame,
  * the ML stack, the heap), and the instructions that read and write it.
- * That is what differs between the two register allocators, and each
- * implements the operations here (the type t); what uses them (the
- * primitives, the transfers) is the same for both.
+ * What uses it (the primitives, the transfers) doesn't know which register,
+ * if any, an operand is in.
  *
- *  - The graph allocator (VibeArmAccessGraph): a temporary is in the
- *    register of its web (see VibeArmAnalysis), or, if it has none, in the
- *    frame.  Within a block, a stack slot that is read more than once is
- *    cached in a register that no web is using there.
- *  - The local allocator (VibeArmAccessLocal): every temporary has a home
- *    in the frame, and the registers are a cache of temporaries and stack
- *    slots that is filled on demand as a block is output.  What the
- *    registers hold at the start of a block is fixed by the first of its
- *    predecessors to be output; the other predecessors conform, with code
- *    on the edge if need be.
- *
- * What the two share is here too: the frame, and the reading of an operand
- * given where the allocator says that it is.
+ * A temporary is in the register of its web (see VibeArmAnalysis), or, if
+ * it has none, in the frame.  A stack slot that is promoted in a loop is in
+ * the register of its web.  Within a block, a stack slot that is read more
+ * than once is cached in a register that no web is using there.
  *
  * The frame of a chunk: [sp] and [sp, #8] hold the int/real result of the
  * last C call; then the temporaries; then an area in which to save the
@@ -29,9 +19,8 @@
  *
  * The operations are those of one chunk, and they have state: they must be
  * called in the order that the code is output.  For each block:
- * startBlock; then, for each item k (the transfer is the last),
- * beginItem k, the reads and writes of the item, "defined" for each of its
- * destinations, and endItem.
+ * startBlock; then, for each item, the reads and writes of the item, and
+ * "defined" for each of its destinations.
  *
  * A register argument or result is a number: 0-31 are x0-x30,sp; 32-63 are
  * d0-d31.
@@ -63,8 +52,6 @@ signature VIBE_ARM_ACCESS =
            * in the block of the switch.
            *)
           enterBlock: Emit.Machine.Label.t -> unit,
-          beginItem: int -> unit,
-          endItem: unit -> unit,
           (* the definition of an operand has been output *)
           defined: Emit.Machine.Operand.t -> unit,
 
@@ -113,72 +100,11 @@ signature VIBE_ARM_ACCESS =
            * of the caller-save registers that hold anything around it.
            * The caller sets up the arguments and takes the result.
            *)
-          callRuntime: string -> unit,
+          callRuntime: string -> unit}
 
-          (* (With the graph allocator, edges never need code.)
-           *
-           * Does the edge from here to a block need code, to make the
-           * registers be what the block expects?  If nothing has fixed
-           * what it expects, this does: what they hold now.
-           *)
-          edgeNeedsCode: Emit.Machine.Label.t -> bool,
-          (* Before going to a block at the end of this one: output that
-           * code.
-           *)
-          beforeGoto: Emit.Machine.Label.t -> unit,
-          (* For an edge that isn't the end of the block (an arm of a
-           * switch): the result outputs that code, as it is from here,
-           * when it is called; the code goes in a block of its own.
-           *)
-          edgeCode: Emit.Machine.Label.t -> unit -> unit}
-
-      (* What an allocator is given, to make a t for a chunk. *)
-      type args = {analysis: Items.Analysis.t,
-                   emit: Emit.t,
-                   labelIndex: Emit.Machine.Label.t -> int,
-                   (* the number of temporaries of each type *)
-                   tempsMax: Emit.Machine.CType.t -> int}
-
-      (* What follows is for the allocators. *)
-
-      (* The frame of a chunk. *)
-      val frame:
-         {emit: Emit.t,
-          tempsMax: Emit.Machine.CType.t -> int}
-         -> {frameSize: int,
-             (* the home of temporary n of a type: a base register and an
-              * offset
-              *)
-             homeOf: Emit.Machine.CType.t * int -> int * int,
-             setSpAdj: int -> unit,
-             (* commit (f, rs): store or load (f is str or ldr of Emit)
-              * the caller-save registers rs to or from the save area
-              *)
-             commit: ((Emit.Machine.CType.t * int * Emit.Arm64.Addr.t
-                       -> unit) * int list) -> unit}
-
-      (* Reading an operand, given where the allocator has it. *)
-      val operands:
-         {emit: Emit.t,
-          labelIndex: Emit.Machine.Label.t -> int,
-          homeOf: Emit.Machine.CType.t * int -> int * int,
-          (* the register that an operand is in, if it is in one *)
-          home: Emit.Machine.Operand.t -> int option,
-          (* Put an operand that is in memory in a register to keep it
-           * there, if that is worth it.
-           *)
-          cacheIn: Emit.Machine.Operand.t -> int option}
-         -> {(* as in t *)
-             value: Emit.Machine.Operand.t * int * int -> int,
-             load: Emit.Machine.Operand.t * int * int -> unit,
-             (* memOf (z, t, ct): an addressing mode for a memory operand
-              * that is accessed at type ct.  May clobber x<t> and up.
-              *)
-             memOf: (Emit.Machine.Operand.t * int * Emit.Machine.CType.t
-                     -> Emit.Arm64.Addr.t),
-             (* setReg (ct, h, r): set register h, which is where an
-              * operand of type ct lives, to the value in r; a narrow
-              * value is kept zero-extended.
-              *)
-             setReg: Emit.Machine.CType.t * int * int -> unit}
+      val new: {analysis: Items.Analysis.t,
+                emit: Emit.t,
+                labelIndex: Emit.Machine.Label.t -> int,
+                (* the number of temporaries of each type *)
+                tempsMax: Emit.Machine.CType.t -> int} -> t
    end

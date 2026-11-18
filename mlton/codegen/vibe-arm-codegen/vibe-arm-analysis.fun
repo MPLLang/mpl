@@ -168,8 +168,7 @@ type t =
     segIn: Label.t * Temp.t -> Web.t}
 
 fun analyze {blocks: Block.t vector,
-             labelBlock: Label.t -> Block.t,
-             localRA: bool}: t =
+             labelBlock: Label.t -> Block.t}: t =
    let
       val {get = labelInfo: Label.t -> {near: Label.t list ref,
                                         (* is a loop header? *)
@@ -1100,76 +1099,72 @@ fun analyze {blocks: Block.t vector,
        * interferes with fewer webs than there are registers).
        *)
       val () =
-         if localRA then ()
-         else
-            List.foreach
-            (QuickSort.sortList (!affinities, fn ((_, _, n), (_, _, n')) =>
-                                 n >= n'),
-             fn (w, w', _) =>
-             let
-                val w as W {ct, adj, noReg, ...} = find w
-                val w' as W {ct = ct', adj = adj', noReg = noReg', ...} = find w'
-             in
-                if sameWeb (w, w')
-                   orelse isReal ct <> isReal ct'
-                   orelse !noReg orelse !noReg'
-                   orelse List.exists (!adj, fn w'' => sameWeb (find w'', w'))
-                   orelse (List.length
-                           (List.keepAll
-                            (distinct (!adj @ !adj'), fn W {ct = ct'', ...} =>
-                             isReal ct'' = isReal ct))
-                           >= (if isReal ct then 21 else 15))
-                   then ()
-                else union (w, w')
-             end)
+         List.foreach
+         (QuickSort.sortList (!affinities, fn ((_, _, n), (_, _, n')) =>
+                              n >= n'),
+          fn (w, w', _) =>
+          let
+             val w as W {ct, adj, noReg, ...} = find w
+             val w' as W {ct = ct', adj = adj', noReg = noReg', ...} = find w'
+          in
+             if sameWeb (w, w')
+                orelse isReal ct <> isReal ct'
+                orelse !noReg orelse !noReg'
+                orelse List.exists (!adj, fn w'' => sameWeb (find w'', w'))
+                orelse (List.length
+                        (List.keepAll
+                         (distinct (!adj @ !adj'), fn W {ct = ct'', ...} =>
+                          isReal ct'' = isReal ct))
+                        >= (if isReal ct then 21 else 15))
+                then ()
+             else union (w, w')
+          end)
       (* 5. Color, in order of use count.  Prefer the register of a web that
        * this one is copied to or from.
        *)
       val () =
-         if localRA then ()
-         else
-            List.foreach
-            (QuickSort.sortList
-             (distinct (!webs), fn (W {count, ...}, W {count = count', ...}) =>
-              !count >= !count'),
-             fn W {ct, across, adj, aff, noReg, home, ...} =>
-             if !noReg then ()
-             else
-                let
-                   val used =
-                      List.keepAllMap (!adj, fn w =>
-                                       let
-                                          val W {home, ...} = find w
-                                       in
-                                          !home
-                                       end)
-                   fun free r = not (List.contains (used, r, op =))
-                   val regs =
-                      case (isReal ct, !across) of
-                         (false, false) => caller @ callee
-                       | (false, true) => callee @ caller
-                       | (true, false) => fcaller @ fcallee
-                       | (true, true) => fcallee @ fcaller
-                   (* the best register of a copy partner *)
-                   val (partner, _) =
-                      List.fold
-                      (!aff, (NONE, 0), fn ((w, n), best as (_, n')) =>
-                       let
-                          val W {ct = ct', home, ...} = find w
-                       in
-                          case !home of
-                             NONE => best
-                           | SOME r =>
-                                if n > n' andalso free r
-                                   andalso isReal ct' = isReal ct
-                                   then (SOME r, n)
-                                else best
-                       end)
-                in
-                   home := (case partner of
-                               SOME r => SOME r
-                             | NONE => List.peek (regs, free))
-                end)
+         List.foreach
+         (QuickSort.sortList
+          (distinct (!webs), fn (W {count, ...}, W {count = count', ...}) =>
+           !count >= !count'),
+          fn W {ct, across, adj, aff, noReg, home, ...} =>
+          if !noReg then ()
+          else
+             let
+                val used =
+                   List.keepAllMap (!adj, fn w =>
+                                    let
+                                       val W {home, ...} = find w
+                                    in
+                                       !home
+                                    end)
+                fun free r = not (List.contains (used, r, op =))
+                val regs =
+                   case (isReal ct, !across) of
+                      (false, false) => caller @ callee
+                    | (false, true) => callee @ caller
+                    | (true, false) => fcaller @ fcallee
+                    | (true, true) => fcallee @ fcaller
+                (* the best register of a copy partner *)
+                val (partner, _) =
+                   List.fold
+                   (!aff, (NONE, 0), fn ((w, n), best as (_, n')) =>
+                    let
+                       val W {ct = ct', home, ...} = find w
+                    in
+                       case !home of
+                          NONE => best
+                        | SOME r =>
+                             if n > n' andalso free r
+                                andalso isReal ct' = isReal ct
+                                then (SOME r, n)
+                             else best
+                    end)
+             in
+                home := (case partner of
+                            SOME r => SOME r
+                          | NONE => List.peek (regs, free))
+             end)
    in
       {blocks = blocks,
        labelBlock = labelBlock,

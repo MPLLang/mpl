@@ -36,22 +36,14 @@
  * but only those that are live across the call.  Temporaries that are live
  * across some C call prefer callee-save registers.
  *
- * That is the default ("graph") register allocator.  There is a second,
- * "local", allocator, selected by `-vibe-arm-regalloc local`, that is
- * modeled on the allocator of the x86/amd64 codegens; see "The local
- * register allocator", in vibe-arm-access-local.fun.
- *
- * The regions, the webs of temporaries and (for the graph allocator) their
- * registers are computed for a whole chunk before any of its code is
+ * The regions, the webs of temporaries and their registers are computed for a whole chunk before any of its code is
  * output: that is VibeArmAnalysis (see vibe-arm-analysis.sig).
  *
  * Output.  The codegen builds a list of ARM64 instructions for each chunk
  * (see arm64.sig); printing them as assembly is the business of Arm64.
  *
  * The parts: VibeArmEmit collects the instructions; VibeArmAccess reads
- * and writes the operands of the Machine IR, as VibeArmAccessGraph or
- * VibeArmAccessLocal (one for each register allocator) implements it;
- * VibeArmPrim outputs the primitives; VibeArmItems combines
+ * and writes the operands of the Machine IR; VibeArmPrim outputs the primitives; VibeArmItems combines
  * statements; VibeArmLayout orders the blocks.  What is here is the frame
  * of a chunk function, the transfers, and the loop over the blocks.
  *)
@@ -79,8 +71,6 @@ structure Emit = VibeArmEmit (structure Arm64 = Asm
                               structure Machine = Machine)
 structure Access = VibeArmAccess (structure Emit = Emit
                                   structure Items = Items)
-structure AccessGraph = VibeArmAccessGraph (structure Access = Access)
-structure AccessLocal = VibeArmAccessLocal (structure Access = Access)
 structure PrimApp = VibeArmPrim (structure Access = Access)
 val isReal = Analysis.isReal
 val size = Analysis.size
@@ -137,8 +127,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                 symAddr, instrs, ...} = Emit.new ()
       val self = ChunkLabel.toString chunkLabel
       val leave = Lbl.Plain ("Lleave_" ^ self)
-      (* which register allocator: see "Register allocation", above *)
-      val localRA = !Control.vibeArmLocalRegAlloc
       (* The label of a block, and of the preheader that loads its promoted
        * stack slots.  By default they are local to the assembler; with
        * -vibe-arm-symbols true, each is a symbol, so that tools (a
@@ -158,15 +146,12 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
        * it returns are the ones to output.
        *)
       val analysis as {blocks, labelBlock, blockWebs, ifConvert, ...} =
-         Analysis.analyze {blocks = blocks, labelBlock = labelBlock,
-                           localRA = localRA}
-      val access as {frameSize, startBlock, curBlock, enterBlock, beginItem,
-                     endItem, defined, value, load, dstReg, store, move,
-                     setDst, clearCache, noCache, setSpAdj, saveForCall,
-                     afterCall, edgeNeedsCode, beforeGoto, edgeCode, ...} =
-         (if localRA then AccessLocal.new else AccessGraph.new)
-         {analysis = analysis, emit = e, labelIndex = labelIndex,
-          tempsMax = tempsMax}
+         Analysis.analyze {blocks = blocks, labelBlock = labelBlock}
+      val access as {frameSize, startBlock, curBlock, enterBlock, defined,
+                     value, load, dstReg, store, move, setDst, clearCache,
+                     noCache, setSpAdj, saveForCall, afterCall, ...} =
+         Access.new {analysis = analysis, emit = e, labelIndex = labelIndex,
+                     tempsMax = tempsMax}
       val prim = {access = access, emit = e}
       val webHome = Web.home
       (* The label to branch to to get to l: the preheader of a loop with
@@ -176,8 +161,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
          let
             val {ploop, pheader, ...} = blockWebs l
          in
-            if not localRA
-               andalso ploop <> 0
+            if ploop <> 0
                andalso ploop <> #ploop (blockWebs (curBlock ()))
                then if pheader
                        then preLabel l
@@ -204,27 +188,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
          if isNext l andalso Lbl.equals (target l, blockLabel l)
             then ()
          else branch (target l)
-      (* compensation blocks, for edges that need code: output at the end of
-       * the chunk
-       *)
-      val comps: (Lbl.t * Label.t * (unit -> unit)) list ref = ref []
-      (* the label to branch to in order to get to l *)
-      fun edge l =
-         if edgeNeedsCode l
-            then
-               let
-                  val name =
-                     (if symbols then Lbl.Sym else Lbl.Plain)
-                     (concat [if symbols then "edge_" else "Ledge_",
-                              self, "_", int (List.length (!comps))])
-               in
-                  List.push (comps, (name, l, edgeCode l))
-                  ; name
-               end
-         else target l
-      (* go to l at the end of a block *)
-      fun gotoL l =
-         (beforeGoto l; goto l)
       (* Conditional branches only reach +-1MB. *)
       val far =
          Vector.fold (blocks, 0, fn (Block.T {statements, ...}, n) =>
@@ -252,8 +215,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
       (* if c then goto l else goto l' *)
       fun twoWay (c, l, l') =
          if isNext l
-            then (bcond (negate c, edge l'); gotoL l)
-         else (bcond (c, edge l); gotoL l')
+            then (bcond (negate c, target l'); goto l)
+         else (bcond (c, target l); goto l')
       (* Output an if-converted switch; the flags hold condition c, which
        * selects the case (rather than the default) target.
        *)
@@ -311,7 +274,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                              ; arm (defaultLabel, defaultMoves, c')))
               | _ => (arm (caseLabel, caseMoves, c)
                       ; arm (defaultLabel, defaultMoves, c')))
-            ; gotoL join
+            ; goto join
          end
       (* return x0 to the trampoline *)
       fun leaveChunk () = (flushFrontier (); flushStackTop (); branch leave)
@@ -322,7 +285,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
        *)
       fun jump l =
          if ChunkLabel.equals (labelChunk l, chunkLabel)
-            then gotoL l
+            then goto l
          else branch (Lbl.Sym (entryStub l))
       fun push (return, size) =
          let
@@ -402,18 +365,13 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
        *  - pop, in the header: x5, x6 and x17.
        * That a call may collect doesn't matter: it still returns to its
        * call site.
-       *
-       * The local register allocator outputs code on edges and at the start
-       * of a block that hasn't been checked against this, so it keeps to the
-       * frame.
        *)
       fun directReturn (l: Label.t): bool =
-         not localRA
-         andalso (case labelBlock l of
-                     Block.T {kind as Kind.CReturn {func, ...}, ...} =>
-                        not (CFunction.maySwitchThreadsFrom func)
-                        andalso not (Kind.isEntry kind)
-                   | _ => false)
+         case labelBlock l of
+            Block.T {kind as Kind.CReturn {func, ...}, ...} =>
+               not (CFunction.maySwitchThreadsFrom func)
+               andalso not (Kind.isEntry kind)
+          | _ => false
       (* Runtime functions that are one instruction.  (The C codegen gets
        * them inline from the C compiler.)  The result goes where the block
        * that the call returns to expects it.
@@ -439,7 +397,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                          else (load (z, r, 16)
                                ; emit (I.Un (opc, reg (r, ct), reg (r, ct)))
                                ; str (ct, r, Addr.Offset (R.SP, 8)))
-                         ; gotoL return
+                         ; goto return
                          ; true
                       end)
           | _ => false
@@ -546,7 +504,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                then indJump ()
             else (case return of
                      NONE => (movInt (0, ~2); branch leave)
-                   | SOME {return, ...} => gotoL return)
+                   | SOME {return, ...} => goto return)
          end
       fun outputTransfer t =
          case t of
@@ -560,7 +518,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
           | Transfer.Call {label, return, ...} =>
                (Option.app (return, fn {return, size, ...} => push (return, size))
                 ; jump label)
-          | Transfer.Goto l => gotoL l
+          | Transfer.Goto l => goto l
           | Transfer.Raise {raisesTo} =>
                (clearCache ()
                 ; emit (I.Bin
@@ -569,7 +527,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                          regOp (x (value (gcField GCField.ExnStack, 1, 3)))))
                 ; rtrans raisesTo)
           | Transfer.Return {returnsTo} => rtrans returnsTo
-          | Transfer.Spork {cont, ...} => gotoL cont
+          | Transfer.Spork {cont, ...} => goto cont
           | Transfer.Switch (Switch.T {cases, default, test, ...}) =>
                let
                   val r = value (test, 0, 3)
@@ -634,7 +592,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                                       else (movInt (17, span)
                                             ; emit (I.Cmp (I.CMP, R.X 16,
                                                            regOp (R.X 17))))
-                                    ; bcond (CC Cond.HI, edge default)
+                                    ; bcond (CC Cond.HI, target default)
                                     ; emit (I.Adr (R.X 17, table))
                                     ; emit (I.Load (I.LDRSW, R.X 16,
                                                     Addr.Index (R.X 17, R.X 16,
@@ -647,7 +605,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                                       (0, span + 1, fn k =>
                                        emit
                                        (I.Long
-                                        (edge
+                                        (target
                                          (case List.peek
                                                (cases', fn (m, _) =>
                                                 m = lo + IntInf.fromInt k) of
@@ -656,8 +614,8 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                                          table)))
                                  end
                            else (List.foreach (cases, fn (w, l) =>
-                                               bcond (eq w, edge l))
-                                 ; gotoL default)
+                                               bcond (eq w, target l))
+                                 ; goto default)
                         end
                end
       (* the statements of a block, as they are output *)
@@ -673,11 +631,9 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
              App {dst, also, ...} =>
                 (defined dst; Option.app (also, fn (z, _) => defined z))
            | Defined z => defined z
-           | Move {dst, ...} => defined dst
-          ; endItem ())
-      fun outputItems (its, k0) =
-         List.foreachi (its, fn (k, it) =>
-                        (beginItem (k0 + k); outputItem it; afterItem it))
+           | Move {dst, ...} => defined dst)
+      fun outputItems its =
+         List.foreach (its, fn it => (outputItem it; afterItem it))
       fun outputBlock (b as Block.T {kind, label = l, transfer, ...}) =
          (if Kind.isEntry kind
              then let
@@ -723,21 +679,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                    pop (frameInfo, {promo = false}))
           ; let
                val its = Items.ofBlock (analysis, b)
-               val n = List.length its
-               val () = endItem ()
             in
                case Items.fusable (analysis, b, its) of
-                  NONE => (outputItems (its, 0)
-                           ; beginItem n
-                           ; outputTransfer transfer)
+                  NONE => (outputItems its; outputTransfer transfer)
                 | SOME (its, a, l, l') =>
                      let
-                        val () = outputItems (its, 0)
-                        val () = beginItem (n - 1)
+                        val () = outputItems its
                         val fused = PrimApp.appFlags (prim, a)
                      in
                         afterItem (App a)
-                        ; beginItem n
                         ; (case fused of
                               NONE => outputTransfer transfer
                             | SOME c =>
@@ -799,7 +749,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
          let
             val {pheader, promoted, ...} = blockWebs l
          in
-            if pheader andalso not localRA
+            if pheader
                then (label (preLabel l)
                      ; List.foreach
                        (promoted, fn ((off, ct), w) =>
@@ -810,12 +760,6 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                      ; branch (blockLabel l))
             else ()
          end)
-      (* the compensation blocks of the local register allocator *)
-      ; List.foreach
-        (List.rev (!comps), fn (name, l, conform) =>
-         (label name
-          ; conform ()
-          ; branch (blockLabel l)))
       ; instrs ()
    end
 

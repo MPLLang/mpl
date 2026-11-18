@@ -264,10 +264,6 @@ val codegenComments = control {name = "codegen comments",
                                default = 0,
                                toString = Int.toString}
 
-val vibeArmLocalRegAlloc = control {name = "vibe-arm local register allocator",
-                                    default = false,
-                                    toString = Bool.toString}
-
 val vibeArmSymbols = control {name = "vibe-arm symbols",
                               default = false,
                               toString = Bool.toString}

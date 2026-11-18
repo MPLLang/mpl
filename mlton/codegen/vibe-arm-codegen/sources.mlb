@@ -17,10 +17,6 @@ local
    vibe-arm-emit.fun
    vibe-arm-access.sig
    vibe-arm-access.fun
-   vibe-arm-access-graph.sig
-   vibe-arm-access-graph.fun
-   vibe-arm-access-local.sig
-   vibe-arm-access-local.fun
    vibe-arm-prim.sig
    vibe-arm-prim.fun
    vibe-arm-codegen.sig

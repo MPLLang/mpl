@@ -11,11 +11,10 @@ with two compilers, under each configuration of the codegen, and compare.
 
 The corpus is regression/*.sml, examples/src/*, rare.sml and, if you have
 it, the benchmarks of parallel-ml-bench (mpl/bench/*).  The configurations
-are the two register allocators (-vibe-arm-regalloc graph, the default,
-and local), -vibe-arm-symbols true, and each allocator with the target OS
-faked as Linux.  The regression suite and the benchmarks are compiled
-under both allocators, and every eighth of them under the others; the
-examples and rare.sml under all five.
+are the default ("plain"), -vibe-arm-symbols true ("sym"), and the target
+OS faked as Linux ("linux").  The regression suite and the benchmarks are
+compiled under the first, and every eighth of them under the others; the
+examples and rare.sml under all three.
 
 Nothing is assembled, linked or run: this checks that the output is the
 same, not that it is right.  For that, there is bin/regression, with
@@ -47,9 +46,9 @@ mlton/mlton-mpl-compile, in a couple of minutes, and leaves build/ alone.
   ./compare.sh /tmp/out-base /tmp/out-new
 
 compare.sh exits with status 0 if every assembly file is the same, and
-names the files that differ if not.  One run of gen.sh is about 900
-compilations (five minutes on a ten-core machine) and writes about
-1 GB.  Set JOBS to change how many run at once, and ONLY to reg, ex,
+names the files that differ if not.  One run of gen.sh is about 460
+compilations (a few minutes on a ten-core machine) and writes about
+450 MB.  Set JOBS to change how many run at once, and ONLY to reg, ex,
 pmb or rare to compile just that part of the corpus.
 
 

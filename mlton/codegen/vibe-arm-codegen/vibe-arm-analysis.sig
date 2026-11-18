@@ -14,9 +14,8 @@
  *    an entry block); no temporary is live between regions.
  *  - Loops: the loop forest of the control-flow graph of near transfers.
  *  - Webs: each temporary is split into its webs, the live ranges that are
- *    connected by definitions reaching uses.  Unless the local register
- *    allocator was asked for, the webs are colored: each gets a register,
- *    or none (it then lives in the frame).
+ *    connected by definitions reaching uses.  The webs are colored: each
+ *    gets a register, or none (it then lives in the frame).
  *  - Promotion: the most-read stack slots of a loop get webs, and so
  *    registers, of their own, that are live throughout the loop.
  *
@@ -136,7 +135,5 @@ signature VIBE_ARM_ANALYSIS =
           segIn: Machine.Label.t * Temp.t -> Web.t}
 
       val analyze: {blocks: Machine.Block.t vector,
-                    labelBlock: Machine.Label.t -> Machine.Block.t,
-                    (* the local register allocator: don't color the webs *)
-                    localRA: bool} -> t
+                    labelBlock: Machine.Label.t -> Machine.Block.t} -> t
    end

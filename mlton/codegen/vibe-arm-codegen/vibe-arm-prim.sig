@@ -3,8 +3,8 @@
  *)
 
 (* The primitives that the vibe-arm codegen implements: the instructions
- * for an application of one.  It is the same for both register allocators:
- * it gets at its arguments and its destination through VibeArmAccess.
+ * for an application of one.  It gets at its arguments and its destination
+ * through VibeArmAccess.
  *
  * Registers x0-x2 and d16-d18 hold the arguments, when they aren't in
  * registers already; x5-x7 and x16 are scratch.
