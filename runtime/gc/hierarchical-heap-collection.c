@@ -198,16 +198,19 @@ uint32_t minDepthWithoutCC(GC_thread thread)
 
 /* Collecting the top level (depth 1) copies all of the program's top-level
  * live data. Do it only once the thread has allocated, since its last local
- * collection at any depth, collectionThresholdRatio times the depth-1 heap's
- * bytesSurvivedLastCollection: its used bytes after the last top-level
- * collection, or after the last CC of depth 1 merged back (the CC sets the
- * same field of its pack). */
+ * collection at any depth, collectionThresholdRatio times what the depth-1
+ * heap kept: its used bytes after the last top-level collection
+ * (bytesSurvivedLastTopLevelCollection), or after the last CC of depth 1
+ * merged back (its CC pack's bytesSurvivedLastCollection), whichever is
+ * larger. Only the first is written here: the second also decides when a CC
+ * of this heap is registered, and writing it would delay that. */
 static bool topLevelCollectionDue(GC_state s, GC_thread thread)
 {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   if (HM_HH_getDepth(hh) != 1)
     return FALSE;
-  size_t survived = HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection;
+  size_t survived = max(hh->bytesSurvivedLastTopLevelCollection,
+                        HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection);
   return thread->bytesAllocatedSinceLastCollection >=
          s->controls->hhConfig.collectionThresholdRatio * survived;
 }
@@ -965,14 +968,15 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
     /* Record the top level's survivors on the depth-1 heap, for
      * topLevelCollectionDue, and keep them out of the thread's count:
      * otherwise they would also hold back the cheap collections of deeper
-     * heaps, which don't copy them. */
+     * heaps, which don't copy them. Not in the heap's CC pack: a CC of this
+     * heap would then wait until the heap doubled from that size. */
     HM_HierarchicalHeap top = thread->hierarchicalHeap;
     while (NULL != top && HM_HH_getDepth(top) > 1)
       top = top->nextAncestor;
     size_t topSurvived = 0;
     if (NULL != top && HM_HH_getDepth(top) == 1) {
       topSurvived = HM_getChunkListUsedSize(HM_HH_getChunkList(top));
-      HM_HH_getConcurrentPack(top)->bytesSurvivedLastCollection = topSurvived;
+      top->bytesSurvivedLastTopLevelCollection = topSurvived;
     }
     thread->bytesSurvivedLastCollection -=
       min(thread->bytesSurvivedLastCollection, topSurvived);

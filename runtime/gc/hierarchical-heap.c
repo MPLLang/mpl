@@ -525,6 +525,7 @@ HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
   // hh->dependant2 = NULL;
   hh->numDependants = 0;
   hh->heightDependants = 0;
+  hh->bytesSurvivedLastTopLevelCollection = 0;
 
   HM_initChunkList(HM_HH_getChunkList(hh));
   HM_initRemSet(HM_HH_getRemSet(hh));
@@ -713,6 +714,8 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   }
 
   HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(hh));
+  newHH->bytesSurvivedLastTopLevelCollection =
+    hh->bytesSurvivedLastTopLevelCollection;
   thread->hierarchicalHeap = newHH;
   HM_chunk chunk = HM_allocateChunkWithPurpose(
     HM_HH_getChunkList(newHH),
