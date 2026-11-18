@@ -37,16 +37,6 @@ static void displayCollectionStats (FILE *out, const char *name, struct rusage *
   fprintf (out, "\n");
 }
 
-static void displayGlobalCumulativeStatistics (
-    FILE *out,
-    struct GC_globalCumulativeStatistics* globalCumulativeStatistics) {
-    fprintf (out, "max global heap occupancy: %s bytes\n",
-           uintmaxToCommaString (globalCumulativeStatistics->maxHeapOccupancy));
-    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
-    // fprintf (out, "max chunk pool occupancy: %s bytes\n",
-    //          uintmaxToCommaString (ChunkPool_maxAllocated ()));
-}
-
 static void displayHHAllocStats(FILE *out, GC_state s) {
   FixedSizeAllocator fsa = getHHAllocator(s);
   fprintf(out, "num hh allocated: %zu\n", numFixedSizeAllocated(fsa));
@@ -105,12 +95,15 @@ static void displayCumulativeStatistics (FILE *out, struct GC_cumulativeStatisti
            0.0 : 100.0 * ((double) gcTime) / (double)totalTime);
   fprintf (out, "total bytes allocated: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->bytesAllocated));
+  fprintf (out, "local collections: %s\n",
+           uintmaxToCommaString (cumulativeStatistics->numHHLocalGCs));
+  fprintf (out, "local collections: wall time: %s ms, plus %s ms on remembered sets\n",
+           uintmaxToCommaString (timespecToMillis (&cumulativeStatistics->timeLocalGC)),
+           uintmaxToCommaString (timespecToMillis (&cumulativeStatistics->timeLocalPromo)));
   fprintf (out, "local collections: bytes in scope: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->bytesInScopeForLocal));
   fprintf (out, "local collections: bytes reclaimed: %s bytes\n",
            uintmaxToCommaString (cumulativeStatistics->bytesReclaimedByLocal));
-  fprintf (out, "local collections: wall time: %s ms\n",
-           uintmaxToCommaString (timespecToMillis (&cumulativeStatistics->timeLocalGC)));
   fprintf (out, "concurrent collections: %s\n",
            uintmaxToCommaString (cumulativeStatistics->numCCs));
   fprintf (out, "concurrent collections: wall time: %s ms\n",
@@ -161,17 +154,6 @@ static void displayCumulativeStatisticsJSON (FILE *out, GC_state s) {
 
     /* print global statistics */
     fprintf(out, "\"totalTime\" : %"PRIuMAX, totalTime);
-
-    fprintf(out, ", ");
-
-    fprintf(out,
-            "\"maxGlobalHeapOccupancy\" : %"PRIuMAX,
-            s->globalCumulativeStatistics->maxHeapOccupancy);
-
-    // SAM_NOTE: TODO: removed for now; will need to replace with blocks statistics
-    // fprintf(out,
-    //         "\"maxChunkPoolOccupancy\" : %"PRIuMAX,
-    //         ChunkPool_maxAllocated ());
   }
 
   fprintf(out, " }");
@@ -220,10 +202,6 @@ void GC_done(GC_state s) {
 
   if (s->controls->summary) {
     if (HUMAN == s->controls->summaryFormat) {
-      fprintf (s->controls->summaryFile, "Global::\n");
-      displayGlobalCumulativeStatistics
-              (s->controls->summaryFile,
-               s->globalCumulativeStatistics);
       if (s->procStates) {
         for (uint32_t proc = 0; proc < s->numberOfProcs; proc++) {
           fprintf (s->controls->summaryFile, "Thread [%d]::\n", proc);
