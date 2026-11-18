@@ -197,10 +197,11 @@ uint32_t minDepthWithoutCC(GC_thread thread)
 }
 
 /* Collecting the top level (depth 1) copies all of the program's top-level
- * live data. Do it only once the thread has allocated
- * collectionThresholdRatio times what survived the last such collection,
- * which is recorded on the depth-1 heap (in its concurrent-collection pack,
- * which the CC also maintains), since the last local collection. */
+ * live data. Do it only once the thread has allocated, since its last local
+ * collection at any depth, collectionThresholdRatio times the depth-1 heap's
+ * bytesSurvivedLastCollection: its used bytes after the last top-level
+ * collection, or after the last CC of depth 1 merged back (the CC sets the
+ * same field of its pack). */
 static bool topLevelCollectionDue(GC_state s, GC_thread thread)
 {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
@@ -274,7 +275,8 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
    * collecting its depth-1 heap claims nothing, so it is just a leaf
    * collection, the same one the scheduler threads already do at depth 1.
    * Without this, sequential code at the top level, including the
-   * unpromoted/unstolen right branch of a top-level par, is never collected.
+   * unpromoted/unstolen right branch of a top-level par, is never collected
+   * locally (only a CC registered at depth 1, by a spawn there, collects it).
    */
   uint32_t minLocal = thread->minLocalCollectionDepth;
   bool collectTopLevel = FALSE;
@@ -361,7 +363,7 @@ void HM_HHC_collectLocal(uint32_t desiredScope)
   LOG(LM_HH_COLLECTION, LL_INFO,
       "collecting hh %p (L: %u):\n"
       "  LGC id %d:%zu\n"
-      "  thread min-local depth is %u\n"
+      "  min-local depth is        %u\n"
       "  min without CC is         %u\n"
       "  min okay is               %u\n"
       "  desired min is            %u\n"
