@@ -200,10 +200,14 @@ uint32_t minDepthWithoutCC(GC_thread thread)
  * live data. Do it only once the thread has allocated, since its last local
  * collection at any depth, collectionThresholdRatio times what the depth-1
  * heap kept: its used bytes after the last top-level collection
- * (bytesSurvivedLastTopLevelCollection), or after the last CC of depth 1
- * merged back (its CC pack's bytesSurvivedLastCollection), whichever is
- * larger. Only the first is written here: the second also decides when a CC
- * of this heap is registered, and writing it would delay that. */
+ * (bytesSurvivedLastTopLevelCollection, set by HM_HHC_collectLocal), or
+ * what the CCs of depth 1 merged into it kept (its CC pack's
+ * bytesSurvivedLastCollection), whichever is larger. Both are 0 in a new
+ * heap, and the heap is new after either kind of collection (a top-level
+ * collection copies into a new heap, a CC splits one off), so in effect
+ * the more recent of the two measurements counts. The pack's value also
+ * decides when a CC of this heap is registered, so a top-level collection
+ * doesn't write it: that would delay the CC. */
 static bool topLevelCollectionDue(GC_state s, GC_thread thread)
 {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;

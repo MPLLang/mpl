@@ -714,8 +714,6 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   }
 
   HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(hh));
-  newHH->bytesSurvivedLastTopLevelCollection =
-    hh->bytesSurvivedLastTopLevelCollection;
   thread->hierarchicalHeap = newHH;
   HM_chunk chunk = HM_allocateChunkWithPurpose(
     HM_HH_getChunkList(newHH),
