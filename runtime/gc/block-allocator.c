@@ -236,7 +236,9 @@ static void setSuperBlockSizeClass(GC_state s, SuperBlock sb, int sizeClass) {
 /* mmap only guarantees page alignment, but blocks must start at multiples
  * of the block size (blockOf rounds a pointer down to one), which can be a
  * larger power of two than the page size. Map enough extra to find an
- * aligned start, and unmap the excess on either side. */
+ * aligned start, and unmap the excess on either side. This relies on
+ * releasing part of a mapping, which munmap allows (Linux, macOS); at the
+ * default block size there's no excess, and nothing is released. */
 static pointer mmapBlockAligned(GC_state s, size_t length) {
   size_t blockSize = s->controls->blockSize;
   size_t extra = blockSize - s->sysvals.pageSize;
@@ -245,6 +247,8 @@ static pointer mmapBlockAligned(GC_state s, size_t length) {
     return p;
   pointer start = (pointer)(uintptr_t)align((size_t)p, blockSize);
   size_t head = (size_t)(start - p);
+  /* p is page-aligned, so the aligned start is at most extra bytes in. */
+  assert(head <= extra);
   if (head > 0)
     GC_release(p, head);
   if (extra > head)
