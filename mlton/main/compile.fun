@@ -80,6 +80,8 @@ structure Backend = Backend (structure Machine = Machine
                              structure Rssa = Rssa
                              fun funcToLabel f = f)
 structure CCodegen = CCodegen (structure Machine = Machine)
+structure VibeArm64Codegen = VibeArm64Codegen (structure CCodegen = CCodegen
+                                           structure Machine = Machine)
 
 (* SAM_NOTE: removing unsupported codegens *)
 (*
@@ -547,6 +549,7 @@ fun mkCompile {outputC, outputLL, outputS} =
             val codegenImplementsPrim =
                case !Control.codegen of
                   Control.CCodegen => CCodegen.implementsPrim
+                | Control.VibeArm64Codegen => VibeArm64Codegen.implementsPrim
 (* SAM_NOTE: removing unsupported codegens *)
 (*
                 | Control.AMD64Codegen => amd64Codegen.implementsPrim
@@ -617,6 +620,10 @@ fun mkCompile {outputC, outputLL, outputS} =
                   Control.CCodegen =>
                      CCodegen.output {program = machine,
                                       outputC = outputC}
+                | Control.VibeArm64Codegen =>
+                     VibeArm64Codegen.output {program = machine,
+                                            outputC = outputC,
+                                            outputS = outputS}
 (* SAM_NOTE: removing unsupported codegens *)
 (*
                      Control.AMD64Codegen =>

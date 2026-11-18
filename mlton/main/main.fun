@@ -164,6 +164,7 @@ fun hasCodegen (cg, {default}) =
    in
       case cg of
         CCodegen => true
+      | VibeArm64Codegen => !Control.Target.arch = ARM64
       (*
       | LLVMCodegen => true
       | _ => false
@@ -317,6 +318,9 @@ fun makeOptions {usage} =
         intRef codegenComments),
        (Expert, "codegen-fuse-op-and-chk", " {false|true}", "fuse `op` and `opCheckP` primitives in codegen",
         boolRef codegenFuseOpAndChk),
+       (Normal, "vibe-arm64-symbols", " {false|true}",
+        "keep a symbol for each block and entry of the vibe-arm64 codegen",
+        boolRef vibeArm64Symbols),
        (Normal, "const", " '<name> <value>'", "set compile-time constant",
         SpaceString (fn s =>
                      case String.tokens (s, Char.isSpace) of
@@ -1079,7 +1083,9 @@ fun commandLine (_: string, args: string list): unit =
                       NONE => if defaultAlignIs8 () then Align8 else Align4
                     | SOME a => a)
       val () =
-         codegen := CCodegen
+         codegen := (case !explicitCodegen of
+                        SOME (Explicit cg) => cg
+                      | _ => CCodegen)
 (* SAM_NOTE: removing unsupported codegens *)
 (*
          codegen := (case !explicitCodegen of
@@ -1208,7 +1214,25 @@ fun commandLine (_: string, args: string list): unit =
                                 " target"])
          else ()
       val () =
-         Control.labelsHaveExtra_ := (case (targetOS, targetArch) of
+         if !codegen = VibeArm64Codegen
+            then
+               let
+                  (* in yellow, if it goes to a terminal *)
+                  val (on, off) =
+                     if (Posix.ProcEnv.isatty Posix.FileSys.stderr
+                         handle _ => false)
+                        then ("\027[33m", "\027[0m")
+                     else ("", "")
+               in
+                  Out.output
+                  (Out.error,
+                   concat [on,
+                           "Warning: the vibe-arm64 codegen is an experimental native code generator for ARM64/AArch64. It can generate more efficient code than `-codegen c`, but has not been tested as thoroughly.",
+                           off, "\n"])
+               end
+         else ()
+      val () =
+         Control.labelsHaveExtra_ :=(case (targetOS, targetArch) of
                                          (Cygwin, X86) => true
                                        | (Darwin, _) => true
                                        | (MinGW, X86) => true
@@ -1218,6 +1242,7 @@ fun commandLine (_: string, args: string list): unit =
          (case !explicitChunkify of
              NONE => (case !codegen of
                          CCodegen => Chunkify.Coalesce {limit = 4096}
+                       | VibeArm64Codegen => Chunkify.Coalesce {limit = 4096}
 (*
                        | AMD64Codegen => Chunkify.Func
                        | LLVMCodegen => Chunkify.Coalesce {limit = 4096}
@@ -1436,7 +1461,16 @@ fun commandLine (_: string, args: string list): unit =
                                         | _ => [],
                                        ["-o", output],
                                        inputs,
-                                       linkOpts]))
+                                       linkOpts,
+                                       (* The entry stubs of the vibe-arm64
+                                        * codegen need symbols only until
+                                        * the link.
+                                        *)
+                                       if !codegen = VibeArm64Codegen
+                                          andalso not (!vibeArm64Symbols)
+                                          andalso targetOS = Darwin
+                                          then ["-Wl,-x"]
+                                       else []]))
                               ()
                            (* gcc on Cygwin appends .exe, which I don't want, so
                             * move the output file to it's rightful place.

@@ -947,10 +947,14 @@ fun declareFFI (chunks, print) =
       ; if !empty then () else print "\n"
    end
 
-fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
-            outputC: unit -> {file: File.t,
-                              print: string -> unit,
-                              done: unit -> unit}} =
+fun outputWith {program as Machine.Program.T {chunks, frameInfos, main, ...},
+                outputC: unit -> {file: File.t,
+                                  print: string -> unit,
+                                  done: unit -> unit},
+                (* An alternative (non-C) emitter for the chunks; the main
+                 * file (declarations, nextChunks) is still emitted as C.
+                 *)
+                outputChunks = altOutputChunks} =
    let
       val {get = labelInfo: Label.t -> {block: Block.t,
                                         chunkLabel: ChunkLabel.t,
@@ -1895,6 +1899,13 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
             ; List.foreach (chunks, fn chunk => outputChunkFn (chunk, print))
             ; done ()
          end
+      val outputChunks =
+         case altOutputChunks of
+            NONE => outputChunks
+          | SOME f => (fn chunks => f {chunks = chunks,
+                                       labelBlock = #block o labelInfo,
+                                       labelChunk = labelChunk,
+                                       labelIndex = labelIndex})
       val chunksWithSizes =
          List.revMap
          (chunks, fn chunk as Chunk.T {blocks, ...} =>
@@ -1946,5 +1957,8 @@ fun output {program as Machine.Program.T {chunks, frameInfos, main, ...},
    in
       ()
    end
+
+fun output {program, outputC} =
+   outputWith {program = program, outputC = outputC, outputChunks = NONE}
 
 end

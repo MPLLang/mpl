@@ -368,6 +368,7 @@ structure Type =
                 | Label _ =>
                      (case !Control.codegen of
                          Control.Codegen.CCodegen => C.fromBits (width t)
+                       | Control.Codegen.VibeArm64Codegen => C.fromBits (width t)
                       (*
                        | Control.Codegen.AMD64Codegen => C.CPointer
                        | Control.Codegen.LLVMCodegen => C.fromBits (width t)

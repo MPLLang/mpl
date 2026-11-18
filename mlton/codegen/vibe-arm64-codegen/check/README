@@ -1,0 +1,81 @@
+Checking that a change to the vibe-arm64 codegen doesn't change its output
+========================================================================
+
+A refactoring of the codegen should output the same assembly as before,
+byte for byte.  The scripts here compile a corpus of programs to assembly
+with two compilers, under each configuration of the codegen, and compare.
+
+  gen.sh      compile the corpus with the compiler of a build tree
+  compare.sh  compare two output directories of gen.sh
+  rare.sml    a program for what the rest of the corpus never outputs
+
+The corpus is regression/*.sml, examples/src/*, rare.sml and, if you have
+it, the benchmarks of parallel-ml-bench (mpl/bench/*).  The configurations
+are the default ("plain"), -vibe-arm64-symbols true ("sym"), and the target
+OS faked as Linux ("linux").  The regression suite and the benchmarks are
+compiled under the first, and every eighth of them under the others; the
+examples and rare.sml under all three.
+
+Nothing is assembled, linked or run: this checks that the output is the
+same, not that it is right.  For that, there is bin/regression, with
+-codegen vibe-arm64.
+
+
+Procedure
+---------
+
+You need a build tree (the build/ directory that "make" makes, with
+bin/mpl and lib/mlton) of a compiler that has the vibe-arm64 codegen, and
+the compiler itself (lib/mlton/mlton-mpl-compile) from before and after
+the change.  "make -C mlton" builds only the compiler, as
+mlton/mlton-mpl-compile, in a couple of minutes, and leaves build/ alone.
+
+  # before the change (for example, with it stashed)
+  make -C mlton
+  cp -R build /tmp/base
+  cp mlton/mlton-mpl-compile /tmp/base/lib/mlton/
+
+  # after the change
+  make -C mlton
+  cp -R build /tmp/new
+  cp mlton/mlton-mpl-compile /tmp/new/lib/mlton/
+
+  cd mlton/codegen/vibe-arm64-codegen/check
+  ./gen.sh /tmp/base /tmp/out-base ~/parallel-ml-bench
+  ./gen.sh /tmp/new /tmp/out-new ~/parallel-ml-bench
+  ./compare.sh /tmp/out-base /tmp/out-new
+
+compare.sh exits with status 0 if every assembly file is the same, and
+names the files that differ if not.  One run of gen.sh is about 460
+compilations (a few minutes on a ten-core machine) and writes about
+450 MB.  Set JOBS to change how many run at once, and ONLY to reg, ex,
+pmb or rare to compile just that part of the corpus.
+
+
+Notes
+-----
+
+- Use bash to run the scripts.
+
+- The first line of every file that the compiler outputs is a comment
+  with its version, which is different for a tree with uncommitted
+  changes; compare.sh skips that line.
+
+- gen.sh adds a target, lib/mlton/targets/fakelinux, to the build tree
+  that it is given: a copy of the host's, with "linux" as its OS.  That
+  is enough to make the codegen output what it does for Linux (symbols
+  without a prefix, .L labels, :lo12: relocations, .hidden, unpacked
+  stack arguments), but that output has not been assembled.
+
+- A few programs don't compile, with either compiler: at the time of
+  writing, four of the regression suite and three of the benchmarks.
+  compare.sh requires only that the logs of the two runs are the same.
+
+- rare.sml exists because the rest of the corpus never outputs indirect
+  calls, overflow checks on unsigned and narrow words, conversions
+  between reals and unsigned words, compare-and-swap on 16-bit values and
+  on reals, or fnmsub.  It uses _prim and _import to get at them, and is
+  only ever compiled, not linked.  When the codegen learns to output
+  something new, check that some program of the corpus makes it do so
+  (grep the output of gen.sh for the mnemonic), and add to rare.sml if
+  none does.

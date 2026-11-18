@@ -73,7 +73,7 @@ signature CONTROL_FLAGS =
       structure Codegen:
          sig
             (* SAM_NOTE: removing unsupported codegens *)
-            datatype t = CCodegen
+            datatype t = CCodegen | VibeArm64Codegen
             (*
                AMD64Codegen
              | CCodegen
@@ -93,6 +93,9 @@ signature CONTROL_FLAGS =
 
       (* whether or not to fuse `op` and `opCheckP` primitives in codegen *)
       val codegenFuseOpAndChk: bool ref
+
+      (* Keep symbols for the blocks and entry stubs of the vibe-arm64 codegen. *)
+      val vibeArm64Symbols: bool ref
 
       val commandLineConsts: StrMap.t
       val setCommandLineConst: {name: string, value: string} -> unit
