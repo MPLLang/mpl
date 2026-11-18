@@ -29,7 +29,9 @@
  * There may be zero or more bytes of padding for alignment purposes.
  *
  * The bytesNeeded size_t is the number of bytes needed when returning
- * to this thread.
+ * to this thread. For the running thread, it is the number of bytes the
+ * runtime last guaranteed free, which the mutator frontier invariant checks
+ * against.
  *
  * The exnStack ptrdiff_t is an offset added to stackBottom that
  * specifies the top of the exnStack.

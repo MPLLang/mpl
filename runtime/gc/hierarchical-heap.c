@@ -959,16 +959,10 @@ pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
   assert(getThreadCurrent(s) == thread);
 #endif
 
-  /* SAM_NOTE: ensureHierarchicalHeapAssurances was tripping it's invariant
-   * for the mutator frontier, due to (limit-frontier)<bytesNeeded. But
-   * this runtime call doesn't need to ensure bytes free..
-   *
-   * TODO: ensureHierarchicalHeapAssurances should take a boolean, to indicate
-   * whether or not it should check that invariant...?
-   */
-  size_t bytesRequested =
-    max(GC_HEAP_LIMIT_SLOP, getThreadCurrent(s)->bytesNeeded);
-  HM_ensureHierarchicalHeapAssurances(s, FALSE, bytesRequested, TRUE);
+  /* This runtime call needs no bytes free on return. (The frontier invariant
+   * checked at the end of HM_ensureHierarchicalHeapAssurances is against the
+   * request it was given, which it records in thread->bytesNeeded.) */
+  HM_ensureHierarchicalHeapAssurances(s, FALSE, GC_HEAP_LIMIT_SLOP, TRUE);
 
   s->frontier = HM_HH_getFrontier(getThreadCurrent(s));
   s->limitPlusSlop = HM_HH_getLimit(getThreadCurrent(s));
