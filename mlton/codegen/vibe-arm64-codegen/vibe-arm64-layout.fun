@@ -2,7 +2,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor VibeArmLayout (S: VIBE_ARM_LAYOUT_STRUCTS): VIBE_ARM_LAYOUT =
+functor VibeArm64Layout (S: VIBE_ARM64_LAYOUT_STRUCTS): VIBE_ARM64_LAYOUT =
 struct
 
 open S

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Write the assembly that the vibe-arm codegen outputs for a corpus of
+# Write the assembly that the vibe-arm64 codegen outputs for a corpus of
 # programs, under each of its configurations.  See README.
 #
 # usage: gen.sh <build tree> <output dir> [<parallel-ml-bench dir>]
@@ -75,10 +75,10 @@ add rare rare "$here/rare.sml" "$all"
 
 run () {
   IFS='|' read -r set name file cfg <<< "$1"
-  flags=(-codegen vibe-arm)
+  flags=(-codegen vibe-arm64)
   case $cfg in
     plain) ;;
-    sym) flags+=(-vibe-arm-symbols true) ;;
+    sym) flags+=(-vibe-arm64-symbols true) ;;
     linux) flags+=(-target fakelinux) ;;
   esac
   case $set in

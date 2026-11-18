@@ -2,7 +2,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-(* The analysis of a chunk that the vibe-arm codegen does before it outputs
+(* The analysis of a chunk that the vibe-arm64 codegen does before it outputs
  * any code.
  *
  *  - Speculation: cheap computations at the start of the arms of a two-way
@@ -22,14 +22,14 @@
  * The comments in the implementation say how each is done.
  *)
 
-signature VIBE_ARM_ANALYSIS_STRUCTS =
+signature VIBE_ARM64_ANALYSIS_STRUCTS =
    sig
       structure Machine: MACHINE
    end
 
-signature VIBE_ARM_ANALYSIS =
+signature VIBE_ARM64_ANALYSIS =
    sig
-      include VIBE_ARM_ANALYSIS_STRUCTS
+      include VIBE_ARM64_ANALYSIS_STRUCTS
 
       (* Registers are numbered: 0-31 are x0-x30,sp; 32-63 are d0-d31.
        * These are the ones that temporaries and stack slots may be given,

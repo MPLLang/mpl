@@ -2,7 +2,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor VibeArmEmit (S: VIBE_ARM_EMIT_STRUCTS): VIBE_ARM_EMIT =
+functor VibeArm64Emit (S: VIBE_ARM64_EMIT_STRUCTS): VIBE_ARM64_EMIT =
 struct
 
 open S

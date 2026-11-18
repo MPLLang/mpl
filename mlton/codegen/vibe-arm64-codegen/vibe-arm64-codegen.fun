@@ -37,18 +37,18 @@
  * across some C call prefer callee-save registers.
  *
  * The regions, the webs of temporaries and their registers are computed for a whole chunk before any of its code is
- * output: that is VibeArmAnalysis (see vibe-arm-analysis.sig).
+ * output: that is VibeArm64Analysis (see vibe-arm64-analysis.sig).
  *
  * Output.  The codegen builds a list of ARM64 instructions for each chunk
  * (see arm64.sig); printing them as assembly is the business of Arm64.
  *
- * The parts: VibeArmEmit collects the instructions; VibeArmAccess reads
- * and writes the operands of the Machine IR; VibeArmPrim outputs the primitives; VibeArmItems combines
- * statements; VibeArmLayout orders the blocks.  What is here is the frame
+ * The parts: VibeArm64Emit collects the instructions; VibeArm64Access reads
+ * and writes the operands of the Machine IR; VibeArm64Prim outputs the primitives; VibeArm64Items combines
+ * statements; VibeArm64Layout orders the blocks.  What is here is the frame
  * of a chunk function, the transfers, and the loop over the blocks.
  *)
 
-functor VibeArmCodegen (S: VIBE_ARM_CODEGEN_STRUCTS): VIBE_ARM_CODEGEN =
+functor VibeArm64Codegen (S: VIBE_ARM64_CODEGEN_STRUCTS): VIBE_ARM64_CODEGEN =
 struct
 
 open S
@@ -63,15 +63,15 @@ structure Opnd = Asm.Operand
 structure R = Asm.Reg
 structure Tgt = Asm.Target
 
-structure Analysis = VibeArmAnalysis (structure Machine = Machine)
+structure Analysis = VibeArm64Analysis (structure Machine = Machine)
 structure Web = Analysis.Web
-structure Items = VibeArmItems (structure Analysis = Analysis)
-structure Layout = VibeArmLayout (structure Analysis = Analysis)
-structure Emit = VibeArmEmit (structure Arm64 = Asm
+structure Items = VibeArm64Items (structure Analysis = Analysis)
+structure Layout = VibeArm64Layout (structure Analysis = Analysis)
+structure Emit = VibeArm64Emit (structure Arm64 = Asm
                               structure Machine = Machine)
-structure Access = VibeArmAccess (structure Emit = Emit
+structure Access = VibeArm64Access (structure Emit = Emit
                                   structure Items = Items)
-structure PrimApp = VibeArmPrim (structure Access = Access)
+structure PrimApp = VibeArm64Prim (structure Access = Access)
 val isReal = Analysis.isReal
 val size = Analysis.size
 val switchCases = Analysis.switchCases
@@ -113,8 +113,8 @@ fun implementsPrim (p: 'a Prim.t): bool =
  * addresses of the stubs are collected in a table that is indexed by frame
  * index (that is, by "return address").
  *)
-fun entryStub l = "vibeArmEntry_" ^ Label.toString l
-val entryTable = "vibeArmEntries"
+fun entryStub l = "vibeArm64Entry_" ^ Label.toString l
+val entryTable = "vibeArm64Entries"
 
 fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                  {labelBlock: Label.t -> Block.t,
@@ -129,10 +129,10 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
       val leave = Lbl.Plain ("Lleave_" ^ self)
       (* The label of a block, and of the preheader that loads its promoted
        * stack slots.  By default they are local to the assembler; with
-       * -vibe-arm-symbols true, each is a symbol, so that tools (a
+       * -vibe-arm64-symbols true, each is a symbol, so that tools (a
        * profiler, a debugger) can name the block that an address is in.
        *)
-      val symbols = !Control.vibeArmSymbols
+      val symbols = !Control.vibeArm64Symbols
       fun blockLabel l =
          if symbols then Lbl.Sym (Label.toString l)
          else Lbl.Local (Label.toString l)
@@ -140,7 +140,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
          if symbols then Lbl.Sym ("pre_" ^ Label.toString l)
          else Lbl.Plain ("Lpre_" ^ Label.toString l)
 
-      (* The analysis of the chunk (see vibe-arm-analysis.sig): speculation,
+      (* The analysis of the chunk (see vibe-arm64-analysis.sig): speculation,
        * regions, loops and, for the graph allocator, the registers of the
        * webs of temporaries and of promoted stack slots.  The blocks that
        * it returns are the ones to output.
@@ -165,7 +165,7 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
                andalso ploop <> #ploop (blockWebs (curBlock ()))
                then if pheader
                        then preLabel l
-                    else Error.bug "VibeArmCodegen.target: no preheader"
+                    else Error.bug "VibeArm64Codegen.target: no preheader"
             else blockLabel l
          end
 

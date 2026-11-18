@@ -1,4 +1,4 @@
-Checking that a change to the vibe-arm codegen doesn't change its output
+Checking that a change to the vibe-arm64 codegen doesn't change its output
 ========================================================================
 
 A refactoring of the codegen should output the same assembly as before,
@@ -11,21 +11,21 @@ with two compilers, under each configuration of the codegen, and compare.
 
 The corpus is regression/*.sml, examples/src/*, rare.sml and, if you have
 it, the benchmarks of parallel-ml-bench (mpl/bench/*).  The configurations
-are the default ("plain"), -vibe-arm-symbols true ("sym"), and the target
+are the default ("plain"), -vibe-arm64-symbols true ("sym"), and the target
 OS faked as Linux ("linux").  The regression suite and the benchmarks are
 compiled under the first, and every eighth of them under the others; the
 examples and rare.sml under all three.
 
 Nothing is assembled, linked or run: this checks that the output is the
 same, not that it is right.  For that, there is bin/regression, with
--codegen vibe-arm.
+-codegen vibe-arm64.
 
 
 Procedure
 ---------
 
 You need a build tree (the build/ directory that "make" makes, with
-bin/mpl and lib/mlton) of a compiler that has the vibe-arm codegen, and
+bin/mpl and lib/mlton) of a compiler that has the vibe-arm64 codegen, and
 the compiler itself (lib/mlton/mlton-mpl-compile) from before and after
 the change.  "make -C mlton" builds only the compiler, as
 mlton/mlton-mpl-compile, in a couple of minutes, and leaves build/ alone.
@@ -40,7 +40,7 @@ mlton/mlton-mpl-compile, in a couple of minutes, and leaves build/ alone.
   cp -R build /tmp/new
   cp mlton/mlton-mpl-compile /tmp/new/lib/mlton/
 
-  cd mlton/codegen/vibe-arm-codegen/check
+  cd mlton/codegen/vibe-arm64-codegen/check
   ./gen.sh /tmp/base /tmp/out-base ~/parallel-ml-bench
   ./gen.sh /tmp/new /tmp/out-new ~/parallel-ml-bench
   ./compare.sh /tmp/out-base /tmp/out-new

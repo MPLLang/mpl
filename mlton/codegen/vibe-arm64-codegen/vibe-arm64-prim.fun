@@ -2,7 +2,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor VibeArmPrim (S: VIBE_ARM_PRIM_STRUCTS): VIBE_ARM_PRIM =
+functor VibeArm64Prim (S: VIBE_ARM64_PRIM_STRUCTS): VIBE_ARM64_PRIM =
 struct
 
 open S
@@ -142,12 +142,12 @@ fun primApp ({access, emit = e}: t,
                                           x (ext (k, ws, signed, true))) of
                               [r0] => (r0, NONE)
                             | [r0, r1] => (r0, SOME (regOp r1))
-                            | _ => Error.bug "VibeArmPrim.chk: operands")
+                            | _ => Error.bug "VibeArm64Prim.chk: operands")
                   (* a binary instruction on the operands *)
                   fun binary (opc, d) =
                      case z1 of
                         SOME z => emit (I.Bin (opc, d, r0, z))
-                      | NONE => Error.bug "VibeArmPrim.chk: binary"
+                      | NONE => Error.bug "VibeArm64Prim.chk: binary"
                   (* the operation itself, which may also set the flags *)
                   fun arith (d, {flags}) =
                      case opc of
@@ -293,7 +293,7 @@ fun primApp ({access, emit = e}: t,
                                                  then (m, s)
                                               else if s >= N
                                                  then Error.bug
-                                                      "VibeArmPrim.divConst"
+                                                      "VibeArm64Prim.divConst"
                                               else search (s + 1)
                                            end
                                         val (m, s) = search 1
@@ -334,7 +334,7 @@ fun primApp ({access, emit = e}: t,
                                                     then (m, s)
                                                  else if s >= 64
                                                     then Error.bug
-                                                         "VibeArmPrim.divConst"
+                                                         "VibeArm64Prim.divConst"
                                                  else search (s + 1)
                                               end
                                            val (m, s) = search 0
@@ -604,7 +604,7 @@ fun primApp ({access, emit = e}: t,
                            fun const k =
                               case a k of
                                  Operand.Const (Const.Word w) => WordX.toIntInf w
-                               | _ => Error.bug "VibeArmPrim.primApp: extract"
+                               | _ => Error.bug "VibeArm64Prim.primApp: extract"
                            val ct = wct ws
                         in
                            emit (I.Ubfx (reg (d, ct), reg (v 0, ct),
@@ -618,7 +618,7 @@ fun primApp ({access, emit = e}: t,
              | Word_sub ws => addsub (false, wct ws)
              | Word_subCheckP z => chk (Sub, z, [0, 1])
              | Word_xorb ws => logic (I.EOR, ws)
-             | _ => Error.bug (concat ["VibeArmPrim.primApp: ",
+             | _ => Error.bug (concat ["VibeArm64Prim.primApp: ",
                                        Prim.toString prim])
          end
    in

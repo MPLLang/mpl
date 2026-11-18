@@ -2,7 +2,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor VibeArmAccess (S: VIBE_ARM_ACCESS_STRUCTS): VIBE_ARM_ACCESS =
+functor VibeArm64Access (S: VIBE_ARM64_ACCESS_STRUCTS): VIBE_ARM64_ACCESS =
 struct
 
 open S
@@ -227,7 +227,7 @@ fun new {analysis: Analysis.t,
           | Operand.SequenceOffset {base, index, offset, scale, ...} =>
                let
                   val () = if t >= 17
-                              then Error.bug "VibeArmAccess.addr: nesting"
+                              then Error.bug "VibeArm64Access.addr: nesting"
                            else ()
                   val b = value (base, t, t)
                   val ix = value (index, t + 1, t + 1)
@@ -243,7 +243,7 @@ fun new {analysis: Analysis.t,
                (20, Bytes.toInt offset)
           | Operand.Temporary tmp =>
                homeOf (cty z, Temporary.index tmp)
-          | _ => Error.bug (concat ["VibeArmAccess.addr: ", Operand.toString z])
+          | _ => Error.bug (concat ["VibeArm64Access.addr: ", Operand.toString z])
       (* Put the value of z in register d. May clobber x<t> and up. *)
       and load (z, d, t): unit =
          let
@@ -260,13 +260,13 @@ fun new {analysis: Analysis.t,
                     | Const.Null => movInt (d, 0)
                     | Const.Real r =>
                          (case RealX.castToWord r of
-                             NONE => Error.bug "VibeArmAccess.load: Real"
+                             NONE => Error.bug "VibeArm64Access.load: Real"
                            | SOME w =>
                                 (movImm (17, WordX.toIntInf w)
                                  ; emit (I.Un (I.FMOV, reg (d, ct),
                                                reg (17, ct)))))
                     | Const.Word w => movImm (d, WordX.toIntInf w)
-                    | _ => Error.bug "VibeArmAccess.load: Const")
+                    | _ => Error.bug "VibeArm64Access.load: Const")
              | Operand.Label l => movInt (d, labelIndex l)
              | Operand.StaticHeapRef (StaticHeap.Ref.T {kind, offset, ...}) =>
                   (symAddr (d, "staticHeap" ^ StaticHeap.Kind.name kind,

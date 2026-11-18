@@ -2,7 +2,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-(* The statements of a block, as the vibe-arm codegen outputs them: with
+(* The statements of a block, as the vibe-arm64 codegen outputs them: with
  * statements that are better output together combined into one item.
  *
  *  - An operation and its overflow check, on the same arguments, are one
@@ -13,14 +13,14 @@
  *    the slot.
  *)
 
-signature VIBE_ARM_ITEMS_STRUCTS =
+signature VIBE_ARM64_ITEMS_STRUCTS =
    sig
-      structure Analysis: VIBE_ARM_ANALYSIS
+      structure Analysis: VIBE_ARM64_ANALYSIS
    end
 
-signature VIBE_ARM_ITEMS =
+signature VIBE_ARM64_ITEMS =
    sig
-      include VIBE_ARM_ITEMS_STRUCTS
+      include VIBE_ARM64_ITEMS_STRUCTS
 
       type app = {args: Analysis.Machine.Operand.t vector,
                   dst: Analysis.Machine.Operand.t,

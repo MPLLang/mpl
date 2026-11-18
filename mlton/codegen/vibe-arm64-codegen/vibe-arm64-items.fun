@@ -2,7 +2,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor VibeArmItems (S: VIBE_ARM_ITEMS_STRUCTS): VIBE_ARM_ITEMS =
+functor VibeArm64Items (S: VIBE_ARM64_ITEMS_STRUCTS): VIBE_ARM64_ITEMS =
 struct
 
 open S

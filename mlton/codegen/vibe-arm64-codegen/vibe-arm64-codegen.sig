@@ -2,16 +2,16 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature VIBE_ARM_CODEGEN_STRUCTS =
+signature VIBE_ARM64_CODEGEN_STRUCTS =
    sig
       structure CCodegen: C_CODEGEN
       structure Machine: MACHINE
       sharing Machine = CCodegen.Machine
    end
 
-signature VIBE_ARM_CODEGEN =
+signature VIBE_ARM64_CODEGEN =
    sig
-      include VIBE_ARM_CODEGEN_STRUCTS
+      include VIBE_ARM64_CODEGEN_STRUCTS
 
       val implementsPrim: 'a Machine.Prim.t -> bool
       val output: {program: Machine.Program.t,

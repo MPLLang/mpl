@@ -2,7 +2,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-functor VibeArmAnalysis (S: VIBE_ARM_ANALYSIS_STRUCTS): VIBE_ARM_ANALYSIS =
+functor VibeArm64Analysis (S: VIBE_ARM64_ANALYSIS_STRUCTS): VIBE_ARM64_ANALYSIS =
 struct
 
 open S
@@ -722,7 +722,7 @@ fun analyze {blocks: Block.t vector,
                            if w < 4096 then 8 * w else w)
              val () =
                 if Kind.isEntry kind andalso not (List.isEmpty (liveTemps b))
-                   then Error.bug "VibeArmCodegen: temporary live at entry"
+                   then Error.bug "VibeArm64Codegen: temporary live at entry"
                 else ()
              val cur: (entry * web) list ref =
                 ref (List.map (liveTemps b, fn e => (e, segIn (label, e, false))))

@@ -4,7 +4,7 @@
 
 (* ARM64 (AArch64) assembly, as data.
  *
- * This is the output of the vibe-arm codegen: instructions over physical
+ * This is the output of the vibe-arm64 codegen: instructions over physical
  * registers, labels, and the few directives that the codegen needs.  It
  * knows nothing of the Machine IR.  The syntax that depends on the target
  * (the prefix of a symbol, the spelling of a local label and of a

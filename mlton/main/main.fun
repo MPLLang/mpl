@@ -164,7 +164,7 @@ fun hasCodegen (cg, {default}) =
    in
       case cg of
         CCodegen => true
-      | VibeArmCodegen => !Control.Target.arch = ARM64
+      | VibeArm64Codegen => !Control.Target.arch = ARM64
       (*
       | LLVMCodegen => true
       | _ => false
@@ -318,9 +318,9 @@ fun makeOptions {usage} =
         intRef codegenComments),
        (Expert, "codegen-fuse-op-and-chk", " {false|true}", "fuse `op` and `opCheckP` primitives in codegen",
         boolRef codegenFuseOpAndChk),
-       (Normal, "vibe-arm-symbols", " {false|true}",
-        "keep a symbol for each block and entry of the vibe-arm codegen",
-        boolRef vibeArmSymbols),
+       (Normal, "vibe-arm64-symbols", " {false|true}",
+        "keep a symbol for each block and entry of the vibe-arm64 codegen",
+        boolRef vibeArm64Symbols),
        (Normal, "const", " '<name> <value>'", "set compile-time constant",
         SpaceString (fn s =>
                      case String.tokens (s, Char.isSpace) of
@@ -1214,7 +1214,7 @@ fun commandLine (_: string, args: string list): unit =
                                 " target"])
          else ()
       val () =
-         if !codegen = VibeArmCodegen
+         if !codegen = VibeArm64Codegen
             then
                let
                   (* in yellow, if it goes to a terminal *)
@@ -1227,7 +1227,7 @@ fun commandLine (_: string, args: string list): unit =
                   Out.output
                   (Out.error,
                    concat [on,
-                           "Warning: the vibe-arm codegen is an experimental native code generator for ARM64/AArch64. It can generate more efficient code than `-codegen c`, but has not been tested as thoroughly.",
+                           "Warning: the vibe-arm64 codegen is an experimental native code generator for ARM64/AArch64. It can generate more efficient code than `-codegen c`, but has not been tested as thoroughly.",
                            off, "\n"])
                end
          else ()
@@ -1242,7 +1242,7 @@ fun commandLine (_: string, args: string list): unit =
          (case !explicitChunkify of
              NONE => (case !codegen of
                          CCodegen => Chunkify.Coalesce {limit = 4096}
-                       | VibeArmCodegen => Chunkify.Coalesce {limit = 4096}
+                       | VibeArm64Codegen => Chunkify.Coalesce {limit = 4096}
 (*
                        | AMD64Codegen => Chunkify.Func
                        | LLVMCodegen => Chunkify.Coalesce {limit = 4096}
@@ -1462,12 +1462,12 @@ fun commandLine (_: string, args: string list): unit =
                                        ["-o", output],
                                        inputs,
                                        linkOpts,
-                                       (* The entry stubs of the vibe-arm
+                                       (* The entry stubs of the vibe-arm64
                                         * codegen need symbols only until
                                         * the link.
                                         *)
-                                       if !codegen = VibeArmCodegen
-                                          andalso not (!vibeArmSymbols)
+                                       if !codegen = VibeArm64Codegen
+                                          andalso not (!vibeArm64Symbols)
                                           andalso targetOS = Darwin
                                           then ["-Wl,-x"]
                                        else []]))

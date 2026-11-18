@@ -2,13 +2,13 @@
  * See the file MLton-LICENSE for details.
  *)
 
-(* Access to the operands of the Machine IR, for the vibe-arm codegen: where
+(* Access to the operands of the Machine IR, for the vibe-arm64 codegen: where
  * the value of an operand is as a block is output (a register, the frame,
  * the ML stack, the heap), and the instructions that read and write it.
  * What uses it (the primitives, the transfers) doesn't know which register,
  * if any, an operand is in.
  *
- * A temporary is in the register of its web (see VibeArmAnalysis), or, if
+ * A temporary is in the register of its web (see VibeArm64Analysis), or, if
  * it has none, in the frame.  A stack slot that is promoted in a loop is in
  * the register of its web.  Within a block, a stack slot that is read more
  * than once is cached in a register that no web is using there.
@@ -26,16 +26,16 @@
  * d0-d31.
  *)
 
-signature VIBE_ARM_ACCESS_STRUCTS =
+signature VIBE_ARM64_ACCESS_STRUCTS =
    sig
-      structure Emit: VIBE_ARM_EMIT
-      structure Items: VIBE_ARM_ITEMS
+      structure Emit: VIBE_ARM64_EMIT
+      structure Items: VIBE_ARM64_ITEMS
       sharing Emit.Machine = Items.Analysis.Machine
    end
 
-signature VIBE_ARM_ACCESS =
+signature VIBE_ARM64_ACCESS =
    sig
-      include VIBE_ARM_ACCESS_STRUCTS
+      include VIBE_ARM64_ACCESS_STRUCTS
 
       val cty: Emit.Machine.Operand.t -> Emit.Machine.CType.t
 

@@ -2,25 +2,25 @@
  * See the file MLton-LICENSE for details.
  *)
 
-(* Building the instructions of a chunk, for the vibe-arm codegen: the list
+(* Building the instructions of a chunk, for the vibe-arm64 codegen: the list
  * that they are collected in, and the short sequences that depend only on
  * what ARM64 can encode (a constant that needs several instructions, an
  * offset that is too large for an addressing mode, the address of a
  * symbol).  It knows nothing of where the operands of the Machine IR live;
- * that is VibeArmAccess.
+ * that is VibeArm64Access.
  *
  * Registers are numbered: 0-31 are x0-x30,sp; 32-63 are d0-d31.
  *)
 
-signature VIBE_ARM_EMIT_STRUCTS =
+signature VIBE_ARM64_EMIT_STRUCTS =
    sig
       structure Arm64: ARM64
       structure Machine: MACHINE
    end
 
-signature VIBE_ARM_EMIT =
+signature VIBE_ARM64_EMIT =
    sig
-      include VIBE_ARM_EMIT_STRUCTS
+      include VIBE_ARM64_EMIT_STRUCTS
 
       (* integer register r (0-31), at 64 bits *)
       val x: int -> Arm64.Reg.t

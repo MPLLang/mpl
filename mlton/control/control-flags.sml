@@ -234,7 +234,7 @@ structure Codegen =
    struct
       datatype t =
          CCodegen
-       | VibeArmCodegen
+       | VibeArm64Codegen
        (*
        | AMD64Codegen
        | LLVMCodegen
@@ -242,11 +242,11 @@ structure Codegen =
        *)
 
       (* val all = [X86Codegen,AMD64Codegen,CCodegen,LLVMCodegen] *)
-      val all = [CCodegen, VibeArmCodegen]
+      val all = [CCodegen, VibeArm64Codegen]
 
       val toString: t -> string =
          fn CCodegen => "c"
-          | VibeArmCodegen => "vibe-arm"
+          | VibeArm64Codegen => "vibe-arm64"
           (*
           | AMD64Codegen => "amd64"
           | LLVMCodegen => "llvm"
@@ -264,7 +264,7 @@ val codegenComments = control {name = "codegen comments",
                                default = 0,
                                toString = Int.toString}
 
-val vibeArmSymbols = control {name = "vibe-arm symbols",
+val vibeArm64Symbols = control {name = "vibe-arm64 symbols",
                               default = false,
                               toString = Bool.toString}
 
@@ -1804,7 +1804,7 @@ val buildConsts =
            ("MLton_Codegen_codegen", int (case !codegen of
                                              CCodegen => 0
                                            (* same as C, as far as the basis library is concerned *)
-                                           | VibeArmCodegen => 0
+                                           | VibeArm64Codegen => 0
                                            (*
                                            | X86Codegen => 1
                                            | AMD64Codegen => 2
