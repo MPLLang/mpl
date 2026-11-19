@@ -39,6 +39,11 @@ fun map (opt, f) =
       NONE => NONE
     | SOME x => SOME (f x)
 
+fun andThen (opt, f) =
+   case opt of
+      NONE => NONE
+    | SOME x => f x
+
 fun equals (o1, o2, eq) =
    case (o1, o2) of
       (NONE, NONE) => true

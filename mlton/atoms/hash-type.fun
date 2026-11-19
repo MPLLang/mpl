@@ -145,7 +145,7 @@ fun ofConst c =
        | Null => cpointer
        | Real r => real (RealX.size r)
        | Word w => word (WordX.size w)
-       | WordVector v => vector (word (WordXVector.elementSize v))
+       | WordVector v => vector ArrayLayout.Default (word (WordXVector.elementSize v))
    end
 
 fun isUnit t =

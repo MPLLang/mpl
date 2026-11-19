@@ -49,6 +49,17 @@ structure Vector =
       type 'a vector = 'a t
    end
 
+structure ArrayAos =
+   struct
+      type 'a t = 'a array_aos
+      type 'a array_aos = 'a t
+   end
+structure VectorAos =
+   struct
+      type 'a t = 'a vector_aos
+      type 'a vector_aos = 'a t
+   end
+
 (* Primitive Basis (Primitive Types) *)
 structure Char8 =
    struct

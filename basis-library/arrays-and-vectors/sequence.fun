@@ -66,7 +66,7 @@ structure SeqIndex =
             else fromIntUnsafe n
    end
 
-functor Sequence (S: PRIM_SEQUENCE): SEQUENCE =
+functor Sequence (S: PRIM_SEQUENCE): SEQUENCE where type 'a prim_array = 'a S.prim_array  =
    struct
       val op +! = SeqIndex.+!
       val op +$ = SeqIndex.+$
@@ -83,6 +83,7 @@ functor Sequence (S: PRIM_SEQUENCE): SEQUENCE =
 
       type 'a sequence = 'a S.sequence
       type 'a elt = 'a S.elt
+      type 'a prim_array = 'a S.prim_array
 
       (* S.maxLen must be representable as an Int.int already *)
       val maxLen = SeqIndex.toInt S.maxLen
@@ -130,6 +131,7 @@ functor Sequence (S: PRIM_SEQUENCE): SEQUENCE =
             type 'a sequence = 'a S.Slice.sequence
             type 'a elt = 'a S.Slice.elt
             type 'a slice = 'a S.Slice.slice
+            type 'a prim_array = 'a S.Slice.prim_array
 
             fun length sl = 
                if Primitive.Controls.safe
@@ -250,7 +252,7 @@ functor Sequence (S: PRIM_SEQUENCE): SEQUENCE =
                                        handle Overflow => raise Size)
                               else (fn (x, s) => s +! S.Slice.length (toSlice x))
                         val n = List.foldl add 0 xs
-                        val a = Primitive.Array.alloc n
+                        val a = S.unsafeArrayAlloc n
                         fun loop (di, xs) =
                            case xs of
                               [] => S.unsafeFromArray a
@@ -281,7 +283,7 @@ functor Sequence (S: PRIM_SEQUENCE): SEQUENCE =
                               else (fn (x, s) =>
                                        (s +! sepn +! S.Slice.length (toSlice x)))
                         val n = List.foldl add (S.Slice.length (toSlice x)) xs
-                        val a = Primitive.Array.alloc n
+                        val a = S.unsafeArrayAlloc n
                         fun loop (di, xs) =
                            case xs of
                               [] => raise Fail "Sequence.Slice.concatWithGen"
