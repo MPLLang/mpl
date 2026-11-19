@@ -267,6 +267,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                (* SAM_NOTE: only CCodegen supported right now *)
                val frameInfos =
                   if !Control.codegen = Control.CCodegen
+                     orelse !Control.codegen = Control.VibeAmd64Codegen
                      orelse !Control.codegen = Control.VibeArm64Codegen (* orelse !Control.codegen = Control.LLVMCodegen *)
                      then let
                              val done =
@@ -338,6 +339,7 @@ fun toMachine (rssa: Rssa.Program.t) =
                (* SAM_NOTE: only CCodegen supported right now *)
                if entry
                   andalso (!Control.codegen = Control.CCodegen
+                           orelse !Control.codegen = Control.VibeAmd64Codegen
                            orelse !Control.codegen = Control.VibeArm64Codegen
                            (* orelse !Control.codegen = Control.LLVMCodegen *))
                   then new ()

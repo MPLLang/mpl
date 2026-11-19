@@ -12,11 +12,13 @@ local
    c-codegen/sources.mlb
    (*llvm-codegen/sources.mlb*)
    (*x86-codegen/sources.mlb*)
+   vibe-amd64-codegen/sources.mlb
    vibe-arm64-codegen/sources.mlb
 in
    (*functor amd64Codegen*)
    functor CCodegen
    (*functor LLVMCodegen*)
    (*functor x86Codegen*)
+   functor VibeAmd64Codegen
    functor VibeArm64Codegen
 end

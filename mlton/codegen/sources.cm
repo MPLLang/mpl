@@ -13,6 +13,7 @@ Library
 functor CCodegen
 (*functor LLVMCodegen*)
 (*functor x86Codegen*)
+functor VibeAmd64Codegen
 functor VibeArm64Codegen
 
 is
@@ -21,4 +22,5 @@ is
 c-codegen/sources.cm
 (*llvm-codegen/sources.cm*)
 (*x86-codegen/sources.cm*)
+vibe-amd64-codegen/sources.cm
 vibe-arm64-codegen/sources.cm
