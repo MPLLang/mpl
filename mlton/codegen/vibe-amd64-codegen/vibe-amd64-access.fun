@@ -240,6 +240,20 @@ fun new {analysis: Analysis.t,
             Operand.Cast (z, _) => constWord z
           | Operand.Const (Const.Word w) => SOME w
           | _ => NONE
+      (* The displacement of a sequence offset whose index is a constant,
+       * if it fits in an address.  The index is signed.
+       *)
+      fun constDisp {index, offset, scale} =
+         case constWord index of
+            NONE => NONE
+          | SOME w =>
+               let
+                  val d = IntInf.fromInt (Bytes.toInt offset)
+                          + IntInf.fromInt (Bytes.toInt (Scale.toBytes scale))
+                            * WordX.toIntInfX w
+               in
+                  if simm32 d then SOME (IntInf.toInt d) else NONE
+               end
       fun reads z =
          case z of
             Operand.Address z => reads z
@@ -256,10 +270,12 @@ fun new {analysis: Analysis.t,
                (case stripCast base of
                    Operand.StaticHeapRef _ => false
                  | _ => not (isSome (home base)))
-          | Operand.SequenceOffset {base, index, ...} =>
+          | Operand.SequenceOffset {base, index, offset, scale, ...} =>
                not (isSome (home base))
                orelse not (isSome (home index)
-                           orelse isSome (constWord index))
+                           orelse isSome (constDisp {index = index,
+                                                     offset = offset,
+                                                     scale = scale}))
           | _ => false
       fun immOf z =
          let
@@ -339,10 +355,9 @@ fun new {analysis: Analysis.t,
                      fun mk (b, i) =
                         Addr.T {base = SOME b, index = SOME (i, n), disp = off}
                   in
-                     case constWord index of
-                        SOME w =>
-                           based (inReg (base, scratch),
-                                  off + n * IntInf.toInt (WordX.toIntInf w))
+                     case constDisp {index = index, offset = offset,
+                                     scale = scale} of
+                        SOME d => based (inReg (base, scratch), d)
                       | NONE =>
                            (case (regHome base, regHome index) of
                                (SOME b, SOME i) => mk (b, i)
