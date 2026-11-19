@@ -131,7 +131,12 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  assert(bytesRequested + sizeof(struct HM_chunk) <= s->controls->blockSize);
+  /* A request can exceed a block: the limit check before an IntInf
+   * primitive asks for a bound on its result computed at run time.
+   * HM_ensureHierarchicalHeapAssurances then extends the thread into a
+   * chunk of several blocks, with the result at its start, and the
+   * primitive closes that chunk once the result is in place (see
+   * leaveOversizedChunk in int-inf.c). */
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);

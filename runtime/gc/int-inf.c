@@ -126,6 +126,45 @@ void initIntInfRes (GC_state s, __mpz_struct *res,
 }
 
 /*
+ * An IntInf primitive asks for a bound on its result, computed at run time,
+ * and that can exceed a block. GC_collect then extends the thread into a
+ * chunk of several blocks, and the primitive builds its result at the start
+ * of that chunk, in its first block, as a large sequence is. Nothing else
+ * may follow it there: HM_getChunkOf finds an object's chunk from the
+ * object's block, so it works only for objects in a chunk's first block.
+ *
+ * So once the result is in place, if the thread's current chunk is larger
+ * than a block, it is closed: marked as a single-object chunk when it holds
+ * the result, and the thread continues in a fresh chunk. That chunk has room
+ * for whatever the code after the call allocates before its next limit
+ * check: the compiler covers at most 512 * 7 bytes, slop included, with one
+ * statically sized check (maxBytesAlloc in insert-checks.fun).
+ *
+ * This doesn't trigger a collection, so it is safe in a call that doesn't
+ * enter the runtime.
+ */
+static void leaveOversizedChunk (GC_state s, pointer resultStart,
+                                 bool resultKept) {
+  GC_thread thread = getThreadCurrent(s);
+  HM_chunk chunk = thread->currentChunk;
+  if ((size_t)(HM_getChunkLimit(chunk) - (pointer)chunk)
+      <= s->controls->blockSize)
+    return;
+
+  HM_HH_updateValues(thread, s->frontier);
+  if (resultKept and resultStart == HM_getChunkStart(chunk))
+    chunk->mightContainMultipleObjects = FALSE;
+
+  size_t bytesAfter = 7 * GC_HEAP_LIMIT_SLOP;
+  if (!HM_HH_extend(s, thread, bytesAfter))
+    DIE("Ran out of space after an IntInf result");
+  s->frontier = HM_HH_getFrontier(thread);
+  s->limitPlusSlop = HM_HH_getLimit(thread);
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  thread->bytesNeeded = bytesAfter;
+}
+
+/*
  * Given an __mpz_struct pointer which reflects the answer, set
  * gcState.frontier and return the answer.
  * If the answer fits in a fixnum, we return that, with the frontier
@@ -133,7 +172,20 @@ void initIntInfRes (GC_state s, __mpz_struct *res,
  * If the answer doesn't need all of the space allocated, we adjust
  * the sequence size and roll the frontier slightly back.
  */
+static objptr finiIntInfResInPlace (GC_state s, __mpz_struct *res,
+                                    size_t bytes);
+
 objptr finiIntInfRes (GC_state s, __mpz_struct *res, size_t bytes) {
+  pointer resultStart =
+    (pointer)res->_mp_d
+    - (offsetof(struct GC_intInf, obj) + offsetof(struct GC_intInf_obj, limbs));
+  objptr result = finiIntInfResInPlace (s, res, bytes);
+  leaveOversizedChunk (s, resultStart, not isSmall (result));
+  return result;
+}
+
+static objptr finiIntInfResInPlace (GC_state s, __mpz_struct *res,
+                                    size_t bytes) {
   GC_intInf bp;
   int size;
 
@@ -320,6 +372,7 @@ objptr IntInf_strop (GC_state s, objptr arg, Int32_t base, size_t bytes,
   sp->length = (GC_sequenceLength)size;
   sp->header = GC_STRING8_HEADER;
   // sp->fwdptr = BOGUS_OBJPTR;
+  leaveOversizedChunk (s, (pointer)sp, TRUE);
   return pointerToObjptr ((pointer)&sp->obj, NULL);
 }
 
