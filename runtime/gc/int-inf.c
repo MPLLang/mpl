@@ -142,9 +142,10 @@ void initIntInfRes (GC_state s, __mpz_struct *res,
  * bytes, slop included, the compiler's limit for one statically sized check
  * (maxBytesAlloc in insert-checks.fun). As for the closed chunk:
  *   - if it's empty (a fixnum result), it is freed;
- *   - if the result is its only object and fits in the chunk the thread
- *     goes back to, the result is moved there and the chunk is freed, so a
- *     small result doesn't keep a chunk sized for its bound;
+ *   - if the result is its only object and fits, with that room after it,
+ *     in a chunk of one block, the result is moved to the chunk the thread
+ *     continues in and the chunk is freed, so a small result doesn't keep a
+ *     chunk sized for its bound;
  *   - otherwise it stays, marked single-object when the result is its only
  *     object, like a large sequence's chunk.
  *
@@ -187,22 +188,24 @@ objptr leaveOversizedChunk (GC_state s, pointer resultStart, objptr result) {
     prev = NULL;
 
   if (0 == used
-      or (onlyResult and NULL != prev
-          and HM_getChunkSizePastFrontier(prev) >= used + bytesAfter)) {
-    /* empty, or a result small enough to move: free the chunk */
-    if (NULL != prev) {
-      pointer dst = HM_getChunkFrontier(prev);
-      if (used > 0) {
-        GC_memcpy (start, dst, used);
-        result = pointerToObjptr (objptrToPointer (result, NULL) - start + dst,
-                                  NULL);
-      }
+      or (onlyResult
+          and used + bytesAfter + sizeof(struct HM_chunk)
+              <= s->controls->blockSize)) {
+    /* empty, or a result small enough to move: free the chunk. A fresh
+     * chunk also takes a result that the chunk before can't: otherwise,
+     * once that one's room is between bytesAfter and used + bytesAfter,
+     * every such result would keep a chunk sized for its bound. */
+    if (NULL != prev
+        and HM_getChunkSizePastFrontier(prev) >= used + bytesAfter)
       thread->currentChunk = prev;
+    else if (!HM_HH_extend(s, thread, used + bytesAfter))
+      DIE("Ran out of space after an IntInf result");
+    pointer dst = HM_getChunkFrontier(thread->currentChunk);
+    if (used > 0) {
+      GC_memcpy (start, dst, used);
+      result = pointerToObjptr (objptrToPointer (result, NULL) - start + dst,
+                                NULL);
       HM_HH_updateValues(thread, dst + used);
-    } else {
-      assert (0 == used);
-      if (!HM_HH_extend(s, thread, bytesAfter))
-        DIE("Ran out of space after an IntInf result");
     }
     /* HM_HH_extend counted the chunk as allocated when it was opened; a
      * freed chunk shouldn't bring the next collection closer. */
