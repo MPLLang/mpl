@@ -53,9 +53,11 @@ fun switchCases (cases, default) =
    end
 
 (* The analysis may make this many temporaries of each type, beyond those
- * that a chunk has.
+ * that a chunk has: those that speculation renames to, and one for results
+ * that nothing reads (see "sink").
  *)
-val extraTemps = 16
+val renameTemps = 16
+val extraTemps = renameTemps + 1
 
 (* A select: dst = if test = value then a else b.  The Machine IR has no
  * such statement; it is a PrimApp of a primitive that the IR never has
@@ -203,10 +205,17 @@ fun analyze {blocks: Block.t vector,
                              List.push (made, (ct, n)); n
                           end
          in
-            if !n >= extraTemps then NONE
+            if !n >= renameTemps then NONE
             else (Int.inc n
                   ; SOME (Temporary.new (ty, SOME (tempsMax ct + !n))))
          end
+      (* The temporary for results of its type that nothing reads.  The
+       * Machine IR has primitives with an effect and no destination (a
+       * compare-and-swap whose result is unused); here, every primitive that
+       * is output has a destination.
+       *)
+      fun sink (ty: Type.t): Temporary.t =
+         Temporary.new (ty, SOME (tempsMax (Type.toCType ty) + extraTemps))
       val {get = labelInfo: Label.t -> {near: Label.t list ref,
                                         (* is a loop header? *)
                                         loopHeader: bool ref,
@@ -812,23 +821,41 @@ fun analyze {blocks: Block.t vector,
                             (s :: ss, uses (src, uses (dst, live)))
                        | Statement.PrimApp {args, dst, prim} =>
                             let
-                               fun keep live =
+                               fun keep' (s, live) =
                                   (s :: ss,
                                    Vector.fold (args, live, fn (z, live) =>
                                                 uses (z, live)))
+                               fun keep live = keep' (s, live)
+                               (* the argument that has the type of the
+                                * result of a compare-and-swap
+                                *)
                                val effect =
                                   case prim of
-                                     Prim.Array_cas _ => true
-                                   | Prim.Ref_cas _ => true
-                                   | _ => false
+                                     Prim.Array_cas _ => SOME 2
+                                   | Prim.Ref_cas _ => SOME 1
+                                   | _ => NONE
                             in
-                               case dst of
-                                  SOME (Operand.Temporary t) =>
-                                     if isLive (t, live) orelse effect
+                               case (dst, effect) of
+                                  (SOME (Operand.Temporary t), _) =>
+                                     if isLive (t, live) orelse isSome effect
                                         then keep (kill (t, live))
                                      else (changed := true; (ss, live))
-                                | SOME z => keep (uses (z, live))
-                                | NONE => keep live
+                                | (SOME z, _) => keep (uses (z, live))
+                                | (NONE, SOME k) =>
+                                     let
+                                        val t =
+                                           sink (Operand.ty (Vector.sub (args, k)))
+                                     in
+                                        changed := true
+                                        ; keep' (Statement.PrimApp
+                                                 {args = args,
+                                                  dst = SOME (Operand.Temporary t),
+                                                  prim = prim},
+                                                 live)
+                                     end
+                                | (NONE, NONE) =>
+                                     (* the other primitives are pure *)
+                                     (changed := true; (ss, live))
                             end)
                in
                   if !changed
@@ -884,6 +911,12 @@ fun analyze {blocks: Block.t vector,
             fun isT (z, t) =
                case stripCast z of
                   Operand.Temporary t' => same (t, t')
+                | _ => false
+            (* a compare-and-swap *)
+            fun writesMemory (p: Type.t Prim.t) =
+               case p of
+                  Prim.Array_cas _ => true
+                | Prim.Ref_cas _ => true
                 | _ => false
             fun foldable src =
                case src of
@@ -999,12 +1032,12 @@ fun analyze {blocks: Block.t vector,
                                                          same (t', t'')))
                                               | Statement.PrimApp
                                                 {dst = SOME (Operand.Temporary t'),
-                                                 ...} =>
+                                                 prim, ...} =>
+                                                   not (writesMemory prim)
+                                                   andalso
                                                    not (List.exists
                                                         (srcTemps, fn t'' =>
                                                          same (t', t'')))
-                                              | Statement.PrimApp {dst = NONE, ...} =>
-                                                   true
                                               | _ => false
                                        in
                                           if ok then loop (s :: pre, ss)
@@ -1018,19 +1051,30 @@ fun analyze {blocks: Block.t vector,
                                           *)
                                          (case (s, ss) of
                                              (Statement.PrimApp
-                                              {args, dst = SOME d, ...},
+                                              {args, dst = SOME d, prim},
                                               Statement.PrimApp
                                               {args = args', dst = SOME d',
                                                prim = prim'} :: ss') =>
                                                 Vector.equals
                                                 (args, args', Operand.equals)
                                                 andalso count (d', t) = 0
+                                                (* If the two aren't output
+                                                 * as one, the second reads
+                                                 * the memory operand after
+                                                 * the first has written its
+                                                 * destination, which the
+                                                 * address mustn't read.
+                                                 *)
                                                 andalso (case (d, d') of
-                                                            (Operand.Temporary _,
+                                                            (Operand.Temporary td,
                                                              Operand.Temporary _) =>
-                                                               true
+                                                               not (List.exists
+                                                                    (srcTemps, fn t'' =>
+                                                                     same (td, t'')))
                                                           | _ => false)
-                                                andalso (case prim' of
+                                                andalso List.forall
+                                                        ([prim, prim'], fn p =>
+                                                         case p of
                                                             Prim.Array_cas _ => false
                                                           | Prim.Ref_cas _ => false
                                                           | Prim.MLton_bogus => false

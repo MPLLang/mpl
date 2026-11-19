@@ -993,8 +993,8 @@ fun selReal ({access, emit = e}: t, cmp: Items.app, sels: Items.app list) =
       val {ins, ...} = e
       fun arg ({args, ...}: Items.app, k) = Vector.sub (args, k)
       fun fs ct = if size ct = 4 then "ss" else "sd"
-      (* the comparison: its mnemonic, and x and y such that it is x < y
-       * (if strict) or x <= y
+      (* the comparison: its mnemonic, and whether it is x < y (strict) or
+       * x <= y
        *)
       val z =
          case #prim cmp of
@@ -1008,8 +1008,6 @@ fun selReal ({access, emit = e}: t, cmp: Items.app, sels: Items.app list) =
             let
                val x = arg (cmp, 0)
                val y = arg (cmp, 1)
-               (* as p < q *)
-               val (p, q) = if strict then (x, y) else (y, x)
                (* the values of a select, for when x ? y holds and for
                 * when it doesn't
                 *)
@@ -1019,33 +1017,32 @@ fun selReal ({access, emit = e}: t, cmp: Items.app, sels: Items.app list) =
                         if WordX.isZero w then (arg (s, 3), arg (s, 2))
                         else (arg (s, 2), arg (s, 3))
                    | _ => Error.bug "VibeAmd64Prim.selReal"
-               (* the same, for when p < q holds and for when it doesn't *)
-               fun values' s =
-                  let
-                     val (a, b) = values s
-                  in
-                     if strict then (a, b) else (b, a)
-                  end
                fun same (z, z') = Operand.equals (z, z')
-               (* Is the select a minimum or a maximum of p and q?  It
-                * can't be output as one if an earlier select has changed
-                * p or q.
+               (* Is the select a minimum or a maximum of x and y?  The
+                * instructions compute "if x < y then x else y" and
+                * "if y > x then y else x" exactly, including for NaNs and
+                * zeros of either sign.  Nothing does so for a select on
+                * x <= y: that isn't the negation of y < x when one is a
+                * NaN, and min (x, y) gives the wrong one of two zeros.
+                * Nor can a select be output as one if an earlier select has
+                * changed x or y.
                 *)
                datatype kind = Min | Max | Blend
                val (kinds, _) =
                   List.fold
                   (sels, ([], []), fn (s, (ks, written)) =>
                    let
-                      val (a, b) = values' s
+                      val (a, b) = values s
                       val clean =
                          not (List.exists
                               (written, fn d =>
-                               Operand.interfere (d, p)
-                               orelse Operand.interfere (d, q)))
+                               Operand.interfere (d, x)
+                               orelse Operand.interfere (d, y)))
                       val k =
-                         if clean andalso CType.equals (cty (#dst s), ct)
-                            then if same (a, p) andalso same (b, q) then Min
-                                 else if same (a, q) andalso same (b, p)
+                         if strict andalso clean
+                            andalso CType.equals (cty (#dst s), ct)
+                            then if same (a, x) andalso same (b, y) then Min
+                                 else if same (a, y) andalso same (b, x)
                                     then Max
                                  else Blend
                          else Blend
@@ -1083,11 +1080,11 @@ fun selReal ({access, emit = e}: t, cmp: Items.app, sels: Items.app list) =
                              (* min (a, b) is a if a < b, else b; max (a, b)
                               * is a if a > b, else b
                               *)
-                             Min => (load (p, xmm1, [rax, rcx])
-                                     ; ins ("min" ^ fs ct, [rm q, X xmm1])
+                             Min => (load (x, xmm1, [rax, rcx])
+                                     ; ins ("min" ^ fs ct, [rm y, X xmm1])
                                      ; store (dst, xmm1, {clean = true}))
-                           | Max => (load (q, xmm1, [rax, rcx])
-                                     ; ins ("max" ^ fs ct, [rm p, X xmm1])
+                           | Max => (load (y, xmm1, [rax, rcx])
+                                     ; ins ("max" ^ fs ct, [rm x, X xmm1])
                                      ; store (dst, xmm1, {clean = true}))
                            | Blend =>
                                 (* b xor ((a xor b) and mask) *)

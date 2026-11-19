@@ -856,6 +856,15 @@ fun outputChunk (Chunk.T {blocks, chunkLabel, tempsMax},
       ; instrs ()
    end
 
+(* What ends an assembly file.  On ELF targets, an object file that doesn't
+ * say that it doesn't need an executable stack makes the linker give the
+ * whole program one.
+ *)
+fun endFile (print: string -> unit): unit =
+   case !Control.Target.os of
+      MLton.Platform.OS.Darwin => ()
+    | _ => print "\t.section .note.GNU-stack,\"\",@progbits\n"
+
 fun output {program as Program.T {chunks, frameInfos, ...}, outputC,
             outputS: unit -> {file: File.t,
                               print: string -> unit,
@@ -909,6 +918,7 @@ fun output {program as Program.T {chunks, frameInfos, ...}, outputC,
                 List.push (code, I.Quad (Option.map (lo, entryLabel))))
          in
             Asm.output (List.rev (!code), print)
+            ; endFile print
             ; done ()
          end
    in
@@ -927,6 +937,7 @@ fun output {program as Program.T {chunks, frameInfos, ...}, outputC,
                                                labelIndex = labelIndex},
                                        {frame = frame, frameSize = frameSize}),
                           print))
+             ; endFile print
              ; done ()
           end)}
    end

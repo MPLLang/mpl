@@ -38,7 +38,9 @@ fun items (ss: Statement.t list): item list =
       [] => []
     | Statement.Move z :: ss => Move z :: items ss
     | Statement.PrimApp {dst = NONE, ...} :: ss =>
-         (* all primitives are pure *)
+         (* The analysis has given a destination to every primitive that
+          * has an effect.
+          *)
          items ss
     | Statement.PrimApp {args, dst = SOME dst, prim} :: ss =>
          let
