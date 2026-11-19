@@ -8,6 +8,10 @@ void *GC_mmapFileReadable (int fd, size_t size) {
   return mmapFileReadable(fd, size);
 }
 
+void *GC_mmapFileWriteable (int fd, size_t size) {
+  return mmapFileWriteable(fd, size);
+}
+
 void *GC_mmapAnon (void *start, size_t length) {
         return mmapAnon (start, length);
 }

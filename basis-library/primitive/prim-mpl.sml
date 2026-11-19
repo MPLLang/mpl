@@ -16,7 +16,11 @@ struct
       Pointer.t * Char8.t array * C_Size.word * C_Size.word -> unit;
     val copyWord8sToBuffer = _import "GC_memcpyToBuffer" runtime private:
       Pointer.t * Word8.word array * C_Size.word * C_Size.word -> unit;
+    val copyWord8sFromBuffer = _import "GC_memcpyFromBuffer" runtime private:
+       Pointer.t * Word8.word array * C_Size.word * C_Size.word -> unit;
     val mmapFileReadable = _import "GC_mmapFileReadable" runtime private:
+      C_Int.int * C_Size.word -> Pointer.t;
+    val mmapFileWriteable = _import "GC_mmapFileWriteable" runtime private:
       C_Int.int * C_Size.word -> Pointer.t;
     val release = _import "GC_release" runtime private:
       Pointer.t * C_Size.word -> unit;
