@@ -141,6 +141,23 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
 
+  /* The chunk opened for a request larger than a block goes at the end of
+   * the heap's chunk list. Put the thread's current chunk there first, so
+   * that it is the chunk just before the new one, which is where
+   * leaveOversizedChunk looks for the chunk to go back to. Otherwise it would
+   * find whatever was put in the list since: the chunk of the previous large
+   * result, or of a large sequence. */
+  {
+    GC_thread thread = getThreadCurrent(s);
+    HM_chunk current = thread->currentChunk;
+    if (thread->bytesNeeded + sizeof(struct HM_chunk) > s->controls->blockSize
+        && NULL != current->nextChunk) {
+      HM_chunkList list = HM_HH_getChunkList(HM_getLevelHead(current));
+      HM_unlinkChunkPreserveLevelHead(list, current);
+      HM_appendChunk(list, current);
+    }
+  }
+
   /* SAM_NOTE: don't use HM_HH_getFrontier here, because invariant is possibly
    * violated (might have frontier == limitPlusSlop)
    */

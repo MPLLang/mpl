@@ -136,9 +136,10 @@ void initIntInfRes (GC_state s, __mpz_struct *res,
  * So once the result is in place, a current chunk larger than a block is
  * closed, and the thread continues in the chunk before it in the same heap
  * when that one has room (as allocateLargeSequence returns to the thread's
- * previous chunk), else in a fresh chunk. The room is what the code after
- * the call may allocate before its next limit check: at most 512 * 7 bytes,
- * slop included, the compiler's limit for one statically sized check
+ * previous chunk), else in a fresh chunk. (GC_collect puts the chunk the
+ * thread was in just before the one it opens.) The room is what the code
+ * after the call may allocate before its next limit check: at most 512 * 7
+ * bytes, slop included, the compiler's limit for one statically sized check
  * (maxBytesAlloc in insert-checks.fun). As for the closed chunk:
  *   - if it's empty (a fixnum result), it is freed;
  *   - if the result is its only object and fits in the chunk the thread
