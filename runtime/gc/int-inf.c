@@ -150,8 +150,15 @@ void initIntInfRes (GC_state s, __mpz_struct *res,
  * Nothing here can trigger a collection, so it is safe in a call that
  * doesn't enter the runtime. Returns the result, moved or not.
  */
-static objptr leaveOversizedChunk (GC_state s, pointer resultStart,
-                                   objptr result) {
+static objptr leaveOversizedChunk (GC_state s, size_t bytes,
+                                   pointer resultStart, objptr result) {
+  /* Fast path: the check before the call asked for at most bytes, the
+   * statically sized allocation after the call and the slop. If that fits
+   * in a block, it didn't open a chunk larger than a block. */
+  if (bytes + 7 * GC_HEAP_LIMIT_SLOP + sizeof(struct HM_chunk)
+      <= s->controls->blockSize)
+    return result;
+
   GC_thread thread = getThreadCurrent(s);
   HM_chunk chunk = thread->currentChunk;
   if ((size_t)(HM_getChunkLimit(chunk) - (pointer)chunk)
@@ -226,7 +233,7 @@ objptr finiIntInfRes (GC_state s, __mpz_struct *res, size_t bytes) {
     (pointer)res->_mp_d
     - (offsetof(struct GC_intInf, obj) + offsetof(struct GC_intInf_obj, limbs));
   objptr result = finiIntInfResInPlace (s, res, bytes);
-  return leaveOversizedChunk (s, resultStart, result);
+  return leaveOversizedChunk (s, bytes, resultStart, result);
 }
 
 static objptr finiIntInfResInPlace (GC_state s, __mpz_struct *res,
@@ -417,7 +424,7 @@ objptr IntInf_strop (GC_state s, objptr arg, Int32_t base, size_t bytes,
   sp->length = (GC_sequenceLength)size;
   sp->header = GC_STRING8_HEADER;
   // sp->fwdptr = BOGUS_OBJPTR;
-  return leaveOversizedChunk (s, (pointer)sp,
+  return leaveOversizedChunk (s, bytes, (pointer)sp,
                               pointerToObjptr ((pointer)&sp->obj, NULL));
 }
 
