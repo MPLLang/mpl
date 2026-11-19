@@ -204,6 +204,11 @@ objptr leaveOversizedChunk (GC_state s, pointer resultStart, objptr result) {
       if (!HM_HH_extend(s, thread, bytesAfter))
         DIE("Ran out of space after an IntInf result");
     }
+    /* HM_HH_extend counted the chunk as allocated when it was opened; a
+     * freed chunk shouldn't bring the next collection closer. */
+    size_t chunkSize = HM_getChunkSize(chunk);
+    thread->bytesAllocatedSinceLastCollection -=
+      min(chunkSize, thread->bytesAllocatedSinceLastCollection);
     HM_unlinkChunk(list, chunk);
     HM_freeChunkWithInfo(s, chunk, NULL, BLOCK_FOR_HEAP_CHUNK);
   } else {
