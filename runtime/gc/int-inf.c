@@ -155,9 +155,20 @@ static void leaveOversizedChunk (GC_state s, pointer resultStart,
   if (resultKept and resultStart == HM_getChunkStart(chunk))
     chunk->mightContainMultipleObjects = FALSE;
 
+  /* Continue in the chunk before it in the same heap if that one has the
+   * room, as allocateLargeSequence returns to the thread's previous chunk;
+   * opening a fresh chunk after every large result would leave most of it
+   * empty. */
   size_t bytesAfter = 7 * GC_HEAP_LIMIT_SLOP;
-  if (!HM_HH_extend(s, thread, bytesAfter))
+  HM_chunk prev = chunk->prevChunk;
+  if (NULL != prev
+      and prev->mightContainMultipleObjects
+      and HM_getLevelHead(prev) == HM_getLevelHead(chunk)
+      and HM_getChunkSizePastFrontier(prev) >= bytesAfter) {
+    thread->currentChunk = prev;
+  } else if (!HM_HH_extend(s, thread, bytesAfter)) {
     DIE("Ran out of space after an IntInf result");
+  }
   s->frontier = HM_HH_getFrontier(thread);
   s->limitPlusSlop = HM_HH_getLimit(thread);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
