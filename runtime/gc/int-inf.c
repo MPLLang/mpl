@@ -242,22 +242,7 @@ objptr leaveOversizedChunk (GC_state s, pointer resultStart, objptr result) {
  * If the answer doesn't need all of the space allocated, we adjust
  * the sequence size and roll the frontier slightly back.
  */
-static objptr finiIntInfResInPlace (GC_state s, __mpz_struct *res,
-                                    size_t bytes);
-
 objptr finiIntInfRes (GC_state s, __mpz_struct *res, size_t bytes) {
-  objptr result = finiIntInfResInPlace (s, res, bytes);
-  if (mayBeInOversizedChunk (s, bytes)) {
-    pointer resultStart =
-      (pointer)res->_mp_d
-      - (offsetof(struct GC_intInf, obj) + offsetof(struct GC_intInf_obj, limbs));
-    return leaveOversizedChunk (s, resultStart, result);
-  }
-  return result;
-}
-
-static objptr finiIntInfResInPlace (GC_state s, __mpz_struct *res,
-                                    size_t bytes) {
   GC_intInf bp;
   int size;
 
@@ -343,6 +328,19 @@ static objptr finiIntInfResInPlace (GC_state s, __mpz_struct *res,
   return pointerToObjptr ((pointer)&bp->obj, NULL);
 }
 
+/* What an IntInf primitive returns: the result finiIntInfRes made, once the
+ * thread has left a chunk larger than a block (see leaveOversizedChunk). */
+static inline objptr leaveIntInfRes (GC_state s, __mpz_struct *res,
+                                     size_t bytes, objptr result) {
+  if (mayBeInOversizedChunk (s, bytes)) {
+    pointer resultStart =
+      (pointer)res->_mp_d
+      - (offsetof(struct GC_intInf, obj) + offsetof(struct GC_intInf_obj, limbs));
+    return leaveOversizedChunk (s, resultStart, result);
+  }
+  return result;
+}
+
 objptr IntInf_binop (GC_state s,
                      objptr lhs, objptr rhs, size_t bytes,
                      void(*binop)(__mpz_struct *resmpz,
@@ -358,7 +356,8 @@ objptr IntInf_binop (GC_state s,
   fillIntInfArg (s, lhs, &lhsmpz, lhsspace);
   fillIntInfArg (s, rhs, &rhsmpz, rhsspace);
   binop (&resmpz, &lhsmpz, &rhsmpz);
-  return finiIntInfRes (s, &resmpz, bytes);
+  return leaveIntInfRes (s, &resmpz, bytes,
+                         finiIntInfRes (s, &resmpz, bytes));
 }
 
 objptr IntInf_unop (GC_state s,
@@ -375,7 +374,8 @@ objptr IntInf_unop (GC_state s,
  initIntInfRes (s, &resmpz, bytes);
  fillIntInfArg (s, arg, &argmpz, argspace);
  unop (&resmpz, &argmpz);
- return finiIntInfRes (s, &resmpz, bytes);
+ return leaveIntInfRes (s, &resmpz, bytes,
+                        finiIntInfRes (s, &resmpz, bytes));
 }
 
 objptr IntInf_shop (GC_state s,
@@ -394,7 +394,8 @@ objptr IntInf_shop (GC_state s,
   initIntInfRes (s, &resmpz, bytes);
   fillIntInfArg (s, arg, &argmpz, argspace);
   shop (&resmpz, &argmpz, (unsigned long)shift);
-  return finiIntInfRes (s, &resmpz, bytes);
+  return leaveIntInfRes (s, &resmpz, bytes,
+                         finiIntInfRes (s, &resmpz, bytes));
 }
 
 Int32_t IntInf_cmpop (GC_state s, objptr lhs, objptr rhs,
