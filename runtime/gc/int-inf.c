@@ -133,46 +133,81 @@ void initIntInfRes (GC_state s, __mpz_struct *res,
  * may follow it there: HM_getChunkOf finds an object's chunk from the
  * object's block, so it works only for objects in a chunk's first block.
  *
- * So once the result is in place, if the thread's current chunk is larger
- * than a block, it is closed: marked as a single-object chunk when it holds
- * the result, and the thread continues in a fresh chunk. That chunk has room
- * for whatever the code after the call allocates before its next limit
- * check: the compiler covers at most 512 * 7 bytes, slop included, with one
- * statically sized check (maxBytesAlloc in insert-checks.fun).
+ * So once the result is in place, a current chunk larger than a block is
+ * closed, and the thread continues in the chunk before it in the same heap
+ * when that one has room (as allocateLargeSequence returns to the thread's
+ * previous chunk), else in a fresh chunk. The room is what the code after
+ * the call may allocate before its next limit check: at most 512 * 7 bytes,
+ * slop included, the compiler's limit for one statically sized check
+ * (maxBytesAlloc in insert-checks.fun). As for the closed chunk:
+ *   - if it's empty (a fixnum result), it is freed;
+ *   - if the result is its only object and fits in the chunk the thread
+ *     goes back to, the result is moved there and the chunk is freed, so a
+ *     small result doesn't keep a chunk sized for its bound;
+ *   - otherwise it stays, marked single-object when the result is its only
+ *     object, like a large sequence's chunk.
  *
- * This doesn't trigger a collection, so it is safe in a call that doesn't
- * enter the runtime.
+ * Nothing here can trigger a collection, so it is safe in a call that
+ * doesn't enter the runtime. Returns the result, moved or not.
  */
-static void leaveOversizedChunk (GC_state s, pointer resultStart,
-                                 bool resultKept) {
+static objptr leaveOversizedChunk (GC_state s, pointer resultStart,
+                                   objptr result) {
   GC_thread thread = getThreadCurrent(s);
   HM_chunk chunk = thread->currentChunk;
   if ((size_t)(HM_getChunkLimit(chunk) - (pointer)chunk)
       <= s->controls->blockSize)
-    return;
+    return result;
 
-  HM_HH_updateValues(thread, s->frontier);
-  if (resultKept and resultStart == HM_getChunkStart(chunk))
-    chunk->mightContainMultipleObjects = FALSE;
-
-  /* Continue in the chunk before it in the same heap if that one has the
-   * room, as allocateLargeSequence returns to the thread's previous chunk;
-   * opening a fresh chunk after every large result would leave most of it
-   * empty. */
   size_t bytesAfter = 7 * GC_HEAP_LIMIT_SLOP;
+  pointer start = HM_getChunkStart(chunk);
+  size_t used = (size_t)(s->frontier - start);
+  bool onlyResult = (resultStart == start);
+  HM_chunkList list = HM_HH_getChunkList(HM_getLevelHead(chunk));
   HM_chunk prev = chunk->prevChunk;
   if (NULL != prev
-      and prev->mightContainMultipleObjects
-      and HM_getLevelHead(prev) == HM_getLevelHead(chunk)
-      and HM_getChunkSizePastFrontier(prev) >= bytesAfter) {
-    thread->currentChunk = prev;
-  } else if (!HM_HH_extend(s, thread, bytesAfter)) {
-    DIE("Ran out of space after an IntInf result");
+      and not (prev->mightContainMultipleObjects
+               and HM_getLevelHead(prev) == HM_getLevelHead(chunk)
+               and HM_getChunkSizePastFrontier(prev) >= bytesAfter))
+    prev = NULL;
+
+  if (0 == used
+      or (onlyResult and NULL != prev
+          and HM_getChunkSizePastFrontier(prev) >= used + bytesAfter)) {
+    /* empty, or a result small enough to move: free the chunk */
+    if (NULL != prev) {
+      pointer dst = HM_getChunkFrontier(prev);
+      if (used > 0) {
+        GC_memcpy (start, dst, used);
+        result = pointerToObjptr (objptrToPointer (result, NULL) - start + dst,
+                                  NULL);
+      }
+      thread->currentChunk = prev;
+      HM_HH_updateValues(thread, dst + used);
+    } else {
+      assert (0 == used);
+      if (!HM_HH_extend(s, thread, bytesAfter))
+        DIE("Ran out of space after an IntInf result");
+    }
+    HM_unlinkChunk(list, chunk);
+    HM_freeChunkWithInfo(s, chunk, NULL, BLOCK_FOR_HEAP_CHUNK);
+  } else {
+    HM_HH_updateValues(thread, s->frontier);
+    if (onlyResult)
+      chunk->mightContainMultipleObjects = FALSE;
+    if (NULL != prev)
+      thread->currentChunk = prev;
+    else if (!HM_HH_extend(s, thread, bytesAfter))
+      DIE("Ran out of space after an IntInf result");
   }
+
   s->frontier = HM_HH_getFrontier(thread);
   s->limitPlusSlop = HM_HH_getLimit(thread);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  /* a heartbeat that arrived during the call set the limit to 0; keep it */
+  if (0 == s->atomicState and s->signalsInfo.signalIsPending)
+    s->limit = 0;
   thread->bytesNeeded = bytesAfter;
+  return result;
 }
 
 /*
@@ -191,8 +226,7 @@ objptr finiIntInfRes (GC_state s, __mpz_struct *res, size_t bytes) {
     (pointer)res->_mp_d
     - (offsetof(struct GC_intInf, obj) + offsetof(struct GC_intInf_obj, limbs));
   objptr result = finiIntInfResInPlace (s, res, bytes);
-  leaveOversizedChunk (s, resultStart, not isSmall (result));
-  return result;
+  return leaveOversizedChunk (s, resultStart, result);
 }
 
 static objptr finiIntInfResInPlace (GC_state s, __mpz_struct *res,
@@ -383,8 +417,8 @@ objptr IntInf_strop (GC_state s, objptr arg, Int32_t base, size_t bytes,
   sp->length = (GC_sequenceLength)size;
   sp->header = GC_STRING8_HEADER;
   // sp->fwdptr = BOGUS_OBJPTR;
-  leaveOversizedChunk (s, (pointer)sp, TRUE);
-  return pointerToObjptr ((pointer)&sp->obj, NULL);
+  return leaveOversizedChunk (s, (pointer)sp,
+                              pointerToObjptr ((pointer)&sp->obj, NULL));
 }
 
 /*
