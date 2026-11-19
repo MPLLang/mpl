@@ -175,9 +175,14 @@ objptr leaveOversizedChunk (GC_state s, pointer resultStart, objptr result) {
   bool onlyResult = (resultStart == start);
   HM_chunkList list = HM_HH_getChunkList(HM_getLevelHead(chunk));
   HM_chunk prev = chunk->prevChunk;
+  /* Not a chunk larger than a block, though: one closed here with other
+   * objects before the result (below) stays able to hold several objects,
+   * and its frontier can be past its first block. */
   if (NULL != prev
       and not (prev->mightContainMultipleObjects
                and HM_getLevelHead(prev) == HM_getLevelHead(chunk)
+               and (size_t)(HM_getChunkLimit(prev) - (pointer)prev)
+                   <= s->controls->blockSize
                and HM_getChunkSizePastFrontier(prev) >= bytesAfter))
     prev = NULL;
 
