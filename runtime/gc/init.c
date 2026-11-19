@@ -662,6 +662,10 @@ int GC_init (GC_state s, int argc, char **argv) {
 
   unless (isAligned(s->controls->blockSize, s->sysvals.pageSize))
     die ("block-size must be a multiple of the system page size (%zu)", s->sysvals.pageSize);
+  /* blockOf rounds pointers down to a multiple of the block size. */
+  unless (s->controls->blockSize > 0
+          && s->controls->blockSize == (s->controls->blockSize & -s->controls->blockSize))
+    die ("block-size must be a power of two");
 
   if (s->controls->allocChunkSize == 0) {
     /* user didn't specify a specify alloc-chunk size, so set a default. */
@@ -672,8 +676,11 @@ int GC_init (GC_state s, int argc, char **argv) {
   unless (isAligned(s->controls->allocChunkSize, s->controls->blockSize))
     die ("alloc-chunk must be a multiple of the block-size (%zu)", s->controls->blockSize);
 
-  unless (isAligned(s->controls->allocBlocksMinSize, s->controls->blockSize))
-    die("alloc-blocks-min-size must be a multiple of the block-size (%zu)",
+  /* 0 is a multiple, but mmapNewSuperBlocks computes its count from
+   * allocBlocksMinSize - 1. */
+  unless (s->controls->allocBlocksMinSize > 0
+          && isAligned(s->controls->allocBlocksMinSize, s->controls->blockSize))
+    die("alloc-blocks-min-size must be a positive multiple of the block-size (%zu)",
       s->controls->blockSize);
 
   unless (s->controls->superblockThreshold <= s->controls->megablockThreshold)

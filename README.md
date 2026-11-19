@@ -282,8 +282,8 @@ with `affinity-base <B>` and `affinity-stride <S>` to pin thread `i` to
 processor number `B + S*i`.
 * `block-size <X>` Set the heap block size to `X` bytes. This can be
 written with suffixes K, M, and G, e.g. `64K` is 64 kilobytes. The block-size
-must be a multiple of the system page size (typically 4K). By default it is
-set to one page.
+must be a power of two and a multiple of the system page size (typically 4K).
+By default it is set to one page.
 
 For example, the following runs a program `foo` with a single command-line
 argument `bar` using 4 pinned processors.
