@@ -34,12 +34,14 @@ Bool GC_HH_decheckMaxDepth(ARG_USED_FOR_DETECT_ENTANGLEMENT objptr resultRef) {
 #ifdef DETECT_ENTANGLEMENT
 void decheckInit(GC_state s) {
 #if ASSERT
-  if (mmap(SYNCH_DEPTHS_BASE, SYNCH_DEPTHS_LEN, PROT_WRITE,
+  /* Anonymous mappings are zero-filled, so the table needs no memset.
+   * (A memset here would touch all SYNCH_DEPTHS_LEN bytes, 8 GB with the
+   * default MAX_FORK_DEPTH, and make every debug run that large.) */
+  if (mmap(SYNCH_DEPTHS_BASE, SYNCH_DEPTHS_LEN, PROT_READ | PROT_WRITE,
           MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, 0, 0) == MAP_FAILED) {
       perror("mmap error");
       exit(-1);
   }
-  memset(synch_depths, 0, MAX_PATHS * sizeof(uint32_t));
   synch_depths[1] = 0;
 #endif
 
