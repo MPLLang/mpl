@@ -151,6 +151,9 @@ GC_thread newThreadWithHeap(
 
   if (reserved > s->cumulativeStatistics->maxStackSize)
     s->cumulativeStatistics->maxStackSize = reserved;
+  /* The thread and stack go into new chunks whose frontiers are set
+   * directly, not through HM_HH_updateValues, so count them here. */
+  s->cumulativeStatistics->bytesAllocated += totalSize;
 
   /* Allocate and initialize the heap that will be assigned to this thread.
    * Can't just use HM_HH_extend, because the corresponding thread doesn't exist
@@ -233,8 +236,6 @@ static inline void setFrontier (GC_state s, pointer p,
   p = alignFrontier (s, p);
   assert ((size_t)(p - s->frontier) <= bytes);
   GC_profileAllocInc (s, (size_t)(p - s->frontier));
-  /* SPOONHOWER_NOTE: unsafe concurrent access */
-  s->cumulativeStatistics->bytesAllocated += (size_t)(p - s->frontier);
   s->frontier = p;
   assert (s->frontier <= s->limitPlusSlop);
 }

@@ -157,16 +157,17 @@ GC_thread initThreadAndHeap(GC_state s, uint32_t depth) {
 void initWorld(GC_state s) {
   GC_thread thread = initThreadAndHeap(s, 0);
   struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
+  /* newThreadWithHeap has already counted the initial thread and stack. */
+  size_t usedBefore = HM_getChunkListUsedSize(HM_HH_getChunkList(hh));
 
   /* Copy initial dynamic heap, implicitly updating
    * s->{frontier,limit,limitPlusSlop} */
   initDynHeap(s, thread);
 
-  size_t currentSize = HM_getChunkListSize(HM_HH_getChunkList(hh));
-
-  /* SAM_NOTE: some of these statistics may be maintained incorrectly
-   * elsewhere in the runtime. */
-  s->cumulativeStatistics->bytesAllocated += currentSize;
+  /* The initial heap is copied in without HM_HH_updateValues, so count it
+   * here (the bytes used, not the chunks). */
+  s->cumulativeStatistics->bytesAllocated +=
+    HM_getChunkListUsedSize(HM_HH_getChunkList(hh)) - usedBefore;
   s->lastMajorStatistics->bytesLive = sizeofInitialBytesLive(s);
 
   decheckInit(s);

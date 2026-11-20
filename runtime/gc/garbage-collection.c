@@ -62,6 +62,14 @@ void growStackCurrent(GC_state s) {
     this->promoStackTop = newPromoStackTop;
     this->promoStackReserved = newPromoStackReserved;
 
+    /* Stack growth is the program's allocation too (MLton counts the new
+     * stack); here the stack's chunk grows by the difference. */
+    pointer oldEnd = HM_getChunkFrontier(chunk);
+    if (HM_getChunkStart(chunk) + stackSize > oldEnd) {
+      s->cumulativeStatistics->bytesAllocated +=
+        (size_t)(HM_getChunkStart(chunk) + stackSize - oldEnd);
+    }
+
     HM_updateChunkFrontierInList(
       HM_HH_getChunkList(hh),
       chunk,
@@ -99,6 +107,8 @@ void growStackCurrent(GC_state s) {
     HM_HH_getChunkList(newhh),
     newChunk,
     frontier + stackSize);
+  /* the new stack is the program's allocation (as in MLton) */
+  s->cumulativeStatistics->bytesAllocated += stackSize;
 
   copyStack(s, getStackCurrent(s), stack);
   getThreadCurrent(s)->stack = pointerToObjptr((pointer)stack, NULL);
