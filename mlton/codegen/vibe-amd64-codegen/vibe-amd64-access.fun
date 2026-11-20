@@ -188,6 +188,12 @@ fun new {analysis: Analysis.t,
        *)
       val cacheable: (int * CType.t) list ref = ref []
       val freeRegs: int list ref = ref []
+      (* The slots that the block doesn't read after its last write of
+       * them, with the number of writes of them still to come.  The last
+       * write drops the slot from the cache rather than updating its
+       * register: the register would never be read.
+       *)
+      val deadAfter: ((int * CType.t) * int ref) list ref = ref []
       fun cached so =
          List.peek (!cache, fn {off, ct, ...} =>
                     sameSlot ((off, ct), slotKey so))
@@ -519,17 +525,29 @@ fun new {analysis: Analysis.t,
                      val () =
                         cache := List.keepAll (!cache, fn {off, ct, ...} =>
                                                not (other (off, ct)))
+                     val last =
+                        case List.peek (!deadAfter, fn (k', _) =>
+                                        sameSlot (k, k')) of
+                           NONE => false
+                         | SOME (_, n) => (Int.dec n; !n <= 0)
                   in
                      case (promotedHome so, cached so) of
                         (SOME r, _) => set r
-                      | (_, SOME {reg, ...}) => set reg
+                      | (_, SOME {reg, ...}) =>
+                           if last
+                              then cache := List.keepAll
+                                            (!cache, fn {reg = r, ...} =>
+                                             r <> reg)
+                           else set reg
                       | _ =>
-                           (case cacheReg k of
-                               NONE => ()
-                             | SOME h =>
-                                  (set h
-                                   ; List.push (cache, {off = off, ct = ct,
-                                                        reg = h})))
+                           if last
+                              then ()
+                           else (case cacheReg k of
+                                    NONE => ()
+                                  | SOME h =>
+                                       (set h
+                                        ; List.push (cache, {off = off, ct = ct,
+                                                             reg = h})))
                   end
              | (Operand.Temporary t, _) =>
                   (case defHome t of
@@ -599,23 +617,29 @@ fun new {analysis: Analysis.t,
                   List.keepAllMap (segIn @ defs, fn (_, w) => webHome w)
                   @ List.keepAllMap (promoted, fn (_, w) => webHome w)
                end
+            (* The reads of each slot, weighted: a read that an instruction
+             * can do where the slot is counts 1; one that must load the slot
+             * into a register (the base or the index of an address) counts
+             * 2, since each such read is a load of its own.
+             *)
             val reads: ((int * CType.t) * int ref) list ref = ref []
-            fun read so =
+            fun read (so, w) =
                let
                   val k = slotKey so
                in
                   case List.peek (!reads, fn (k', _) => sameSlot (k, k')) of
-                     SOME (_, n) => Int.inc n
-                   | NONE => List.push (reads, (k, ref 1))
+                     SOME (_, n) => n := !n + w
+                   | NONE => List.push (reads, (k, ref w))
                end
-            fun visit (z, isDst) =
+            fun visit (z, isDst) = visitW (z, isDst, 1)
+            and visitW (z, isDst, w) =
                case z of
                   Operand.Address z => visit (z, true)
-                | Operand.Cast (z, _) => visit (z, isDst)
-                | Operand.Offset {base, ...} => visit (base, false)
+                | Operand.Cast (z, _) => visitW (z, isDst, w)
+                | Operand.Offset {base, ...} => visitW (base, false, 2)
                 | Operand.SequenceOffset {base, index, ...} =>
-                     (visit (base, false); visit (index, false))
-                | Operand.StackOffset so => if isDst then () else read so
+                     (visitW (base, false, 2); visitW (index, false, 2))
+                | Operand.StackOffset so => if isDst then () else read (so, w)
                 | _ => ()
             val () =
                case kind of
@@ -634,13 +658,72 @@ fun new {analysis: Analysis.t,
             val () =
                Transfer.foldOperands (transfer, (), fn (z, ()) =>
                                       visit (z, false))
+            (* In order: for each slot, the number of writes, and whether it
+             * is read after the last of them.
+             *)
+            val acc: ((int * CType.t) * {writes: int ref,
+                                         readAfter: bool ref}) list ref =
+               ref []
+            fun entry so =
+               let
+                  val k = slotKey so
+               in
+                  case List.peek (!acc, fn (k', _) => sameSlot (k, k')) of
+                     SOME (_, e) => e
+                   | NONE =>
+                        let
+                           val e = {writes = ref 0, readAfter = ref false}
+                        in
+                           List.push (acc, (k, e)); e
+                        end
+               end
+            fun use z =
+               case z of
+                  Operand.Address z => use z
+                | Operand.Cast (z, _) => use z
+                | Operand.Offset {base, ...} => use base
+                | Operand.SequenceOffset {base, index, ...} =>
+                     (use base; use index)
+                | Operand.StackOffset so => #readAfter (entry so) := true
+                | _ => ()
+            fun def z =
+               case z of
+                  Operand.Cast (z, _) => def z
+                | Operand.StackOffset so =>
+                     let
+                        val {writes, readAfter} = entry so
+                     in
+                        Int.inc writes; readAfter := false
+                     end
+                | _ => use z
+            val () =
+               case kind of
+                  Kind.CReturn {dst = SOME z, ...} => def (Live.toOperand z)
+                | _ => ()
+            val () =
+               Vector.foreach
+               (statements, fn s =>
+                case s of
+                   Statement.Move {dst, src} => (use src; def dst)
+                 | Statement.PrimApp {args, dst, ...} =>
+                      (Vector.foreach (args, use)
+                       ; Option.app (dst, def)))
+            val () =
+               Transfer.foldOperands (transfer, (), fn (z, ()) => use z)
          in
-            clearCache ()
+            deadAfter := List.keepAllMap
+                         (!acc, fn (k, {writes, readAfter}) =>
+                          if !writes > 0 andalso not (!readAfter)
+                             then SOME (k, ref (!writes))
+                          else NONE)
+            ; clearCache ()
             ; cacheable := List.keepAllMap (!reads, fn (k, n) =>
                                             (* An instruction can read a slot where
                                              * it is; a register is worth it from
-                                             * the third read.  (An operation and
-                                             * its overflow check count as two.)
+                                             * the third read, or from the second
+                                             * that must load it.  (An operation
+                                             * and its overflow check count as
+                                             * two reads.)
                                              *)
                                             if !n >= 3 then SOME k else NONE)
             ; freeRegs := List.keepAll
