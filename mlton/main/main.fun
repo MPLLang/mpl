@@ -164,6 +164,7 @@ fun hasCodegen (cg, {default}) =
    in
       case cg of
         CCodegen => true
+      | VibeAmd64Codegen => !Control.Target.arch = AMD64
       | VibeArm64Codegen => !Control.Target.arch = ARM64
       (*
       | LLVMCodegen => true
@@ -318,6 +319,9 @@ fun makeOptions {usage} =
         intRef codegenComments),
        (Expert, "codegen-fuse-op-and-chk", " {false|true}", "fuse `op` and `opCheckP` primitives in codegen",
         boolRef codegenFuseOpAndChk),
+       (Normal, "vibe-amd64-symbols", " {false|true}",
+        "keep a symbol for each block and entry of the vibe-amd64 codegen",
+        boolRef vibeAmd64Symbols),
        (Normal, "vibe-arm64-symbols", " {false|true}",
         "keep a symbol for each block and entry of the vibe-arm64 codegen",
         boolRef vibeArm64Symbols),
@@ -1214,9 +1218,13 @@ fun commandLine (_: string, args: string list): unit =
                                 " target"])
          else ()
       val () =
-         if !codegen = VibeArm64Codegen
+         if !codegen = VibeAmd64Codegen orelse !codegen = VibeArm64Codegen
             then
                let
+                  val (name, arch) =
+                     if !codegen = VibeAmd64Codegen
+                        then ("vibe-amd64", "x86-64/AMD64")
+                     else ("vibe-arm64", "ARM64/AArch64")
                   (* in yellow, if it goes to a terminal *)
                   val (on, off) =
                      if (Posix.ProcEnv.isatty Posix.FileSys.stderr
@@ -1227,7 +1235,7 @@ fun commandLine (_: string, args: string list): unit =
                   Out.output
                   (Out.error,
                    concat [on,
-                           "Warning: the vibe-arm64 codegen is an experimental native code generator for ARM64/AArch64. It can generate more efficient code than `-codegen c`, but has not been tested as thoroughly.",
+                           "Warning: the ", name, " codegen is an experimental native code generator for ", arch, ". It can generate more efficient code than `-codegen c`, but has not been tested as thoroughly.",
                            off, "\n"])
                end
          else ()
@@ -1242,6 +1250,7 @@ fun commandLine (_: string, args: string list): unit =
          (case !explicitChunkify of
              NONE => (case !codegen of
                          CCodegen => Chunkify.Coalesce {limit = 4096}
+                       | VibeAmd64Codegen => Chunkify.Coalesce {limit = 4096}
                        | VibeArm64Codegen => Chunkify.Coalesce {limit = 4096}
 (*
                        | AMD64Codegen => Chunkify.Func
@@ -1466,8 +1475,11 @@ fun commandLine (_: string, args: string list): unit =
                                         * codegen need symbols only until
                                         * the link.
                                         *)
-                                       if !codegen = VibeArm64Codegen
-                                          andalso not (!vibeArm64Symbols)
+                                       if ((!codegen = VibeArm64Codegen
+                                            andalso not (!vibeArm64Symbols))
+                                           orelse
+                                           (!codegen = VibeAmd64Codegen
+                                            andalso not (!vibeAmd64Symbols)))
                                           andalso targetOS = Darwin
                                           then ["-Wl,-x"]
                                        else []]))
