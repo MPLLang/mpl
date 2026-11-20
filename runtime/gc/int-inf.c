@@ -234,7 +234,10 @@ objptr leaveOversizedChunk (GC_state s, pointer resultStart, objptr result) {
   /* a heartbeat that arrived during the call set the limit to 0; keep it */
   if (0 == s->atomicState and s->signalsInfo.signalIsPending)
     s->limit = 0;
-  thread->bytesNeeded = bytesAfter;
+  /* The next runtime call sets bytesNeeded for itself; what's left here is
+   * only read by checks such as invariantForMutatorFrontier before then, and
+   * bytesAfter could be more than the room left by the time one runs. */
+  thread->bytesNeeded = 0;
   return result;
 }
 
