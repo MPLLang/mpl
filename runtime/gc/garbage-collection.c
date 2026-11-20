@@ -136,7 +136,11 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    * HM_ensureHierarchicalHeapAssurances then extends the thread into a
    * chunk of several blocks, with the result at its start, and the
    * primitive closes that chunk once the result is in place (see
-   * leaveOversizedChunk in int-inf.c). */
+   * leaveOversizedChunk in int-inf.c). So there is no assertion here that
+   * the request fits in a block: this function can't tell that request from
+   * a statically sized one that is too large. enter() asserts instead that
+   * the mutator never comes back in a chunk larger than a block, which is
+   * where such a request would leave it. */
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
