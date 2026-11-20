@@ -146,7 +146,11 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    * that it is the chunk just before the new one, which is where
    * leaveOversizedChunk looks for the chunk to go back to. Otherwise it would
    * find whatever was put in the list since: the chunk of the previous large
-   * result, or of a large sequence. */
+   * result, or of a large sequence. This is the usual path, not every one: a
+   * pending signal switches to the handler first, and the original thread's
+   * request is served later by GC_switchToThread; the stack can also grow,
+   * or a collection run, before the chunk is opened. leaveOversizedChunk
+   * doesn't rely on it. */
   {
     GC_thread thread = getThreadCurrent(s);
     HM_chunk current = thread->currentChunk;
