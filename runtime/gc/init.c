@@ -540,7 +540,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhConfig.minCCSize = 1024L * 1024L;
   s->controls->hhConfig.maxCCChainLength = 2;
   s->controls->hhConfig.ccThresholdRatio = 2.0f;
-  s->controls->hhConfig.maxCCDepth = 3;
+  s->controls->hhConfig.maxCCDepth = 1;
   s->controls->hhConfig.minLocalDepth = 2;
   s->controls->rusageMeasureGC = FALSE;
   s->controls->summary = FALSE;
