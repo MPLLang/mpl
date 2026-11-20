@@ -142,9 +142,9 @@ void initIntInfRes (GC_state s, __mpz_struct *res,
  * chunk is opened: then the chunk before is another one, and the tests
  * below either find it fit to continue in or open a fresh chunk.) The
  * room is what the code after the call may allocate before its next limit
- * check: at most 512 * 7 bytes, slop included, the compiler's limit for one
- * statically sized check (maxBytesAlloc in insert-checks.fun). As for the
- * closed chunk:
+ * check: at most GC_LIMIT_CHECK_MAX_BYTES, slop included, the compiler's
+ * limit for one statically sized check (see heap.h). As for the closed
+ * chunk:
  *   - if it's empty (a fixnum result), it is freed;
  *   - if the result is its only object and fits, with that room after it,
  *     in a chunk of one block, the result is moved to the chunk the thread
@@ -157,12 +157,13 @@ void initIntInfRes (GC_state s, __mpz_struct *res,
  * doesn't enter the runtime. Returns the result, moved or not.
  *
  * The check before the call asked for at most bytes, the statically sized
- * allocation after the call and the slop. If that fits in a block, it didn't
- * open a chunk larger than a block: mayBeInOversizedChunk is the test every
- * call makes, inline, and only the others get here.
+ * allocation after the call and the slop: bytes + GC_LIMIT_CHECK_MAX_BYTES.
+ * If that fits in a block, it didn't open a chunk larger than a block:
+ * mayBeInOversizedChunk is the test every call makes, inline, and only the
+ * others get here.
  */
 static inline bool mayBeInOversizedChunk (GC_state s, size_t bytes) {
-  return bytes + 7 * GC_HEAP_LIMIT_SLOP + sizeof(struct HM_chunk)
+  return bytes + GC_LIMIT_CHECK_MAX_BYTES + sizeof(struct HM_chunk)
          > s->controls->blockSize;
 }
 
@@ -174,7 +175,7 @@ objptr leaveOversizedChunk (GC_state s, pointer resultStart, objptr result) {
       <= s->controls->blockSize)
     return result;
 
-  size_t bytesAfter = 7 * GC_HEAP_LIMIT_SLOP;
+  size_t bytesAfter = GC_LIMIT_CHECK_MAX_BYTES;
   pointer start = HM_getChunkStart(chunk);
   size_t used = (size_t)(s->frontier - start);
   bool onlyResult = (resultStart == start);
