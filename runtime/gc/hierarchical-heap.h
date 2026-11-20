@@ -162,6 +162,7 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp);
 void HM_HH_resetList(pointer threadp);
 
 void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh);
+void HM_HH_maybeRequestCC(GC_state s);
 
 void HM_HH_clearSuspectsAtDepth(
   GC_state s,

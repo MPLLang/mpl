@@ -883,6 +883,63 @@ bool checkPolicyforRoot(
   return TRUE;
 }
 
+/* The allocation clock for concurrent collections. Called by GC_collect,
+ * i.e., whenever the mutator runs out of space in its current chunk (and
+ * also whenever it polls for a signal, which bounds the time between checks
+ * for threads that allocate without exhausting chunks, e.g. large arrays).
+ *
+ * The clock is the size of the thread's leaf heap, which restarts from zero
+ * each time the heap is split off for a CC (HM_HH_registerCont); the alarm is
+ * checkPolicyforRoot.
+ *
+ * The runtime cannot start the CC itself: the scheduler has to take the
+ * snapshot, run the collection, and decide what happens to the current
+ * thread in the meantime. So we ask, by raising the GC signal for this
+ * processor. GC_collect delivers it immediately, exactly as it would any
+ * other signal: the current thread is suspended (as a resumable thread
+ * object, at this GC_collect call) and the signal handler thread runs the
+ * scheduler's GC handler on it. The handler makes the final decision (it
+ * calls HM_HH_registerCont, which rechecks the policy), so this is only a
+ * hint and a spurious request is harmless.
+ *
+ * We only raise the signal if it can be delivered right now (atomicState is 1
+ * between enter() and leave() iff the mutator was not in an atomic section);
+ * otherwise we will be asked again at the next GC_collect. That keeps the
+ * request and the thread it is about together. */
+void HM_HH_maybeRequestCC(GC_state s) {
+  GC_thread thread = getThreadCurrent(s);
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+
+  if (s->atomicState != 1 ||
+      NONE == s->controls->collectionType ||
+      !s->procStates[0].signalsInfo.gcSignalHandled ||
+      s->signalHandlerThread == BOGUS_OBJPTR ||
+      thread->currentDepth < 1 ||
+      thread->currentDepth > s->controls->hhConfig.maxCCDepth ||
+      HM_HH_getDepth(hh) != thread->currentDepth)
+  {
+    return;
+  }
+
+  /* This is also what notices that earlier CCs of this heap have finished. */
+  mergeCompletedCCs(s, hh);
+  assert(thread->hierarchicalHeap == hh);
+
+  /* One at a time. Finished CCs are merged back into the heap only when none
+   * are in progress (see mergeCompletedCCs), and until then their survivors
+   * are not eligible for collection again and don't count towards the
+   * policy. A mutator that outpaces the collector would otherwise keep
+   * splitting off small heaps forever, never merging any of them. */
+  if (NULL != hh->subHeapForCC) {
+    return;
+  }
+
+  if (checkPolicyforRoot(s, thread)) {
+    s->signalsInfo.gcSignalPending = TRUE;
+    s->signalsInfo.signalIsPending = TRUE;
+  }
+}
+
 /*
 objptr copyCurrentStack(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
