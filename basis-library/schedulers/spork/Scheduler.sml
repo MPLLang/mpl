@@ -157,14 +157,6 @@ struct
   fun decrementHitsZero (x : int ref) : bool =
     faa (x, ~1) = 1
 
-  datatype gc_joinpoint =
-    GCJ of {gcTaskData: gctask_data option, tidRight: Word64.word}
-    (** The fact that the gcTaskData is an option here is a questionable
-      * hack... the data will always be SOME. But unwrapping it may affect
-      * how many allocations occur when spawning a gc task, which in turn
-      * affects the GC snapshot, which is already murky.
-      *)
-
   datatype 'a joinpoint =
     J of
       { leftSideThread: Thread.t
@@ -174,7 +166,6 @@ struct
       , tidRight: Word64.word
       , spareHeartbeatsGiven: Heartbeat.token_count
       , tokenPolicy: TokenPolicy
-      , gcj: gc_joinpoint option
       }
 
 
@@ -255,7 +246,6 @@ struct
     NormalTask of (unit -> unit) * Word64.word * int
   | NewThread of Thread.p * Word64.word * int
   | Continuation of Thread.t * int
-  | GCTask of gctask_data
 
   (* ========================================================================
    * STATS
@@ -425,7 +415,7 @@ struct
   val workerLocalData = Vector.tabulate (P, wldInit)
 
   (* gcTask hands a GC task from a worker's task thread to its scheduler
-   * thread: syncGC stores it, and afterReturnToSched reads and clears it.
+   * thread: trySpawnGC stores it, and afterReturnToSched reads and clears it.
    * workerLocalData is allocated at boot, at depth 0. For a depth-0 ref the
    * write barrier's only lasting effect is to pin the stored task with unpin
    * depth 0 and remember it, and no collection runs at depth 0 to unpin it,
@@ -518,94 +508,47 @@ struct
   structure SporkJoin =
   struct
 
-    fun spawnGC interruptedThread : gc_joinpoint option =
+    (* Runs in the signal handler, when the runtime raises the GC signal:
+     * the allocation clock of the interrupted thread says that its heap is
+     * due for a concurrent collection (see HM_HH_maybeRequestCC in the
+     * runtime). Try to register the collection. On success, the GC task is
+     * left for this worker's scheduler thread (see afterReturnToSched).
+     *
+     * The collection is not tied to a fork: there is no join for it. The
+     * runtime notices that it has finished the next time it looks at this
+     * heap (mergeCompletedCCs).
+     *)
+    fun trySpawnGC (interruptedThread: Thread.t) : bool =
       let
         val thread = Thread.current ()
-        val depth = HH.getDepth thread
       in
-        if depth > maxCCDepth then
-          NONE
+        if HH.getDepth thread > maxCCDepth then
+          false
         else
           let
-            (** SAM_NOTE: atomic begin/end not needed here, becuase this is
-              * already run in signal handler.
-              *)
-
             val heapId = ref (HH.getRoot thread)
-            val gcTaskTuple = (interruptedThread, heapId)
-            val gcTaskData = SOME gcTaskTuple
-            val gcTask = GCTask gcTaskTuple
+            val gcTaskData = SOME (interruptedThread, heapId)
             val cont_arr1 = ref NONE
             val cont_arr2 = ref NONE
-            val cont_arr3 = ref (SOME (fn _ => (gcTask, gcTaskData))) (* a hack, I hope it works. *)
+            (* keeps the task data alive through the collection *)
+            val cont_arr3 = ref gcTaskData
 
             (** The above could trigger a local GC and invalidate the hh
               * identifier... :'(
               *)
             val _ = heapId := HH.getRoot thread
           in
-            if not (HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)) then
-              NONE
-            else
-              let
-                val (tidLeft, tidRight) = DE.decheckFork ()
-                val _ = push gcTask
-                val _ = HH.setDepth (thread, depth + 1)
-                val _ = DE.decheckSetTid tidLeft
-                val _ = HH.forceLeftHeap(myWorkerId(), thread)
-              in
-                SOME (GCJ {gcTaskData = gcTaskData, tidRight = tidRight})
-              end
+            HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)
+            andalso
+            ( setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
+            ; true
+            )
           end
-      end
-
-
-    fun syncGC doClearSuspects (GCJ {gcTaskData, tidRight}) =
-      let
-        val _ = Thread.atomicBegin ()
-        val thread = Thread.current ()
-        val depth = HH.getDepth thread
-        val newDepth = depth-1
-      in
-        if popDiscard() then
-          ( ()
-          ; dbgmsg' (fn _ => "switching to do some GC stuff")
-          ; setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
-          ; push (Continuation (thread, newDepth))
-          ; assertAtomic "syncGC before returnToSched" 1
-          ; returnToSchedEndAtomic ()
-          ; assertAtomic "syncGC after returnToSched" 1
-          ; dbgmsg' (fn _ => "back from GC stuff")
-          )
-        else
-          ( setQueueDepth (myWorkerId ()) newDepth
-          );
-
-        (* This can be reused here... the name isn't appropriate in this
-         * context, but the functionality is the same:
-         *   - promote chunks into parent
-         *   - update depth->newDepth
-         *   - update decheck state by joining tidLeft and tidRight.
-         *)
-        HH.joinIntoParentBeforeFastClone
-          { thread = thread
-          , newDepth = newDepth
-          , tidLeft = DE.decheckGetTid thread
-          , tidRight = tidRight
-          };
-
-        assertAtomic "syncGC done" 1;
-        Thread.atomicEnd ();
-
-        doClearSuspects (thread, newDepth)
       end
 
     (* runs in signal handler *)
     fun doSpawn {youngestOptimization: bool} (interruptedLeftThread: Thread.t) : unit =
       let
-        val gcj = spawnGC interruptedLeftThread
-        val _ = assertAtomic "spawn after spawnGC" 1
-
         val thread = Thread.current ()
         val depth = HH.getDepth thread
 
@@ -640,7 +583,6 @@ struct
             , tidRight = tidRight
             , spareHeartbeatsGiven = giveTokens
             , tokenPolicy = tokenPolicy
-            , gcj = gcj
             }
 
         (* this sets the join for both threads (left and right) *)
@@ -686,16 +628,11 @@ struct
       end
 
 
-    fun doSpawnFunc {allowCGC: bool} (g: unit -> 'a) : 'a joinpoint =
+    fun doSpawnFunc (g: unit -> 'a) : 'a joinpoint =
       let
         val _ = Thread.atomicBegin ()
         val thread = Thread.current ()
         val _ = assertTokenInvariants thread "doSpawnFunc"
-
-        val gcj =
-          if allowCGC then spawnGC thread else NONE
-
-        val _ = assertAtomic "spawn after spawnGC" 1
 
         val depth = HH.getDepth thread
 
@@ -773,26 +710,25 @@ struct
           , tidRight = tidRight
           , spareHeartbeatsGiven = half
           , tokenPolicy = TokenPolicyFair
-          , gcj = gcj
           }
       end
 
 
-    fun maybeSpawnFunc {allowCGC: bool} (g: unit -> 'a) : 'a joinpoint option =
+    fun maybeSpawnFunc (g: unit -> 'a) : 'a joinpoint option =
       let
         val depth = HH.getDepth (Thread.current ())
       in
         if depth >= Queue.capacity orelse not (depthOkayForDECheck depth) then
           NONE
         else
-          SOME (doSpawnFunc {allowCGC=allowCGC} g)
+          SOME (doSpawnFunc g)
       end
 
 
     (** Must be called in an atomic section. Implicit atomicEnd() *)
     fun syncEndAtomic
         (doClearSuspects: Thread.t * int -> unit)
-        (J {rightSideThread, rightSideResult, incounter, tidRight, gcj, spareHeartbeatsGiven, tokenPolicy, ...} : 'a joinpoint)
+        (J {rightSideThread, rightSideResult, incounter, tidRight, spareHeartbeatsGiven, tokenPolicy, ...} : 'a joinpoint)
         : 'a Result.t option
       =
       let
@@ -881,9 +817,6 @@ struct
                     SOME result
                   end
             )
-        val _ = case gcj of
-                    NONE => ()
-                  | SOME gcj => syncGC doClearSuspects gcj;
       in
         result
       end
@@ -929,12 +862,39 @@ struct
       end
 
 
+    (* Signal handlers are given the interrupted thread, and return the
+     * thread to switch to when the handler finishes.
+     *)
     fun doIfArgIsNotSchedulerThread (f: Thread.t -> unit) (arg: Thread.t) =
+      ( case getSchedThread () of
+          NONE => ()
+        | SOME t =>
+            if MLton.eq (arg, t) then ()
+            else f arg
+      ; arg
+      )
+
+
+    (* If we manage to spawn a concurrent collection of the interrupted
+     * thread's heap, then finish the handler by switching to our scheduler
+     * thread instead of back to the interrupted thread. The scheduler thread
+     * offers the interrupted thread up for steal, and does the collection
+     * (see afterReturnToSched).
+     *
+     * This handler doesn't touch the tokens of the interrupted thread or
+     * look at its promotable frames, so the token invariants are whatever
+     * they were when the thread was interrupted.
+     *)
+    fun gcHandler (thread: Thread.t) : Thread.t =
       case getSchedThread () of
-        NONE => ()
-      | SOME t =>
-          if MLton.eq (arg, t) then ()
-          else f arg
+        NONE => thread
+      | SOME schedThread =>
+          if MLton.eq (thread, schedThread) orelse not (trySpawnGC thread)
+          then thread
+          else schedThread
+
+    val _ = MLton.Signal.setGCHandler
+      (MLton.Signal.Handler.inspectInterrupted gcHandler)
 
 
     (** itimer is used to deliver signals regularly. sigusr1 is used to relay
@@ -960,7 +920,7 @@ struct
 
 
     fun simpleParFork (f: unit -> unit, g: unit -> unit) : unit =
-      case maybeSpawnFunc {allowCGC = false} g of
+      case maybeSpawnFunc g of
         NONE => (f (); g ())
       | SOME gj =>
           let
@@ -1235,7 +1195,10 @@ struct
         | SOME (thread, hh) =>
             ( dbgmsg'' (fn _ => "back in sched; found GC task")
             ; setGCTask myId NONE
-            (* ; print ("afterReturnToSched: found GC task\n") *)
+              (* The task thread was interrupted at an arbitrary GC_collect
+               * call, and can be resumed by any worker: let someone else
+               * pick it up while we are busy collecting. *)
+            ; push (Continuation (thread, HH.getDepth thread))
             ; traceSchedIdleLeave ()
             ; traceSchedWorkEnter ()
             ; IdleTimer.stop ()
@@ -1252,9 +1215,10 @@ struct
               | SOME (Continuation (thread, _)) =>
                   ( ()
                   ; dbgmsg'' (fn _ => "resume task thread")
+                    (* Continuations are threads that were interrupted by the
+                     * GC signal, at atomic 0. *)
                   ; Thread.atomicBegin ()
-                  ; Thread.atomicBegin ()
-                  ; assertAtomic "afterReturnToSched before thread switch" 2
+                  ; assertAtomic "afterReturnToSched before thread switch" 1
                   ; threadSwitchEndAtomic thread
                   ; WorkTimer.stop ()
                   ; IdleTimer.start ()
@@ -1272,20 +1236,7 @@ struct
           val _ = incrementNumSteals ()
         in
           case task of
-            GCTask (thread, hh) =>
-              ( dbgmsg'' (fn _ => "starting GCTask")
-              ; traceSchedIdleLeave ()
-              ; traceSchedWorkEnter ()
-              ; IdleTimer.stop ()
-              ; WorkTimer.start ()
-              ; HH.collectThreadRoot (thread, !hh)
-              ; WorkTimer.stop ()
-              ; IdleTimer.start ()
-              ; traceSchedWorkLeave ()
-              ; traceSchedIdleEnter ()
-              ; acquireWork ()
-              )
-          | Continuation (thread, depth) =>
+            Continuation (thread, depth) =>
               ( ()
               ; dbgmsg'' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
               (* ; dbgmsg' (fn _ => "resume task thread") *)
@@ -1295,8 +1246,7 @@ struct
               ; IdleTimer.stop ()
               ; WorkTimer.start ()
               ; Thread.atomicBegin ()
-              ; Thread.atomicBegin ()
-              ; assertAtomic "acquireWork before thread switch" 2
+              ; assertAtomic "acquireWork before thread switch" 1
               ; threadSwitchEndAtomic thread
               ; WorkTimer.stop ()
               ; IdleTimer.start ()
