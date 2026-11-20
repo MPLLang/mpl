@@ -232,7 +232,14 @@ objptr leaveOversizedChunk (GC_state s, pointer resultStart, objptr result) {
   s->frontier = HM_HH_getFrontier(thread);
   s->limitPlusSlop = HM_HH_getLimit(thread);
   s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
-  /* a heartbeat that arrived during the call set the limit to 0; keep it */
+  /* A heartbeat that arrived during the call set the limit to 0; keep it.
+   * The store of the limit above has to come before the read of
+   * signalIsPending: a handler that ran before the store had its limit of 0
+   * overwritten, but its flag is seen here; one that runs after the store
+   * sets the limit itself. The fence keeps the compiler from moving the read
+   * before the store, which would let a heartbeat that arrives between them
+   * go unnoticed until the next one. */
+  __atomic_signal_fence(__ATOMIC_SEQ_CST);
   if (0 == s->atomicState and s->signalsInfo.signalIsPending)
     s->limit = 0;
   /* The next runtime call sets bytesNeeded for itself; what's left here is
