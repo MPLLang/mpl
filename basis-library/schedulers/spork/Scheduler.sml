@@ -508,21 +508,32 @@ struct
   structure SporkJoin =
   struct
 
-    (* Runs in the signal handler, when the runtime raises the GC signal:
-     * the allocation clock of the interrupted thread says that its heap is
-     * due for a concurrent collection (see HM_HH_maybeRequestCC in the
-     * runtime). Try to register the collection. On success, the GC task is
-     * left for this worker's scheduler thread (see afterReturnToSched).
+    fun gcTaskPending () =
+      Option.isSome (getGCTask (myWorkerId ()))
+
+    (* Try to register a concurrent collection of the current heap. Called
+     * in two places, which differ in the threshold the runtime checks the
+     * CC policy against (see checkPolicyforRoot):
+     *   - at a par, just before spawning ({atPar = true}): the par
+     *     threshold. Either in the heartbeat handler, or in an eager spawn.
+     *   - in the GC signal handler ({atPar = false}): the seq threshold. The
+     *     runtime raises the GC signal when the allocation clock of the
+     *     interrupted thread says that its heap is due (see
+     *     HM_HH_maybeRequestCC).
+     * On success, the GC task is left for this worker's scheduler thread
+     * (see afterReturnToSched), and the caller must finish by switching to
+     * the scheduler thread, which offers interruptedThread up for steal and
+     * does the collection.
      *
      * The collection is not tied to a fork: there is no join for it. The
      * runtime notices that it has finished the next time it looks at this
      * heap (mergeCompletedCCs).
      *)
-    fun trySpawnGC (interruptedThread: Thread.t) : bool =
+    fun trySpawnGC {atPar: bool} (interruptedThread: Thread.t) : bool =
       let
         val thread = Thread.current ()
       in
-        if HH.getDepth thread > maxCCDepth then
+        if HH.getDepth thread > maxCCDepth orelse gcTaskPending () then
           false
         else
           let
@@ -538,7 +549,7 @@ struct
               *)
             val _ = heapId := HH.getRoot thread
           in
-            HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread)
+            HH.registerCont (cont_arr1, cont_arr2, cont_arr3, thread, {atPar = atPar})
             andalso
             ( setGCTask (myWorkerId ()) gcTaskData (* This communicates with the scheduler thread *)
             ; true
@@ -622,7 +633,13 @@ struct
         else if not (findNextPromotableFrame (youngestOptimization, interruptedLeftThread)) then
           false
         else
-          ( doSpawn youngestOptimization interruptedLeftThread
+          ( (* At a par: check the CC policy against the par threshold, on
+             * the heap at the depth of the fork (before the spawn increments
+             * the depth), as in the fork-time policy. If it registers a CC,
+             * the caller must switch to the scheduler thread when it is done
+             * spawning (see gcTaskPending). *)
+            ignore (trySpawnGC {atPar = true} interruptedLeftThread)
+          ; doSpawn youngestOptimization interruptedLeftThread
           ; true
           )
       end
@@ -865,14 +882,19 @@ struct
     (* Signal handlers are given the interrupted thread, and return the
      * thread to switch to when the handler finishes.
      *)
-    fun doIfArgIsNotSchedulerThread (f: Thread.t -> unit) (arg: Thread.t) =
-      ( case getSchedThread () of
-          NONE => ()
-        | SOME t =>
-            if MLton.eq (arg, t) then ()
-            else f arg
-      ; arg
-      )
+    (* The heartbeat might spawn, and spawning checks the CC policy against
+     * the par threshold (see maybeSpawn). If that registers a CC, then
+     * finish by switching to our scheduler thread, as in gcHandler below. *)
+    fun heartbeatSignalHandler (thread: Thread.t) : Thread.t =
+      case getSchedThread () of
+        NONE => thread
+      | SOME schedThread =>
+          if MLton.eq (thread, schedThread) then
+            thread
+          else
+            ( heartbeatHandler thread
+            ; if gcTaskPending () then schedThread else thread
+            )
 
 
     (* If we manage to spawn a concurrent collection of the interrupted
@@ -889,7 +911,8 @@ struct
       case getSchedThread () of
         NONE => thread
       | SOME schedThread =>
-          if MLton.eq (thread, schedThread) orelse not (trySpawnGC thread)
+          if MLton.eq (thread, schedThread)
+             orelse not (trySpawnGC {atPar = false} thread)
           then thread
           else schedThread
 
@@ -905,13 +928,13 @@ struct
         MLton.Signal.setHandler
           ( MLton.Itimer.signal MLton.Itimer.Real
           , MLton.Signal.Handler.inspectInterrupted
-              (doIfArgIsNotSchedulerThread heartbeatHandler)
+              heartbeatSignalHandler
           )
 
     val _ = MLton.Signal.setHandler
       ( Posix.Signal.usr1
       , MLton.Signal.Handler.inspectInterrupted
-          (doIfArgIsNotSchedulerThread heartbeatHandler)
+          heartbeatSignalHandler
       )
 
 
@@ -973,8 +996,24 @@ struct
         end
 
   
+    (* After an eager spawn (at atomic 1). The spawn checked the CC policy
+     * against the par threshold (see maybeSpawn). If that registered a CC,
+     * offer this thread up for steal and do the collection, by switching to
+     * the scheduler thread (see afterReturnToSched). Either way, we end at
+     * atomic 0: the switch is an implicit atomicEnd, and whoever resumes us
+     * does so from atomic 1, as for threads interrupted by a signal.
+     * The thread resumes right here, at the fork point of the par. *)
+    fun endAtomicAfterEagerSpawn () =
+      if gcTaskPending () then
+        ( assertAtomic "endAtomicAfterEagerSpawn before returnToSched" 1
+        ; returnToSchedEndAtomic ()
+        )
+      else
+        Thread.atomicEnd ()
+
     val sched_package_data = ref
       { syncEndAtomic = syncEndAtomic maybeParClearSuspectsAtDepth
+      , endAtomicAfterEagerSpawn = endAtomicAfterEagerSpawn
       , maybeSpawn = maybeSpawn
       , setQueueDepth = setQueueDepth
       , returnToSchedEndAtomic = returnToSchedEndAtomic
@@ -998,10 +1037,11 @@ struct
           Heartbeat.enoughToSpawn () andalso
           #maybeSpawn (sched_package ()) yo (Thread.current ())
         then
-          #addEagerSpawns (sched_package ()) 1
+          ( #addEagerSpawns (sched_package ()) 1
+          ; #endAtomicAfterEagerSpawn (sched_package ()) ()
+          )
         else
-          ()
-      ; Thread.atomicEnd ()
+          Thread.atomicEnd ()
       )
 
     type ('a, 'c) sporkT =
@@ -1195,9 +1235,10 @@ struct
         | SOME (thread, hh) =>
             ( dbgmsg'' (fn _ => "back in sched; found GC task")
             ; setGCTask myId NONE
-              (* The task thread was interrupted at an arbitrary GC_collect
-               * call, and can be resumed by any worker: let someone else
-               * pick it up while we are busy collecting. *)
+              (* The task thread was suspended either by a signal handler
+               * (at an arbitrary GC_collect call) or by an eager spawn (at
+               * the fork point of a par), and can be resumed by any worker:
+               * let someone else pick it up while we are busy collecting. *)
             ; push (Continuation (thread, HH.getDepth thread))
             ; traceSchedIdleLeave ()
             ; traceSchedWorkEnter ()
@@ -1215,8 +1256,8 @@ struct
               | SOME (Continuation (thread, _)) =>
                   ( ()
                   ; dbgmsg'' (fn _ => "resume task thread")
-                    (* Continuations are threads that were interrupted by the
-                     * GC signal, at atomic 0. *)
+                    (* Continuations are threads that were suspended for a
+                     * CC, and expect to resume at atomic 0. *)
                   ; Thread.atomicBegin ()
                   ; assertAtomic "afterReturnToSched before thread switch" 1
                   ; threadSwitchEndAtomic thread

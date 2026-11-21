@@ -55,7 +55,7 @@ signature MLTON_THREAD =
 
           val forceNewChunk : unit -> unit
 
-          val registerCont : 'a ref * 'b ref * 'c ref * thread -> bool
+          val registerCont : 'a ref * 'b ref * 'c ref * thread * {atPar: bool} -> bool
           val resetList    : thread -> unit
 
           (*Collect the depth = 1 HH of this thread*)

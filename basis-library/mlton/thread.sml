@@ -84,7 +84,7 @@ struct
 
   fun forceLeftHeap (myId, t) = Prim.forceLeftHeap(Word32.fromInt myId, t)
   fun forceNewChunk () = Prim.forceNewChunk (gcState ())
-  fun registerCont (kl, kr, k, t) = Prim.registerCont(kl, kr, k, t)
+  fun registerCont (kl, kr, k, t, {atPar}) = Prim.registerCont(kl, kr, k, t, atPar)
   fun resetList (t) = Prim.resetList(t)
 
   fun cancelCC (t, hh) = Prim.cancelCC (gcState (), t, hh)
