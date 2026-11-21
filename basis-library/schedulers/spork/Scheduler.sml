@@ -798,13 +798,15 @@ struct
                 val _ = HH.joinIntoParentBeforeFastClone
                           {thread=thread, newDepth=newDepth, tidLeft=tidLeft, tidRight=tidRight}
                 val _ = traceSchedJoinFast ()
+                (* per-worker counter: update it before the atomic section
+                 * ends, while we can't be moved to another worker *)
+                val _ = incrementNumFastJoins ()
                 val _ = Thread.atomicEnd ()
                 val _ = doClearSuspects (thread, newDepth)
                 val _ = if newDepth <> 1 then () else HH.updateBytesPinnedEntangledWatermark ()
                 val _ = case tokenPolicy of
                             TokenPolicyGive => Heartbeat.addSpare spareHeartbeatsGiven
                           | _ => Heartbeat.zero
-                val _ = incrementNumFastJoins ()
             in
               NONE
             end
