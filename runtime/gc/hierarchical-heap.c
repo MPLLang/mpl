@@ -858,9 +858,26 @@ void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh) {
 }
 
 
-/* Is the thread's leaf heap due for a CC? thresholdRatio is
+/* Is the thread's leaf heap due for a CC? thresholdRatio (r) is
  * ccParThresholdRatio at a par, and ccSeqThresholdRatio at a sequential
- * allocation point. */
+ * allocation point. The answer is yes iff
+ *
+ *   A >= max(M, r * S)  and  n <= L
+ *
+ * where
+ *   A = size of the leaf heap's own chunk list, i.e., what has been allocated
+ *       since the heap was last split off for a CC
+ *   M = minCCSize
+ *   n = number of CCs of this heap in progress, L = maxCCChainLength
+ *   S = survivor estimate
+ *     = S_leaf                    (survivors of CCs already merged back)
+ *     + sum of S_c, for each completed (but not yet merged) CC c
+ *     + sum of H_p, for each CC p in progress, where H_p is the size of that
+ *       heap when its CC was registered: until we know better, assume that
+ *       all of it survives.
+ *
+ * This is a pure check, except for recording A in the leaf's concurrent pack
+ * (which is where H_p comes from, if the leaf is then split off). */
 bool checkPolicyforRoot(
   GC_state s,
   GC_thread thread,
@@ -870,14 +887,16 @@ bool checkPolicyforRoot(
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
   assert(NULL != hh);
 
-  if (HM_getChunkListSize(HM_HH_getChunkList(hh))
-      < s->controls->hhConfig.minCCSize)
-  {
+  size_t bytesAllocated = HM_getChunkListSize(HM_HH_getChunkList(hh));
+
+  if (bytesAllocated < s->controls->hhConfig.minCCSize) {
     return FALSE;
   }
 
   HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection =
-    HM_getChunkListSize(HM_HH_getChunkList(hh));
+    bytesAllocated;
+
+  size_t bytesSurvived = HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection;
 
   size_t chainLen = 0;
   for (HM_HierarchicalHeap cursor = hh->subHeapForCC;
@@ -887,11 +906,20 @@ bool checkPolicyforRoot(
     chainLen++;
     if (chainLen > s->controls->hhConfig.maxCCChainLength)
       return FALSE;
+
+    /* The collector may be finishing this CC right now. When it does, it
+     * records the survivors and then zeroes bytesAllocatedSinceLastCollection
+     * (see CC_collectWithRoots), so a zero here means that the survivor count
+     * is already available. */
+    ConcurrentPackage cp = HM_HH_getConcurrentPack(cursor);
+    size_t sizeWhenRegistered =
+      __atomic_load_n(&(cp->bytesAllocatedSinceLastCollection), __ATOMIC_ACQUIRE);
+    bytesSurvived +=
+      (sizeWhenRegistered > 0
+      ? sizeWhenRegistered
+      : __atomic_load_n(&(cp->bytesSurvivedLastCollection), __ATOMIC_ACQUIRE));
   }
 
-  size_t bytesSurvived = HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection;
-  
-  /* consider removing this: */
   for (HM_HierarchicalHeap cursor = hh->subHeapCompletedCC;
        NULL != cursor;
        cursor = cursor->subHeapCompletedCC)
@@ -900,16 +928,7 @@ bool checkPolicyforRoot(
       HM_HH_getConcurrentPack(cursor)->bytesSurvivedLastCollection;
   }
 
-  if((thresholdRatio * bytesSurvived) >
-      (HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection)
-    || bytesSurvived == 0) {
-    // if (!HM_HH_getConcurrentPack(hh)->shouldCollect) {
-      // HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection/=2;
-    // }
-    HM_HH_getConcurrentPack(hh)->bytesSurvivedLastCollection +=4;
-    return FALSE;
-  }
-  return TRUE;
+  return (double)bytesAllocated >= thresholdRatio * (double)bytesSurvived;
 }
 
 /* The allocation clock for concurrent collections. Called by GC_collect,
