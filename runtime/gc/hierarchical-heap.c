@@ -413,6 +413,31 @@ void HM_HH_promoteChunks(
     }
     else
     {
+      /* The thread may still be allocating in a chunk of the parent, e.g.,
+       * the left thread at a join where the right child's heap (now hh) has
+       * CCs in progress. The parent is about to go into hh's completed chain,
+       * so continue allocating in a fresh chunk of hh instead. */
+      if (HM_getLevelHead(thread->currentChunk) != hh) {
+        HM_chunk chunk = HM_allocateChunkWithPurpose(
+          HM_HH_getChunkList(hh),
+          GC_HEAP_LIMIT_SLOP,
+          BLOCK_FOR_HEAP_CHUNK);
+        if (NULL == chunk) {
+          DIE("Ran out of space for new chunk");
+        }
+        chunk->levelHead = HM_HH_getUFNode(hh);
+#ifdef DETECT_ENTANGLEMENT
+        chunk->decheckState = thread->decheckState;
+#else
+        chunk->decheckState = DECHECK_BOGUS_TID;
+#endif
+        thread->currentChunk = chunk;
+        if (thread == getThreadCurrent(s)) {
+          s->frontier = HM_HH_getFrontier(thread);
+          s->limitPlusSlop = HM_HH_getLimit(thread);
+          s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+        }
+      }
       assert(HM_getLevelHead(thread->currentChunk) == hh);
 
 #if ASSERT
@@ -833,9 +858,13 @@ void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh) {
 }
 
 
+/* Is the thread's leaf heap due for a CC? thresholdRatio is
+ * ccParThresholdRatio at a par, and ccSeqThresholdRatio at a sequential
+ * allocation point. */
 bool checkPolicyforRoot(
   GC_state s,
-  GC_thread thread)
+  GC_thread thread,
+  double thresholdRatio)
 {
   assert(NULL != thread->hierarchicalHeap);
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
@@ -871,7 +900,7 @@ bool checkPolicyforRoot(
       HM_HH_getConcurrentPack(cursor)->bytesSurvivedLastCollection;
   }
 
-  if((s->controls->hhConfig.ccThresholdRatio * bytesSurvived) >
+  if((thresholdRatio * bytesSurvived) >
       (HM_HH_getConcurrentPack(hh)->bytesAllocatedSinceLastCollection)
     || bytesSurvived == 0) {
     // if (!HM_HH_getConcurrentPack(hh)->shouldCollect) {
@@ -881,6 +910,61 @@ bool checkPolicyforRoot(
     return FALSE;
   }
   return TRUE;
+}
+
+/* The allocation clock for concurrent collections. Called by GC_collect,
+ * i.e., whenever the mutator runs out of space in its current chunk (and
+ * also whenever it polls for a signal, which bounds the time between checks
+ * for threads that allocate without exhausting chunks, e.g. large arrays).
+ *
+ * The clock is the size of the thread's leaf heap, which restarts from zero
+ * each time the heap is split off for a CC (HM_HH_registerCont); the alarm is
+ * checkPolicyforRoot with the seq threshold (ccSeqThresholdRatio). Spawns
+ * check the same policy with the smaller par threshold, so the clock only
+ * goes off in long stretches of allocation without a par.
+ *
+ * The runtime cannot start the CC itself: the scheduler has to take the
+ * snapshot, run the collection, and decide what happens to the current
+ * thread in the meantime. So we ask, by raising the GC signal for this
+ * processor. GC_collect delivers it immediately, exactly as it would any
+ * other signal: the current thread is suspended (as a resumable thread
+ * object, at this GC_collect call) and the signal handler thread runs the
+ * scheduler's GC handler on it. The handler makes the final decision (it
+ * calls HM_HH_registerCont, which rechecks the policy), so this is only a
+ * hint and a spurious request is harmless.
+ *
+ * We only raise the signal if it can be delivered right now (atomicState is 1
+ * between enter() and leave() iff the mutator was not in an atomic section);
+ * otherwise we will be asked again at the next GC_collect. That keeps the
+ * request and the thread it is about together. */
+void HM_HH_maybeRequestCC(GC_state s) {
+  GC_thread thread = getThreadCurrent(s);
+  HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+
+  if (s->atomicState != 1 ||
+      NONE == s->controls->collectionType ||
+      !s->procStates[0].signalsInfo.gcSignalHandled ||
+      s->signalHandlerThread == BOGUS_OBJPTR ||
+      thread->currentDepth < 1 ||
+      thread->currentDepth > s->controls->hhConfig.maxCCDepth ||
+      /* Local collections already handle long sequential allocation in
+       * heaps at depth >= minLocalDepth (and are cheaper than CCs there). */
+      thread->currentDepth >= s->controls->hhConfig.minLocalDepth ||
+      HM_HH_getDepth(hh) != thread->currentDepth)
+  {
+    return;
+  }
+
+  /* This is also what notices that earlier CCs of this heap have finished. */
+  mergeCompletedCCs(s, hh);
+  assert(thread->hierarchicalHeap == hh);
+
+  /* CCs of the same heap can overlap, as at pars: checkPolicyforRoot bounds
+   * the number in progress by maxCCChainLength. */
+  if (checkPolicyforRoot(s, thread, s->controls->hhConfig.ccSeqThresholdRatio)) {
+    s->signalsInfo.gcSignalPending = TRUE;
+    s->signalsInfo.signalIsPending = TRUE;
+  }
 }
 
 /*
@@ -1039,7 +1123,16 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
 
 // =============================================================================
 
-Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
+/* atPar: the caller is spawning (at a par), so use the par threshold;
+ * otherwise this is a sequential allocation point (the GC signal), and we
+ * use the seq threshold. */
+Bool HM_HH_registerCont(
+  pointer kl,
+  pointer kr,
+  pointer k,
+  pointer threadp,
+  Bool atPar)
+{
   GC_state s = pthread_getspecific(gcstate_key);
   enter(s);
 
@@ -1059,7 +1152,11 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
     assert(NULL == thread->hierarchicalHeap->subHeapCompletedCC);
 #endif
 
-  if (!checkPolicyforRoot(s, thread)) {
+  double thresholdRatio = atPar
+    ? s->controls->hhConfig.ccParThresholdRatio
+    : s->controls->hhConfig.ccSeqThresholdRatio;
+
+  if (!checkPolicyforRoot(s, thread, thresholdRatio)) {
     HM_HierarchicalHeap heap = thread->hierarchicalHeap;
     uint32_t depth = heap->depth;
     size_t lastSurvived = heap->concurrentPack.bytesSurvivedLastCollection;
@@ -1124,7 +1221,8 @@ Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp) {
   assert(invariantForMutatorStack (s));
 
   LOG(LM_CC_COLLECTION, LL_INFO,
-    "registered CC for heap %p at depth %u",
+    "registered CC (%s) for heap %p at depth %u",
+    atPar ? "par" : "seq",
     (void*)hh,
     HM_HH_getDepth(hh));
 

@@ -21,7 +21,9 @@ signature MLTON_SIGNAL =
             val isDefault: t -> bool
             val isIgnore: t -> bool
             val simple: (unit -> unit) -> t
-            val inspectInterrupted: (MLtonThread.Basic.t -> unit) -> t
+            (* The handler is given the interrupted thread, and returns the
+             * thread to switch to when the handler finishes. *)
+            val inspectInterrupted: (MLtonThread.Basic.t -> MLtonThread.Basic.t) -> t
          end
 
       structure Mask:
@@ -43,6 +45,10 @@ signature MLTON_SIGNAL =
       val handled: unit -> Mask.t
       val prof: t
       val restart: bool ref
+      (* The GC signal is raised by the runtime, not the OS: a processor
+       * raises it for itself at an allocation slow path (GC_collect) when
+       * the current thread's heap is due for a concurrent collection. *)
+      val setGCHandler: Handler.t -> unit
       val setHandler: t * Handler.t -> unit
       (* suspend m temporarily sets the signal mask to m and suspends until an
        * unmasked signal is received and handled, and then resets the mask.

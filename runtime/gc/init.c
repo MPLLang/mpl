@@ -427,15 +427,26 @@ int processAtMLton (GC_state s, int start, int argc, char **argv,
           if (s->controls->hhConfig.collectionThresholdRatio < 1.0) {
             die("%s collection-threshold-ratio must be at least 1.0", atName);
           }
-        } else if (0 == strcmp (arg, "cc-threshold-ratio")) {
+        } else if (0 == strcmp (arg, "cc-threshold-ratio") ||
+                   0 == strcmp (arg, "cc-par-threshold-ratio")) {
           i++;
           if (i == argc || (0 == strcmp (argv[i], "--"))) {
-            die ("%s cc-threshold-ratio missing argument.", atName);
+            die ("%s %s missing argument.", atName, arg);
           }
 
-          s->controls->hhConfig.ccThresholdRatio = stringToFloat(argv[i++]);
-          if (s->controls->hhConfig.ccThresholdRatio <= 1.0) {
-            die("%s cc-threshold-ratio must be > 1.0", atName);
+          s->controls->hhConfig.ccParThresholdRatio = stringToFloat(argv[i++]);
+          if (s->controls->hhConfig.ccParThresholdRatio <= 1.0) {
+            die("%s %s must be > 1.0", atName, arg);
+          }
+        } else if (0 == strcmp (arg, "cc-seq-threshold-ratio")) {
+          i++;
+          if (i == argc || (0 == strcmp (argv[i], "--"))) {
+            die ("%s cc-seq-threshold-ratio missing argument.", atName);
+          }
+
+          s->controls->hhConfig.ccSeqThresholdRatio = stringToFloat(argv[i++]);
+          if (s->controls->hhConfig.ccSeqThresholdRatio <= 1.0) {
+            die("%s cc-seq-threshold-ratio must be > 1.0", atName);
           }
         } else if (0 == strcmp(arg, "min-collection-size")) {
           i++;
@@ -539,7 +550,8 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhConfig.minCollectionSize = 1024L * 1024L;
   s->controls->hhConfig.minCCSize = 1024L * 1024L;
   s->controls->hhConfig.maxCCChainLength = 2;
-  s->controls->hhConfig.ccThresholdRatio = 2.0f;
+  s->controls->hhConfig.ccParThresholdRatio = 2.0f;
+  s->controls->hhConfig.ccSeqThresholdRatio = 8.0f;
   s->controls->hhConfig.maxCCDepth = 3;
   s->controls->hhConfig.minLocalDepth = 2;
   s->controls->rusageMeasureGC = FALSE;

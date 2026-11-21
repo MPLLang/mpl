@@ -144,6 +144,7 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
   assert(bytesRequested + sizeof(struct HM_chunk) <= s->controls->blockSize);
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
+  HM_HH_maybeRequestCC(s);
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
 
   /* SAM_NOTE: don't use HM_HH_getFrontier here, because invariant is possibly
