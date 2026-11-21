@@ -133,7 +133,6 @@ struct
   structure HM = MLton.HM
   structure HH = MLton.Thread.HierarchicalHeap
   type hh_address = Word64.word
-  type gctask_data = Thread.t * (hh_address ref)
 
   structure DE = MLton.Thread.Disentanglement
 
@@ -245,7 +244,21 @@ struct
   datatype task =
     NormalTask of (unit -> unit) * Word64.word * int
   | NewThread of Thread.p * Word64.word * int
-  | Continuation of Thread.t * int
+  | Continuation of Thread.t
+    (* A thread that was suspended for a CC of its heap. Its depth is read
+     * from the thread when it is resumed. *)
+
+  (* A registered CC, handed from a task thread to its worker's scheduler
+   * thread: the suspended thread, the heap to collect, and the task that
+   * the scheduler thread pushes to offer the suspended thread up for steal.
+   *
+   * The task is allocated here, by the thread it belongs to (in the heap that
+   * is about to be collected, where the collection keeps it alive, and
+   * nothing frees it before the thread runs again). The scheduler thread
+   * must not allocate it: a thief reads the task after it has left the
+   * deque, and by then nothing would stop the scheduler thread's own local
+   * collections from moving or freeing an object in the scheduler's heap. *)
+  type gctask_data = Thread.t * (hh_address ref) * task option
 
   (* ========================================================================
    * STATS
@@ -471,6 +484,14 @@ struct
       Queue.pushBot queue x
     end
 
+  fun pushPreallocated xo =
+    let
+      val myId = myWorkerId ()
+      val {queue, ...} = vectorSub (workerLocalData, myId)
+    in
+      Queue.pushBotPreallocated queue xo
+    end
+
   fun clear () =
     let
       val myId = myWorkerId ()
@@ -538,7 +559,8 @@ struct
         else
           let
             val heapId = ref (HH.getRoot thread)
-            val gcTaskData = SOME (interruptedThread, heapId)
+            val gcTaskData =
+              SOME (interruptedThread, heapId, SOME (Continuation interruptedThread))
             val cont_arr1 = ref NONE
             val cont_arr2 = ref NONE
             (* keeps the task data alive through the collection *)
@@ -1232,14 +1254,14 @@ struct
       fun afterReturnToSched () =
         case getGCTask myId of
           NONE => ( dbgmsg'' (fn _ => "back in sched; no GC task"); () )
-        | SOME (thread, hh) =>
+        | SOME (thread, hh, cont) =>
             ( dbgmsg'' (fn _ => "back in sched; found GC task")
             ; setGCTask myId NONE
               (* The task thread was suspended either by a signal handler
                * (at an arbitrary GC_collect call) or by an eager spawn (at
                * the fork point of a par), and can be resumed by any worker:
                * let someone else pick it up while we are busy collecting. *)
-            ; push (Continuation (thread, HH.getDepth thread))
+            ; pushPreallocated cont
             ; traceSchedIdleLeave ()
             ; traceSchedWorkEnter ()
             ; IdleTimer.stop ()
@@ -1253,7 +1275,7 @@ struct
                   ; traceSchedWorkLeave ()
                   ; traceSchedIdleEnter ()
                   )
-              | SOME (Continuation (thread, _)) =>
+              | SOME (Continuation thread) =>
                   ( ()
                   ; dbgmsg'' (fn _ => "resume task thread")
                     (* Continuations are threads that were suspended for a
@@ -1277,7 +1299,11 @@ struct
           val _ = incrementNumSteals ()
         in
           case task of
-            Continuation (thread, depth) =>
+            Continuation thread =>
+              let
+                (* the thread is suspended, so its depth is stable *)
+                val depth = HH.getDepth thread
+              in
               ( ()
               ; dbgmsg'' (fn _ => "stole continuation (" ^ Int.toString depth ^ ")")
               (* ; dbgmsg' (fn _ => "resume task thread") *)
@@ -1297,6 +1323,7 @@ struct
               ; Queue.setDepth myQueue 1
               ; acquireWork ()
               )
+              end
           | NormalTask (taskFn, tidParent, depth) =>
               let
                 val taskThread = Thread.copy prototypeThread

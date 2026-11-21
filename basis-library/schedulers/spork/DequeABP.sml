@@ -21,6 +21,13 @@ sig
   (* raises Full if at capacity *)
   val pushBot : 'a t -> 'a -> unit
 
+  (* Same, but the caller supplies the element already wrapped (SOME x), so
+   * that the push allocates nothing. Use this to push an element on behalf
+   * of another thread: every object in the deque must be allocated in the
+   * heap of the thread that it belongs to, never in the heap of whoever
+   * happens to do the push. *)
+  val pushBotPreallocated : 'a t -> 'a option -> unit
+
   (* returns NONE if deque is empty *)
   val popBot : 'a t -> 'a option
   val tryPopTop : 'a t -> 'a option
@@ -135,6 +142,13 @@ struct
   fun pushBot (q as {data, top, bot}) x =
     if ABP_deque_push_bot (gcstate (), top, bot, data, SOME x) then ()
     else exceededCapacityError ()
+
+  fun pushBotPreallocated (q as {data, top, bot}) (xo: 'a option) =
+    case xo of
+      NONE => raise Fail "DequeABP.pushBotPreallocated: NONE"
+    | SOME _ =>
+        if ABP_deque_push_bot (gcstate (), top, bot, data, xo) then ()
+        else exceededCapacityError ()
 
   fun tryPopTop (q as {data, top, bot}) =
     ABP_deque_try_pop_top (gcstate (), top, bot, data, NONE)
