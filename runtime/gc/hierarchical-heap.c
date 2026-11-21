@@ -961,6 +961,18 @@ void HM_HH_maybeRequestCC(GC_state s) {
   GC_thread thread = getThreadCurrent(s);
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
 
+  /* Notice that earlier CCs of the leaf heap have finished, at any depth.
+   * Local collections stay away from a thread whose leaf has CCs outstanding
+   * (see minDepthWithoutCC), finished or not, and otherwise the next merge is
+   * at the thread's next par or join: without this, a long stretch of
+   * sequential allocation after a par that registered a CC (at a depth where
+   * the clock below is off, because local collections are supposed to handle
+   * it) is not collected at all. */
+  if (NULL != hh->subHeapForCC) {
+    mergeCompletedCCs(s, hh);
+    assert(thread->hierarchicalHeap == hh);
+  }
+
   if (s->atomicState != 1 ||
       NONE == s->controls->collectionType ||
       !s->procStates[0].signalsInfo.gcSignalHandled ||
@@ -974,10 +986,6 @@ void HM_HH_maybeRequestCC(GC_state s) {
   {
     return;
   }
-
-  /* This is also what notices that earlier CCs of this heap have finished. */
-  mergeCompletedCCs(s, hh);
-  assert(thread->hierarchicalHeap == hh);
 
   /* CCs of the same heap can overlap, as at pars: checkPolicyforRoot bounds
    * the number in progress by maxCCChainLength. */
