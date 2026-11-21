@@ -29,7 +29,7 @@ void HM_enterLocalHeap (GC_state s) {
 }
 
 void HM_exitLocalHeap (GC_state s) {
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HM_HH_updateValues(s, getThreadCurrent(s), s->frontier);
 }
 
 void HM_ensureHierarchicalHeapAssurances(
@@ -62,7 +62,7 @@ void HM_ensureHierarchicalHeapAssurances(
   GC_thread thread = getThreadCurrent(s);
 
   /* update hh before modification */
-  HM_HH_updateValues(thread, s->frontier);
+  HM_HH_updateValues(s, thread, s->frontier);
 
   if (s->limitPlusSlop < s->frontier) {
     DIE("s->limitPlusSlop (%p) < s->frontier (%p)",

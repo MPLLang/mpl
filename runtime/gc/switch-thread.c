@@ -70,7 +70,7 @@ void GC_switchToThread (GC_state s, pointer p, size_t ensureBytesFree) {
   // beginAtomic(s);
 
   // assert(threadAndHeapOkay(s));
-  // HM_HH_updateValues(oldCurrentThread, s->frontier);
+  // HM_HH_updateValues(s, oldCurrentThread, s->frontier);
   s->frontier = 0;
   s->limitPlusSlop = 0;
   s->limit = 0;

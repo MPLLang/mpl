@@ -214,7 +214,7 @@ objptr leaveOversizedChunk (GC_state s, pointer resultStart, objptr result) {
       GC_memcpy (start, dst, used);
       result = pointerToObjptr (objptrToPointer (result, NULL) - start + dst,
                                 NULL);
-      HM_HH_updateValues(thread, dst + used);
+      HM_HH_updateValues(s, thread, dst + used);
     }
     /* HM_HH_extend counted the chunk as allocated when it was opened; a
      * freed chunk shouldn't bring the next collection closer. */
@@ -224,7 +224,7 @@ objptr leaveOversizedChunk (GC_state s, pointer resultStart, objptr result) {
     HM_unlinkChunk(list, chunk);
     HM_freeChunkWithInfo(s, chunk, NULL, BLOCK_FOR_HEAP_CHUNK);
   } else {
-    HM_HH_updateValues(thread, s->frontier);
+    HM_HH_updateValues(s, thread, s->frontier);
     if (onlyResult)
       chunk->mightContainMultipleObjects = FALSE;
     if (NULL != prev)

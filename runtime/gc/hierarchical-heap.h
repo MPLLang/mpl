@@ -147,7 +147,7 @@ HM_HierarchicalHeap HM_HH_getHeapAtDepth(GC_state s, GC_thread thread, uint32_t 
 HM_HierarchicalHeap HM_HH_getCurrent(GC_state s);
 pointer HM_HH_getFrontier(GC_thread thread);
 pointer HM_HH_getLimit(GC_thread thread);
-void HM_HH_updateValues(GC_thread thread, pointer frontier);
+void HM_HH_updateValues(GC_state s, GC_thread thread, pointer frontier);
 
 size_t HM_HH_nextCollectionThreshold(GC_state s, size_t survivingSize);
 size_t HM_HH_addRecentBytesAllocated(GC_thread thread, size_t bytes);
