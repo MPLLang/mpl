@@ -554,6 +554,10 @@ struct
       let
         val thread = Thread.current ()
       in
+        (* A GC task can already be pending here only when the heartbeat
+         * handler spawns more than once in the same beat: the first spawn
+         * registered a CC, and we haven't gotten back to the scheduler
+         * thread yet. One CC per trip to the scheduler thread. *)
         if HH.getDepth thread > maxCCDepth orelse gcTaskPending () then
           false
         else
