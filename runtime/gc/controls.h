@@ -34,8 +34,15 @@ struct HM_HierarchicalHeapConfig {
   /* smallest amount for a CC */
   size_t minCCSize;
 
+  /* the most CCs of the same heap that may be in progress at once */
   size_t maxCCChainLength;
-  double ccThresholdRatio;
+  /* CC policy thresholds (see checkPolicyforRoot). The par threshold is
+   * consulted when a thread spawns (at a par), the seq threshold at
+   * sequential allocation points (HM_HH_maybeRequestCC). The seq threshold
+   * should be the larger of the two, so that the clock only matters for
+   * long stretches of sequential allocation. */
+  double ccParThresholdRatio;
+  double ccSeqThresholdRatio;
   uint32_t maxCCDepth;
 
   /* the shallowest depth that will be claimed for a local

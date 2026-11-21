@@ -157,11 +157,12 @@ uint32_t HM_HH_desiredCollectionScope(GC_state s, GC_thread thread);
 void HM_HH_forceLeftHeap(uint32_t processor, pointer threadp);
 void HM_HH_forceNewChunk(GC_state s);
 pointer HM_HH_getRoot(pointer threadp);
-Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp);
+Bool HM_HH_registerCont(pointer kl, pointer kr, pointer k, pointer threadp, Bool atPar);
 void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp);
 void HM_HH_resetList(pointer threadp);
 
 void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh);
+void HM_HH_maybeRequestCC(GC_state s);
 
 void HM_HH_clearSuspectsAtDepth(
   GC_state s,

@@ -84,7 +84,7 @@ struct
 
   fun forceLeftHeap (myId, t) = Prim.forceLeftHeap(Word32.fromInt myId, t)
   fun forceNewChunk () = Prim.forceNewChunk (gcState ())
-  fun registerCont (kl, kr, k, t) = Prim.registerCont(kl, kr, k, t)
+  fun registerCont (kl, kr, k, t, {atPar}) = Prim.registerCont(kl, kr, k, t, atPar)
   fun resetList (t) = Prim.resetList(t)
 
   fun cancelCC (t, hh) = Prim.cancelCC (gcState (), t, hh)
@@ -363,7 +363,7 @@ local
 in
    fun amInSignalHandler () = InHandler = Array.sub (state, procNum ())
 
-   fun setSimpleSignalHandler (f: Basic.t -> unit): unit =
+   fun setSimpleSignalHandler (f: Basic.t -> Basic.t): unit =
       let
          val _ = Primitive.MLton.installSignalHandler ()
          fun loop (): unit =
@@ -376,13 +376,13 @@ in
                (* val _ = print ("Finish Prim.saved\n") *)
                val _ = Array.update (state, proc, InHandler)
                val oldHH = Prim.handlerEnterHeapOfThread (gcState (), t)
-               val _ = f t
+               val t' = f t
                val _ = Prim.handlerLeaveHeapOfThread (gcState (), t, oldHH)
                val _ = Array.update (state, proc, Normal)
                val _ = Prim.finishSignalHandler (gcState ())
                (* val _ = print ("switch away from signal handler\n") *)
                val _ = assertAtomicState 1
-               val _ = Prim.switchTo t (* implicit atomicEnd () *)
+               val _ = Prim.switchTo t' (* implicit atomicEnd () *)
             in
                loop ()
             end
