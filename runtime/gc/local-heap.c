@@ -96,7 +96,7 @@ void HM_ensureHierarchicalHeapAssurances(
     //     CC_collectAtPublicLevel(s, thread, i);
     // }
 
-    HM_HHC_collectLocal(desiredScope);
+    HM_HHC_collectLocal(s, desiredScope);
 
     /* post-collection, the thread might have been moved? */
     thread = getThreadCurrent(s);

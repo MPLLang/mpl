@@ -72,7 +72,7 @@ struct checkDEDepthsArgs
 /**
  * This function performs a local collection on the current hierarchical heap
  */
-void HM_HHC_collectLocal(uint32_t desiredScope);
+void HM_HHC_collectLocal(GC_state s, uint32_t desiredScope);
 
 /**
  * Forwards the object pointed to by 'opp' into 'destinationLevelList' starting
