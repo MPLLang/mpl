@@ -34,6 +34,7 @@ struct HM_HierarchicalHeapConfig {
   /* smallest amount for a CC */
   size_t minCCSize;
 
+  /* the most CCs of the same heap that may be in progress at once */
   size_t maxCCChainLength;
   /* CC policy thresholds (see checkPolicyforRoot). The par threshold is
    * consulted when a thread spawns (at a par), the seq threshold at

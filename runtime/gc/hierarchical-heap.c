@@ -862,13 +862,14 @@ void mergeCompletedCCs(GC_state s, HM_HierarchicalHeap hh) {
  * ccParThresholdRatio at a par, and ccSeqThresholdRatio at a sequential
  * allocation point. The answer is yes iff
  *
- *   A >= max(M, r * S)  and  n <= L
+ *   A >= max(M, r * S)  and  n < L
  *
  * where
  *   A = size of the leaf heap's own chunk list, i.e., what has been allocated
  *       since the heap was last split off for a CC
  *   M = minCCSize
- *   n = number of CCs of this heap in progress, L = maxCCChainLength
+ *   n = number of CCs of this heap in progress, L = maxCCChainLength (so at
+ *       most L CCs of the same heap overlap, counting the new one)
  *   S = survivor estimate
  *     = S_leaf                    (survivors of CCs already merged back)
  *     + sum of S_c, for each completed (but not yet merged) CC c
@@ -904,7 +905,7 @@ bool checkPolicyforRoot(
        cursor = cursor->subHeapForCC)
   {
     chainLen++;
-    if (chainLen > s->controls->hhConfig.maxCCChainLength)
+    if (chainLen >= s->controls->hhConfig.maxCCChainLength)
       return FALSE;
 
     /* The collector may be finishing this CC right now. When it does, it
@@ -1161,6 +1162,15 @@ Bool HM_HH_registerCont(
   assert(thread == getThreadCurrent(s));
 
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
+
+  /* The leaf heap must be at the thread's current depth. Otherwise it is a
+   * heap that the thread allocated in before its last spawn, and can hold
+   * tasks (and the threads to run them) that are still in the deque and
+   * reachable only from there, which the CC doesn't treat as a root. The
+   * scheduler guarantees this by calling HM_HH_getRoot first, which ensures
+   * the current level. */
+  assert(HM_HH_getDepth(hh) == thread->currentDepth);
+
   CC_initStack(s, HM_HH_getConcurrentPack(hh));
 
   mergeCompletedCCs(s, hh);

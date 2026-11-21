@@ -549,7 +549,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls->hhConfig.collectionThresholdRatio = 8.0;
   s->controls->hhConfig.minCollectionSize = 1024L * 1024L;
   s->controls->hhConfig.minCCSize = 1024L * 1024L;
-  s->controls->hhConfig.maxCCChainLength = 2;
+  s->controls->hhConfig.maxCCChainLength = 3;
   s->controls->hhConfig.ccParThresholdRatio = 2.0f;
   s->controls->hhConfig.ccSeqThresholdRatio = 8.0f;
   s->controls->hhConfig.maxCCDepth = 3;
