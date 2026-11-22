@@ -91,10 +91,10 @@ struct
   fun collectThreadRoot (t, hh) = Prim.collectThreadRoot (t, hh)
   fun getRoot t = Prim.getRoot t
 
-  fun getDepth t = Word32.toInt (Prim.getDepth t)
-  fun setDepth (t, d) = Prim.setDepth (t, Word32.fromInt d)
+  fun getDepth t = Word32.toInt (Prim.getDepth (gcState (), t))
+  fun setDepth (t, d) = Prim.setDepth (gcState (), t, Word32.fromInt d)
   fun setMinLocalCollectionDepth (t, d) =
-    Prim.setMinLocalCollectionDepth (t, Word32.fromInt d)
+    Prim.setMinLocalCollectionDepth (gcState (), t, Word32.fromInt d)
   fun moveNewThreadToDepth (t, tid, d) =
     Prim.moveNewThreadToDepth (t, tid, Word32.fromInt d)
   fun checkFinishedCCReadyToJoin () =

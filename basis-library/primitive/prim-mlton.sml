@@ -379,11 +379,11 @@ structure Thread =
       val resetList: thread -> unit =  _import "HM_HH_resetList" runtime private: thread -> unit;
       val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread * Word64.word -> unit;
 
-      val getDepth = _import "GC_HH_getDepth" runtime private: thread -> Word32.word;
+      val getDepth = _import "GC_HH_getDepth" runtime private: GCState.t * thread -> Word32.word;
       val getRoot = _import "HM_HH_getRoot" runtime private: thread -> Word64.word;
 
-      val setDepth = _import "GC_HH_setDepth" runtime private: thread * Word32.word -> unit;
-      val setMinLocalCollectionDepth = _import "GC_HH_setMinLocalCollectionDepth" runtime private: thread * Word32.word -> unit;
+      val setDepth = _import "GC_HH_setDepth" runtime private: GCState.t * thread * Word32.word -> unit;
+      val setMinLocalCollectionDepth = _import "GC_HH_setMinLocalCollectionDepth" runtime private: GCState.t * thread * Word32.word -> unit;
       val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
       val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
       val clearSuspectsAtDepth = _import "GC_HH_clearSuspectsAtDepth" runtime private: 

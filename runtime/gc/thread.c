@@ -51,16 +51,14 @@ const GC_tokenPolicy TOKEN_POLICY_FAIR = 0; // split evenly
 const GC_tokenPolicy TOKEN_POLICY_KEEP = 1; // keep all
 const GC_tokenPolicy TOKEN_POLICY_GIVE = 2; // give all
 
-Word32 GC_HH_getDepth(pointer threadp) {
-  GC_state s = pthread_getspecific(gcstate_key);
+Word32 GC_HH_getDepth(GC_state s, pointer threadp) {
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
   assert(thread != NULL);
   return thread->currentDepth;
 }
 
-void GC_HH_setDepth(pointer threadp, Word32 depth) {
-  GC_state s = pthread_getspecific(gcstate_key);
+void GC_HH_setDepth(GC_state s, pointer threadp, Word32 depth) {
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
 
   assert(thread != NULL);
@@ -69,8 +67,7 @@ void GC_HH_setDepth(pointer threadp, Word32 depth) {
   // printf("%s %d\n", "HH depth = ", thread->hierarchicalHeap->depth);
 }
 
-void GC_HH_setMinLocalCollectionDepth(pointer threadp, Word32 depth) {
-  GC_state s = pthread_getspecific(gcstate_key);
+void GC_HH_setMinLocalCollectionDepth(GC_state s, pointer threadp, Word32 depth) {
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   thread->minLocalCollectionDepth = depth;
 }
