@@ -83,6 +83,7 @@ void growStackCurrent(GC_state s) {
   /* in this case, the new stack needs more space, so allocate a new chunk,
    * copy the stack, and throw away the old chunk. */
   HM_chunk newChunk = HM_allocateChunkWithPurpose(
+    s,
     HM_HH_getChunkList(newhh),
     stackSize,
     BLOCK_FOR_HEAP_CHUNK);

@@ -233,11 +233,11 @@ void HM_freeChunksInList(GC_state s, HM_chunkList list) {
 }
 
 HM_chunk HM_allocateChunkWithPurpose(
+  GC_state s,
   HM_chunkList list,
   size_t bytesRequested,
   enum BlockPurpose purpose)
 {
-  GC_state s = pthread_getspecific(gcstate_key);
   HM_chunk chunk = HM_getFreeChunkWithPurpose(s, bytesRequested, purpose);
 
   if (NULL == chunk) {
@@ -256,8 +256,8 @@ HM_chunk HM_allocateChunkWithPurpose(
 }
 
 
-HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested) {
-  return HM_allocateChunkWithPurpose(list, bytesRequested, BLOCK_FOR_UNKNOWN_PURPOSE);
+HM_chunk HM_allocateChunk(GC_state s, HM_chunkList list, size_t bytesRequested) {
+  return HM_allocateChunkWithPurpose(s, list, bytesRequested, BLOCK_FOR_UNKNOWN_PURPOSE);
 }
 
 
@@ -482,7 +482,7 @@ size_t HM_getChunkListUsedSize(HM_chunkList list) {
 pointer HM_storeInChunkListWithPurpose(HM_chunkList chunkList, void* p, size_t objSize, enum BlockPurpose purpose) {
   HM_chunk chunk = HM_getChunkListLastChunk(chunkList);
   if (NULL == chunk || HM_getChunkSizePastFrontier(chunk) < objSize) {
-    chunk = HM_allocateChunkWithPurpose(chunkList, objSize, purpose);
+    chunk = HM_allocateChunkWithPurpose(pthread_getspecific(gcstate_key), chunkList, objSize, purpose);
   }
 
   assert(NULL != chunk);

@@ -1884,6 +1884,7 @@ HM_chunk ensureSpaceInTargetHeap(
      * the object came from, as all objects in the same heap can be safely
      * reassigned to any dechecker state of that heap. */
     chunk = HM_allocateChunkWithPurpose(
+      pthread_getspecific(gcstate_key),
       tgtChunkList,
       objectSize,
       BLOCK_FOR_HEAP_CHUNK);

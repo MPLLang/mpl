@@ -419,6 +419,7 @@ void HM_HH_promoteChunks(
        * so continue allocating in a fresh chunk of hh instead. */
       if (HM_getLevelHead(thread->currentChunk) != hh) {
         HM_chunk chunk = HM_allocateChunkWithPurpose(
+          s,
           HM_HH_getChunkList(hh),
           GC_HEAP_LIMIT_SLOP,
           BLOCK_FOR_HEAP_CHUNK);
@@ -633,6 +634,7 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
   }
 
   chunk = HM_allocateChunkWithPurpose(
+    s,
     HM_HH_getChunkList(hh),
     bytesRequested,
     BLOCK_FOR_HEAP_CHUNK);
@@ -740,6 +742,7 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(hh));
   thread->hierarchicalHeap = newHH;
   HM_chunk chunk = HM_allocateChunkWithPurpose(
+    s,
     HM_HH_getChunkList(newHH),
     GC_HEAP_LIMIT_SLOP,
     BLOCK_FOR_HEAP_CHUNK);
@@ -1027,6 +1030,7 @@ objptr copyStackOfThread(GC_state s, GC_thread thread) {
   size_t stackSize = sizeofStackWithMetaData(s, reserved, promoReserved);
 
   HM_chunk newChunk = HM_allocateChunkWithPurpose(
+    s,
     HM_HH_getChunkList(hh),
     stackSize,
     BLOCK_FOR_HEAP_CHUNK);

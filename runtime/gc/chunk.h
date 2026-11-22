@@ -155,8 +155,8 @@ HM_chunk HM_getFreeChunk(GC_state s, size_t bytesRequested);
  * Requires
  *   chunk->limit - chunk->frontier <= bytesRequested
  * Returns NULL if unable to find space for such a chunk. */
-HM_chunk HM_allocateChunk(HM_chunkList list, size_t bytesRequested);
-HM_chunk HM_allocateChunkWithPurpose(HM_chunkList list, size_t bytesRequested, enum BlockPurpose purpose);
+HM_chunk HM_allocateChunk(GC_state s, HM_chunkList list, size_t bytesRequested);
+HM_chunk HM_allocateChunkWithPurpose(GC_state s, HM_chunkList list, size_t bytesRequested, enum BlockPurpose purpose);
 
 void HM_initChunkList(HM_chunkList list);
 
