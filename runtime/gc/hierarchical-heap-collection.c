@@ -1370,7 +1370,7 @@ void addEntangledToRemSet(
   {
     markObj(p);
     struct HM_remembered remElem_ = {.object = op, .from = BOGUS_OBJPTR};
-    HM_remember (HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), &remElem_, true);
+    HM_remember (s, HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), &remElem_, true);
 
     size_t metaDataBytes;
     size_t objectBytes;
@@ -1596,7 +1596,7 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
    * and use the rememebered set later for unmarking.
    */
   if (remElem->from != BOGUS_OBJPTR) {
-    HM_remember(HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), remElem, false);
+    HM_remember(s, HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), remElem, false);
   }
   // if (remElem->from != BOGUS_OBJPTR) {
   //   uint32_t fromDepth = HM_getObjptrDepth(remElem->from);

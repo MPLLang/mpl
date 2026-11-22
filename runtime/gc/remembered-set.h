@@ -50,7 +50,7 @@ typedef struct HM_foreachDownptrClosure {
 
 void HM_initRemSet(HM_remSet remSet);
 void HM_freeRemSetWithInfo(GC_state s, HM_remSet remSet, void* info);
-void HM_remember(HM_remSet remSet, HM_remembered remElem, bool conc);
+void HM_remember(GC_state s, HM_remSet remSet, HM_remembered remElem, bool conc);
 void HM_appendRemSet(HM_remSet r1, HM_remSet r2);
 void HM_foreachRemembered(GC_state s, HM_remSet remSet, HM_foreachDownptrClosure f, bool trackFishyChunks);
 size_t HM_numRemembered(HM_remSet remSet);

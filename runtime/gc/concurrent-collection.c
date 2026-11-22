@@ -605,7 +605,7 @@ struct CC_tryUnpinOrKeepPinnedArgs {
 };
 
 void CC_tryUnpinOrKeepPinned(
-    __attribute__((unused)) GC_state s,
+    GC_state s,
     HM_remembered remElem,
     void *rawArgs)
 {
@@ -642,7 +642,7 @@ void CC_tryUnpinOrKeepPinned(
       * entry. It will be merged and handled properly later.
       */
 
-    HM_remember(args->newRemSet, remElem, false);
+    HM_remember(s, args->newRemSet, remElem, false);
     return;
   }
 
@@ -683,7 +683,7 @@ void CC_tryUnpinOrKeepPinned(
     }
   }
 
-  HM_remember(args->newRemSet, remElem, false);
+  HM_remember(s, args->newRemSet, remElem, false);
 
   /** SAM_NOTE: The goal of the following was to filter remset entries
     * to only keep the "shallowest" entries. But this is really tricky,

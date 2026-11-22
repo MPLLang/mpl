@@ -425,7 +425,7 @@ void make_entangled(
     if (pinChange && addToRemSet)
     {
       struct HM_remembered remElem_ = {.object = new_ptr, .from = BOGUS_OBJPTR};
-      HM_HH_rememberAtLevel(HM_getLevelHead(chunk), &(remElem_), true);
+      HM_HH_rememberAtLevel(s, HM_getLevelHead(chunk), &(remElem_), true);
       assert (HM_HH_getDepth(HM_getLevelHead(chunk)) != 1);
     }
   }
