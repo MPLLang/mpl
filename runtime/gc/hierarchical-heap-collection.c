@@ -95,6 +95,7 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, GC_header header,
                                              size_t *metaDataSize);
 
 objptr copyNonStackObject(
+  GC_state s,
   pointer p,  // pointer to beginning of metadata
   size_t metadataSize,
   size_t objectSizeIncludingMetadata,
@@ -1116,6 +1117,7 @@ objptr relocateObject(
   } else {
     newPointer =
       copyNonStackObject(
+        s,
         p - metaDataBytes,
         metaDataBytes,
         objectBytes,
@@ -1852,6 +1854,7 @@ void forwardHHObjptr(
 
 
 HM_chunk ensureSpaceInTargetHeap(
+  GC_state s,
   size_t objectSize,
   HM_HierarchicalHeap tgtHeap,
   decheck_tid_t decheckState)
@@ -1884,7 +1887,7 @@ HM_chunk ensureSpaceInTargetHeap(
      * the object came from, as all objects in the same heap can be safely
      * reassigned to any dechecker state of that heap. */
     chunk = HM_allocateChunkWithPurpose(
-      pthread_getspecific(gcstate_key),
+      s,
       tgtChunkList,
       objectSize,
       BLOCK_FOR_HEAP_CHUNK);
@@ -1902,6 +1905,7 @@ HM_chunk ensureSpaceInTargetHeap(
 
 
 objptr copyNonStackObject(
+  GC_state s,
   pointer p,  // pointer to beginning of metadata
   size_t metaDataSize,
   size_t objectSizeIncludingMetadata,
@@ -1911,6 +1915,7 @@ objptr copyNonStackObject(
   assert(copySize <= objectSizeIncludingMetadata);
   HM_chunk chunk =
     ensureSpaceInTargetHeap(
+      s,
       objectSizeIncludingMetadata,
       tgtHeap,
       HM_getChunkOf(p)->decheckState
@@ -1930,6 +1935,7 @@ objptr copyStackObject(
 {
   HM_chunk chunk =
     ensureSpaceInTargetHeap(
+      s,
       objectSizeIncludingMetadata,
       tgtHeap,
       HM_getChunkOf(p)->decheckState
