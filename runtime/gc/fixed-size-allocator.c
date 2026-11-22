@@ -36,7 +36,7 @@ static size_t numFixedSizeElemsInList(struct FixedSizeElement *list) {
 }
 */
 
-void* allocateFixedSize(FixedSizeAllocator fsa) {
+void* allocateFixedSize(GC_state s, FixedSizeAllocator fsa) {
   // Fast path #1: if the fast local freelist has a top element, just use that!
   if (NULL != fsa->freeList) {
     struct FixedSizeElement *elem = fsa->freeList;
@@ -91,7 +91,7 @@ void* allocateFixedSize(FixedSizeAllocator fsa) {
     * to their original buffer, by looking up the chunk header.
     */
 
-  chunk = HM_allocateChunkWithPurpose(pthread_getspecific(gcstate_key), buffer, fsa->fixedSize + sizeof(void*), fsa->purpose);
+  chunk = HM_allocateChunkWithPurpose(s, buffer, fsa->fixedSize + sizeof(void*), fsa->purpose);
   pointer gap = HM_shiftChunkStart(chunk, sizeof(void*));
   *(FixedSizeAllocator *)gap = fsa;
 

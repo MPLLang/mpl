@@ -524,8 +524,8 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
-  HM_UnionFindNode uf = allocateFixedSize(getUFAllocator(s));
-  HM_HierarchicalHeap hh = allocateFixedSize(getHHAllocator(s));
+  HM_UnionFindNode uf = allocateFixedSize(s, getUFAllocator(s));
+  HM_HierarchicalHeap hh = allocateFixedSize(s, getHHAllocator(s));
 
   uf->dependant1 = NULL;
   uf->dependant2 = NULL;

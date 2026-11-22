@@ -78,7 +78,7 @@ void initFixedSizeAllocator(
   * (But two concurrent threads should NOT allocate from the same [fsa] at the
   * same time.)
   */
-void* allocateFixedSize(FixedSizeAllocator fsa);
+void* allocateFixedSize(GC_state s, FixedSizeAllocator fsa);
 
 
 /** Free [elem]. Standard assumptions: [elem] must have been returned by some
