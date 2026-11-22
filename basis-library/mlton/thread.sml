@@ -98,7 +98,7 @@ struct
   fun mergeThreads (t, child) = Prim.mergeThreads (gcState (), t, child)
   fun promoteChunks t = Prim.promoteChunks (gcState (), t)
   fun moveNewThreadToDepth (t, tid, d) =
-    Prim.moveNewThreadToDepth (t, tid, Word32.fromInt d)
+    Prim.moveNewThreadToDepth (gcState (), t, tid, Word32.fromInt d)
   fun checkFinishedCCReadyToJoin () =
     Prim.checkFinishedCCReadyToJoin (gcState ())
 

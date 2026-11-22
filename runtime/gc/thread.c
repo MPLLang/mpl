@@ -216,8 +216,7 @@ void GC_HH_deleteClearSet(GC_state s, pointer clearSet) {
   ES_deleteClearSet(s, (ES_clearSet)clearSet);
 }
 
-void GC_HH_moveNewThreadToDepth(pointer threadp, uint64_t tidParent, uint32_t depth) {
-  GC_state s = pthread_getspecific(gcstate_key);
+void GC_HH_moveNewThreadToDepth(GC_state s, pointer threadp, uint64_t tidParent, uint32_t depth) {
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   assert(thread != NULL);
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;

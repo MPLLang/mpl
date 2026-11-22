@@ -144,7 +144,7 @@ PRIVATE objptr GC_HH_forkThread(GC_state s, Bool youngestOptimization, pointer t
  * This essentially puts the thread (and its stack) into the hierarchy.
  * Also sets the depth of the thread.
  */
-PRIVATE void GC_HH_moveNewThreadToDepth(pointer thread, Word64 tidParent, Word32 depth);
+PRIVATE void GC_HH_moveNewThreadToDepth(GC_state s, pointer thread, Word64 tidParent, Word32 depth);
 
 PRIVATE void GC_HH_clearSuspectsAtDepth(GC_state s, pointer threadp, uint32_t depth);
 
