@@ -52,17 +52,16 @@ void Parallel_lockRelease (Pointer arg) {
   spinlock_unlock(lock);
 }
 
-bool Parallel_alreadyLockedByMe (Pointer arg) {
+bool Parallel_alreadyLockedByMe (GC_state s, Pointer arg) {
   spinlock_t* lock = ((spinlock_t*)(arg));
-  uint32_t lockValue = Proc_processorNumber(pthread_getspecific(gcstate_key));
+  uint32_t lockValue = Proc_processorNumber(s);
 
   return (lockValue == spinlock_value(lock));
 }
 
-void Parallel_dekkerTake (Bool amLeft, Pointer left, Pointer right, Pointer leftsTurn_)
+void Parallel_dekkerTake (GC_state s, Bool amLeft, Pointer left, Pointer right, Pointer leftsTurn_)
 {
   Bool *mine, *other, *leftsTurn;
-  GC_state s = pthread_getspecific (gcstate_key);
   size_t cpoll = 0;
 
   if (amLeft) {
@@ -144,8 +143,7 @@ void Parallel_resetBytesLive (void) {
   s->cumulativeStatistics->maxBytesLiveSinceReset = 0;
 }
 
-uint64_t Parallel_getTimeInGC (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+uint64_t Parallel_getTimeInGC (GC_state s) {
   uint64_t gcTime = rusageTime (&s->cumulativeStatistics->ru_gc);
   return gcTime;
 }
