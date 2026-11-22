@@ -16,10 +16,9 @@ void Parallel_lockInit (Pointer arg) {
   spinlock_init(lock);
 }
 
-void Parallel_lockTake (Pointer arg) {
+void Parallel_lockTake (GC_state s, Pointer arg) {
   spinlock_t* lock = ((spinlock_t*)(arg));
-  uint32_t lockValue = Proc_processorNumber(pthread_getspecific(gcstate_key));
-  GC_state s = pthread_getspecific (gcstate_key);
+  uint32_t lockValue = Proc_processorNumber(s);
   size_t cpoll = 0;
 
   LOG(LM_PARALLEL, LL_DEBUG,

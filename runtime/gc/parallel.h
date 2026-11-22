@@ -4,7 +4,7 @@
 PRIVATE void Parallel_init (GC_state s);
 
 PRIVATE void Parallel_lockInit (Pointer);
-PRIVATE void Parallel_lockTake (Pointer);
+PRIVATE void Parallel_lockTake (GC_state, Pointer);
 PRIVATE void Parallel_lockRelease (Pointer);
 PRIVATE bool Parallel_alreadyLockedByMe (Pointer);
 PRIVATE void Parallel_dekkerTake (Bool, Pointer, Pointer, Pointer);

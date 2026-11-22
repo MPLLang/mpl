@@ -36,10 +36,13 @@ structure MLtonParallel:> MLTON_PARALLEL =
                          _import "Parallel_lockInit" runtime private:
                          Word32.word ref -> unit;(* ) *)
 
+        val lockTake =
+            _import "Parallel_lockTake" runtime private:
+            Primitive.MLton.GCState.t * Word32.word ref -> unit;
+
         val takeLock: Word32.word ref -> unit =
             (* msgWrapper1 ("takeLock", *)
-                         _import "Parallel_lockTake" runtime private:
-                         Word32.word ref -> unit;(* ) *)
+                         fn l => lockTake (gcState (), l)(* ) *)
 
         val releaseLock: Word32.word ref -> unit =
             (* msgWrapper1 ("releaseLock", *)
