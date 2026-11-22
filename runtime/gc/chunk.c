@@ -479,10 +479,10 @@ size_t HM_getChunkListUsedSize(HM_chunkList list) {
   return list->usedSize;
 }
 
-pointer HM_storeInChunkListWithPurpose(HM_chunkList chunkList, void* p, size_t objSize, enum BlockPurpose purpose) {
+pointer HM_storeInChunkListWithPurpose(GC_state s, HM_chunkList chunkList, void* p, size_t objSize, enum BlockPurpose purpose) {
   HM_chunk chunk = HM_getChunkListLastChunk(chunkList);
   if (NULL == chunk || HM_getChunkSizePastFrontier(chunk) < objSize) {
-    chunk = HM_allocateChunkWithPurpose(pthread_getspecific(gcstate_key), chunkList, objSize, purpose);
+    chunk = HM_allocateChunkWithPurpose(s, chunkList, objSize, purpose);
   }
 
   assert(NULL != chunk);
@@ -497,8 +497,8 @@ pointer HM_storeInChunkListWithPurpose(HM_chunkList chunkList, void* p, size_t o
   return frontier;
 }
 
-pointer HM_storeInChunkList(HM_chunkList chunkList, void* p, size_t objSize) {
-  return HM_storeInChunkListWithPurpose(chunkList, p, objSize, BLOCK_FOR_UNKNOWN_PURPOSE);
+pointer HM_storeInChunkList(GC_state s, HM_chunkList chunkList, void* p, size_t objSize) {
+  return HM_storeInChunkListWithPurpose(s, chunkList, p, objSize, BLOCK_FOR_UNKNOWN_PURPOSE);
 }
 
 HM_HierarchicalHeap HM_getLevelHead(HM_chunk chunk) {

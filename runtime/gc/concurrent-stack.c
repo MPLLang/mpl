@@ -48,7 +48,7 @@ bool increaseCapacity(CC_stack_data* stack, int factor){
 #endif
 
 // return false if the push failed. true if push succeeds
-bool CC_stack_data_push(CC_stack_data* stack, void* datum){
+bool CC_stack_data_push(GC_state s, CC_stack_data* stack, void* datum){
     pthread_mutex_lock(&stack->mutex);
 
 
@@ -74,14 +74,14 @@ bool CC_stack_data_push(CC_stack_data* stack, void* datum){
     stack->storage[stack->size++] = datum;
 #endif
 
-    HM_storeInChunkListWithPurpose(&(stack->storage), &(datum), sizeof(datum), BLOCK_FOR_FORGOTTEN_SET);
+    HM_storeInChunkListWithPurpose(s, &(stack->storage), &(datum), sizeof(datum), BLOCK_FOR_FORGOTTEN_SET);
     pthread_mutex_unlock(&stack->mutex);
     return TRUE;
 }
 
 bool CC_stack_push(GC_state s, CC_stack* stack, void* datum) {
   if (stack->allClosed) return FALSE;
-  return CC_stack_data_push(&(stack->stacks[s->procNumber]), datum);
+  return CC_stack_data_push(s, &(stack->stacks[s->procNumber]), datum);
 }
 
 #if 0

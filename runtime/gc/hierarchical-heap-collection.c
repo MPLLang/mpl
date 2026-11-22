@@ -1179,6 +1179,7 @@ void copySuspect(
   }
   uint32_t opDepth = args->toDepth;
   HM_storeInChunkListWithPurpose(
+    s,
     HM_HH_getSuspects(toSpaceHH(s, args, opDepth)),
     &new_ptr,
     sizeof(objptr),

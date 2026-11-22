@@ -59,7 +59,7 @@ void clear_suspect(
   if (pinType(header) == PIN_ANY && unpinDepth < eargs->heapDepth) {
     /* Not ready to be cleared */
     HM_HierarchicalHeap unpinHeap = HM_HH_getHeapAtDepth(s, eargs->thread, unpinDepth);
-    HM_storeInChunkListWithPurpose(HM_HH_getSuspects(unpinHeap), opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
+    HM_storeInChunkListWithPurpose(s, HM_HH_getSuspects(unpinHeap), opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
     eargs->numMoved++;
     return;
   }
@@ -72,7 +72,7 @@ void clear_suspect(
   }
   else {
     /*oops something changed in b/w, let's try at the next join*/
-    HM_storeInChunkListWithPurpose(eargs->newList, opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
+    HM_storeInChunkListWithPurpose(s, eargs->newList, opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
     eargs->numFailed++;
 
     LOG(LM_HIERARCHICAL_HEAP, LL_INFO,
@@ -93,7 +93,7 @@ void ES_unmark(GC_state s, objptr op, ES_clearArgs args) {
   clear_suspect(s, &op, op, args);
 }
 
-void ES_add(__attribute__((unused)) GC_state s, HM_chunkList es, objptr op)
+void ES_add(GC_state s, HM_chunkList es, objptr op)
 {
 
   if (!mark_suspect(op))
@@ -102,7 +102,7 @@ void ES_add(__attribute__((unused)) GC_state s, HM_chunkList es, objptr op)
     return;
   }
   s->cumulativeStatistics->numSuspectsMarked++;
-  HM_storeInChunkListWithPurpose(es, &op, sizeof(objptr), BLOCK_FOR_SUSPECTS);
+  HM_storeInChunkListWithPurpose(s, es, &op, sizeof(objptr), BLOCK_FOR_SUSPECTS);
 }
 
 int ES_foreachSuspect(
@@ -265,7 +265,7 @@ size_t ES_numChunksInClearSet(
 
 
 void clear_suspect_par_safe(
-  __attribute__((unused)) GC_state s,
+  GC_state s,
   objptr *opp,
   objptr op,
   struct HM_chunkList *output,
@@ -279,7 +279,7 @@ void clear_suspect_par_safe(
     // Note: lenOutput == depth of heap whose suspects we are clearing
     if (pinType(header) == PIN_ANY && unpinDepth < lenOutput) {
       /* Not ready to be cleared; move it instead */
-      HM_storeInChunkListWithPurpose(&(output[unpinDepth]), opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
+      HM_storeInChunkListWithPurpose(s, &(output[unpinDepth]), opp, sizeof(objptr), BLOCK_FOR_SUSPECTS);
       return;
     }
 

@@ -178,9 +178,11 @@ void markObj(pointer p) {
 }
 
 /* Record that this collection marked op, so that it is unmarked at the end. */
-static inline void rememberMarked(ConcurrentCollectArgs* args, objptr op) {
+static inline void rememberMarked(
+  GC_state s, ConcurrentCollectArgs* args, objptr op)
+{
   HM_storeInChunkListWithPurpose(
-    &(args->markedObjects), &op, sizeof(objptr), BLOCK_FOR_GC_WORKLIST);
+    s, &(args->markedObjects), &op, sizeof(objptr), BLOCK_FOR_GC_WORKLIST);
 }
 
 // This function is exactly the same as in chunk.c.
@@ -330,7 +332,7 @@ void tryMarkAndAddToWorkList(
 
   if (!CC_isPointerMarked(p)) {
     markObj(p);
-    rememberMarked(args, op);
+    rememberMarked(s, args, op);
     args->bytesSaved += sizeofObject(s, p);
     args->numObjectsMarked++;
     assert(CC_isPointerMarked(p));
@@ -438,7 +440,7 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   if(saved && !CC_isPointerMarked(p)) {
     assert(getTransitivePtr(p, rawArgs) == p);
     markObj(p);
-    rememberMarked(args, op);
+    rememberMarked(s, args, op);
     assert(CC_isPointerMarked(p));
     args->bytesSaved += sizeofObject(s, p);
     args->numObjectsMarked++;
