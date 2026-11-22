@@ -368,11 +368,11 @@ structure Thread =
       val handlerEnterHeapOfThread = _import "GC_handlerEnterHeapOfThread" runtime private: GCState.t * thread -> Word64.word;
       val handlerLeaveHeapOfThread = _import "GC_handlerLeaveHeapOfThread" runtime private: GCState.t * thread * Word64.word -> unit;
 
-      val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: Word32.word * thread -> unit;
+      val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: GCState.t * Word32.word * thread -> unit;
       val forceNewChunk = _import "HM_HH_forceNewChunk" runtime private: GCState.t -> unit;
       val registerCont =
         _import "HM_HH_registerCont" runtime private:
-        'a ref * 'b ref * 'c ref * thread * bool -> bool;
+        GCState.t * 'a ref * 'b ref * 'c ref * thread * bool -> bool;
       val cancelCC =
         _import "HM_HH_cancelCC" runtime private:
         GCState.t * thread * Word64.word -> unit;
@@ -380,7 +380,7 @@ structure Thread =
       val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread * Word64.word -> unit;
 
       val getDepth = _import "GC_HH_getDepth" runtime private: GCState.t * thread -> Word32.word;
-      val getRoot = _import "HM_HH_getRoot" runtime private: thread -> Word64.word;
+      val getRoot = _import "HM_HH_getRoot" runtime private: GCState.t * thread -> Word64.word;
 
       val setDepth = _import "GC_HH_setDepth" runtime private: GCState.t * thread * Word32.word -> unit;
       val setMinLocalCollectionDepth = _import "GC_HH_setMinLocalCollectionDepth" runtime private: GCState.t * thread * Word32.word -> unit;

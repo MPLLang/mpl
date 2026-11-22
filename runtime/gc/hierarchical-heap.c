@@ -667,10 +667,10 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
 }
 
 void HM_HH_forceLeftHeap(
+  GC_state s,
   ARG_USED_FOR_ASSERT uint32_t processor,
   pointer threadp)
 {
-  GC_state s = pthread_getspecific (gcstate_key);
   assert(processor < s->numberOfProcs);
   enter(s);
 
@@ -1061,8 +1061,7 @@ objptr copyStackOfThread(GC_state s, GC_thread thread) {
   return pointerToObjptr((pointer)stack, NULL);
 }
 
-pointer HM_HH_getRoot(ARG_USED_FOR_ASSERT pointer threadp) {
-  GC_state s = pthread_getspecific(gcstate_key);
+pointer HM_HH_getRoot(GC_state s, ARG_USED_FOR_ASSERT pointer threadp) {
   enter(s);
 
   /** Superfluous argument to function... */
@@ -1155,13 +1154,13 @@ void HM_HH_cancelCC(GC_state s, pointer threadp, pointer hhp) {
  * otherwise this is a sequential allocation point (the GC signal), and we
  * use the seq threshold. */
 Bool HM_HH_registerCont(
+  GC_state s,
   pointer kl,
   pointer kr,
   pointer k,
   pointer threadp,
   Bool atPar)
 {
-  GC_state s = pthread_getspecific(gcstate_key);
   enter(s);
 
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));

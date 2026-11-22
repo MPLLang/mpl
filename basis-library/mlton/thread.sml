@@ -82,14 +82,14 @@ struct
   type clear_set = MLtonPointer.t
   type finished_clear_set_grain = MLtonPointer.t
 
-  fun forceLeftHeap (myId, t) = Prim.forceLeftHeap(Word32.fromInt myId, t)
+  fun forceLeftHeap (myId, t) = Prim.forceLeftHeap(gcState (), Word32.fromInt myId, t)
   fun forceNewChunk () = Prim.forceNewChunk (gcState ())
-  fun registerCont (kl, kr, k, t, {atPar}) = Prim.registerCont(kl, kr, k, t, atPar)
+  fun registerCont (kl, kr, k, t, {atPar}) = Prim.registerCont(gcState (), kl, kr, k, t, atPar)
   fun resetList (t) = Prim.resetList(t)
 
   fun cancelCC (t, hh) = Prim.cancelCC (gcState (), t, hh)
   fun collectThreadRoot (t, hh) = Prim.collectThreadRoot (t, hh)
-  fun getRoot t = Prim.getRoot t
+  fun getRoot t = Prim.getRoot (gcState (), t)
 
   fun getDepth t = Word32.toInt (Prim.getDepth (gcState (), t))
   fun setDepth (t, d) = Prim.setDepth (gcState (), t, Word32.fromInt d)
