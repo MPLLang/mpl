@@ -18,6 +18,40 @@ void HM_remember(GC_state s, HM_remSet remSet, HM_remembered remElem, bool conc)
   }
 }
 
+/* An entry of a public list is complete once its object is non-zero: the
+ * writer publishes the object last, with a release store
+ * (CC_storeInConcListWithPurpose), so it is read with an acquire load. */
+static inline bool isPublishedEntry(pointer p) {
+  return __atomic_load_n(&(((HM_remembered)p)->object), __ATOMIC_ACQUIRE) != 0;
+}
+/* CC_storeInConcListWithPurpose publishes an entry's last 8-byte word: that
+ * must be the object. */
+COMPILE_TIME_ASSERT(HM_remembered__object_is_the_last_word,
+                    offsetof(struct HM_remembered, object) + sizeof(objptr)
+                      == sizeof(struct HM_remembered)
+                    && sizeof(objptr) == sizeof(uint64_t));
+
+/* Like HM_foreachPrivate, for chunks just taken from a public list, which
+ * a writer may still be filling. */
+static void foreachInPoppedChunks(
+  GC_state s,
+  HM_chunkList chunkList,
+  HM_foreachDownptrClosure f)
+{
+  HM_chunk chunk = HM_getChunkListFirstChunk(chunkList);
+  while (chunk != NULL)
+  {
+    pointer p = HM_getChunkStart(chunk);
+    pointer frontier = HM_getChunkFrontier(chunk);
+    while (p < frontier && isPublishedEntry(p))
+    {
+      f->fun(s, (HM_remembered)p, f->env);
+      p += sizeof(struct HM_remembered);
+    }
+    chunk = chunk->nextChunk;
+  }
+}
+
 void HM_foreachPrivate(
   GC_state s,
   HM_chunkList chunkList,
@@ -79,7 +113,7 @@ void checkFishyChunks(GC_state s,
       pointer frontier = HM_getChunkFrontier(chunk);
       while (TRUE)
       {
-        while (p < frontier && ((HM_remembered)p)->object != 0)
+        while (p < frontier && isPublishedEntry(p))
         {
           f->fun(s, (HM_remembered)p, f->env);
           p += sizeof(struct HM_remembered);
@@ -113,7 +147,7 @@ void HM_foreachPublic (
     struct HM_chunkList _chunkList;
     HM_chunkList chunkList = &(_chunkList);
     CC_popAsChunkList(&(remSet->public), chunkList);
-    HM_foreachPrivate(s, chunkList, f);
+    foreachInPoppedChunks(s, chunkList, f);
     HM_appendChunkList(&(remSet->private), chunkList);
     return;
   }
@@ -129,7 +163,7 @@ void HM_foreachPublic (
     {
       pointer p = HM_getChunkStart(chunk);
       pointer frontier = HM_getChunkFrontier(chunk);
-      while (p < frontier && ((HM_remembered)p)->object != 0)
+      while (p < frontier && isPublishedEntry(p))
       {
         f->fun(s, (HM_remembered)p, f->env);
         p += sizeof(struct HM_remembered);

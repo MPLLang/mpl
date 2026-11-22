@@ -39,6 +39,10 @@ void allocateChunkInConcList(
   // concList->lastChunk = chunk;
 
   memset((void *)HM_getChunkStart(chunk), '\0', HM_getChunkLimit(chunk) - HM_getChunkStart(chunk));
+  /* Walkers follow nextChunk without the lock: the zeroed chunk must be
+   * visible before the pointer to it is (taking the lock below is only an
+   * acquire). */
+  __atomic_thread_fence(__ATOMIC_RELEASE);
 
   bool success = false;
   if(concList->lastChunk == lastChunk) {
@@ -88,7 +92,15 @@ pointer CC_storeInConcListWithPurpose(GC_state s, CC_concList concList, void* p,
       bool success = __sync_bool_compare_and_swap(&(chunk->frontier), frontier, new_frontier);
       if (success)
       {
-        memcpy(frontier, p, objSize);
+        /* Walkers take an entry once its last word is non-zero (for a
+         * remembered entry, its object) and read the rest after it: write
+         * the rest first, then the last word with a release store. */
+        assert(objSize >= sizeof(uint64_t) && objSize % sizeof(uint64_t) == 0);
+        size_t head = objSize - sizeof(uint64_t);
+        uint64_t last;
+        memcpy(frontier, p, head);
+        memcpy(&last, (char *)p + head, sizeof(uint64_t));
+        __atomic_store_n((uint64_t *)(frontier + head), last, __ATOMIC_RELEASE);
         // pthread_mutex_unlock(&concList->mutex);
         return frontier;
       }
