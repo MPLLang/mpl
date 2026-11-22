@@ -128,13 +128,11 @@ void Parallel_dekkerRelease (Bool amLeft, Pointer left, Pointer right, Pointer l
   __sync_bool_compare_and_swap (mine, 1, 0);
 }
 
-Word32 Parallel_processorNumber (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+Word32 Parallel_processorNumber (GC_state s) {
   return Proc_processorNumber (s);
 }
 
-Word32 Parallel_numberOfProcessors (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
+Word32 Parallel_numberOfProcessors (GC_state s) {
   return s->numberOfProcs;
 }
 

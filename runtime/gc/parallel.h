@@ -10,8 +10,8 @@ PRIVATE bool Parallel_alreadyLockedByMe (Pointer);
 PRIVATE void Parallel_dekkerTake (Bool, Pointer, Pointer, Pointer);
 PRIVATE void Parallel_dekkerRelease (Bool, Pointer, Pointer, Pointer);
 
-PRIVATE Word32 Parallel_processorNumber (void);
-PRIVATE Word32 Parallel_numberOfProcessors (void);
+PRIVATE Word32 Parallel_processorNumber (GC_state s);
+PRIVATE Word32 Parallel_numberOfProcessors (GC_state s);
 PRIVATE Word64 Parallel_maxBytesLive (void);
 PRIVATE void Parallel_resetBytesLive (void);
 PRIVATE Word64 Parallel_getTimeInGC (void);

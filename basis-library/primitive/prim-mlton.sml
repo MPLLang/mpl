@@ -217,11 +217,12 @@ structure HM =
 structure Parallel =
    struct
       val numberOfProcessors =
-         _import "Parallel_numberOfProcessors" impure private: unit -> Int32.int;
-      val numberOfProcessors = numberOfProcessors ()
+         _import "Parallel_numberOfProcessors" impure private: GCState.t -> Int32.int;
+      val numberOfProcessors = numberOfProcessors (GCState.gcState ())
 
       val processorNumber =
-         _import "Parallel_processorNumber" impure private: unit -> Int32.int;
+         _import "Parallel_processorNumber" impure private: GCState.t -> Int32.int;
+      val processorNumber = fn () => processorNumber (GCState.gcState ())
 
       val compareAndSwap =
         _prim "Ref_cas": 'a ref * 'a * 'a -> 'a;
