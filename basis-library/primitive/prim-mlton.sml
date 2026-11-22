@@ -384,8 +384,8 @@ structure Thread =
 
       val setDepth = _import "GC_HH_setDepth" runtime private: GCState.t * thread * Word32.word -> unit;
       val setMinLocalCollectionDepth = _import "GC_HH_setMinLocalCollectionDepth" runtime private: GCState.t * thread * Word32.word -> unit;
-      val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
-      val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
+      val mergeThreads = _import "GC_HH_mergeThreads" runtime private: GCState.t * thread * thread -> unit;
+      val promoteChunks = _import "GC_HH_promoteChunks" runtime private: GCState.t * thread -> unit;
       val clearSuspectsAtDepth = _import "GC_HH_clearSuspectsAtDepth" runtime private: 
         GCState.t * thread * Word32.word -> unit;
       val numSuspectsAtDepth = _import "GC_HH_numSuspectsAtDepth" runtime private:

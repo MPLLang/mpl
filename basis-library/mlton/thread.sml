@@ -95,6 +95,8 @@ struct
   fun setDepth (t, d) = Prim.setDepth (gcState (), t, Word32.fromInt d)
   fun setMinLocalCollectionDepth (t, d) =
     Prim.setMinLocalCollectionDepth (gcState (), t, Word32.fromInt d)
+  fun mergeThreads (t, child) = Prim.mergeThreads (gcState (), t, child)
+  fun promoteChunks t = Prim.promoteChunks (gcState (), t)
   fun moveNewThreadToDepth (t, tid, d) =
     Prim.moveNewThreadToDepth (t, tid, Word32.fromInt d)
   fun checkFinishedCCReadyToJoin () =

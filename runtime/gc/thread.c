@@ -72,8 +72,7 @@ void GC_HH_setMinLocalCollectionDepth(GC_state s, pointer threadp, Word32 depth)
   thread->minLocalCollectionDepth = depth;
 }
 
-void GC_HH_mergeThreads(pointer threadp, pointer childp) {
-  GC_state s = pthread_getspecific(gcstate_key);
+void GC_HH_mergeThreads(GC_state s, pointer threadp, pointer childp) {
   enter(s);
 
   objptr threadop = pointerToObjptr(threadp, NULL);
@@ -138,8 +137,7 @@ void GC_HH_mergeThreads(pointer threadp, pointer childp) {
   leave(s);
 }
 
-void GC_HH_promoteChunks(pointer threadp) {
-  GC_state s = pthread_getspecific(gcstate_key);
+void GC_HH_promoteChunks(GC_state s, pointer threadp) {
   enter(s);
 
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
