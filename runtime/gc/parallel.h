@@ -1,7 +1,7 @@
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE void Parallel_init (void);
+PRIVATE void Parallel_init (GC_state s);
 
 PRIVATE void Parallel_lockInit (Pointer);
 PRIVATE void Parallel_lockTake (Pointer);

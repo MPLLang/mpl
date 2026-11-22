@@ -2,9 +2,7 @@
 #include <time.h>
 #include "platform.h"
 
-void Parallel_init (void) {
-  GC_state s = pthread_getspecific (gcstate_key);
-
+void Parallel_init (GC_state s) {
   if (!Proc_isInitialized (s)) {
     /* Now wake them up! */
     Proc_signalInitialization (s);

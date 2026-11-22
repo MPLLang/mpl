@@ -7,6 +7,7 @@
 structure MLtonParallel:> MLTON_PARALLEL =
   struct
     structure Prim = Primitive.MLton.Parallel
+    val gcState = Primitive.MLton.GCState.gcState
 
     structure Deprecated =
       struct
@@ -89,8 +90,13 @@ structure MLtonParallel:> MLTON_PARALLEL =
           (_export "Parallel_run": (unit -> unit) -> unit;) f'
         end
 
-    val initializeProcessors: unit -> unit =
-        _import "Parallel_init" runtime private: unit -> unit;
+    local
+      val init =
+          _import "Parallel_init" runtime private:
+          Primitive.MLton.GCState.t -> unit;
+    in
+      fun initializeProcessors () = init (gcState ())
+    end
 
     (* ========================== compareAndSwap ========================== *)
 
