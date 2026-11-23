@@ -548,7 +548,7 @@ objptr manage_entangled(
   //   if (pinChange)
   //   {
   //     struct HM_remembered remElem_ = {.object = new_ptr, .from = BOGUS_OBJPTR};
-  //     HM_HH_rememberAtLevel(HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
+  //     HM_HH_rememberAtLevel(s, HM_getLevelHeadPathCompress(chunk), &(remElem_), true);
   //   }
   // }
   // else

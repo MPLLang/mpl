@@ -627,7 +627,7 @@ void CC_tryUnpinOrKeepPinned(
       * move on.
       */
     assert(s->controls->manageEntanglement);
-    HM_remember(args->newRemSet, remElem);
+    HM_remember(s, args->newRemSet, remElem, false);
     return;
   }
 #endif
