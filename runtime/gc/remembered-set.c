@@ -42,7 +42,7 @@ static void foreachInPoppedChunks(
   while (chunk != NULL)
   {
     pointer p = HM_getChunkStart(chunk);
-    pointer frontier = HM_getChunkFrontier(chunk);
+    pointer frontier = __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED);
     while (p < frontier && isPublishedEntry(p))
     {
       f->fun(s, (HM_remembered)p, f->env);
@@ -110,7 +110,7 @@ void checkFishyChunks(GC_state s,
     {
       HM_chunk chunk = fishyChunks[i].chunk;
       pointer p = fishyChunks[i].scanned;
-      pointer frontier = HM_getChunkFrontier(chunk);
+      pointer frontier = __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED);
       while (TRUE)
       {
         while (p < frontier && isPublishedEntry(p))
@@ -118,7 +118,7 @@ void checkFishyChunks(GC_state s,
           f->fun(s, (HM_remembered)p, f->env);
           p += sizeof(struct HM_remembered);
         }
-        frontier = HM_getChunkFrontier(chunk);
+        frontier = __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED);
         if (p >= frontier) {
           break;
         }
@@ -139,7 +139,7 @@ void HM_foreachPublic (
   bool trackFishyChunks)
 {
 
-  if ((remSet->public).firstChunk == NULL) {
+  if (__atomic_load_n(&(remSet->public).firstChunk, __ATOMIC_ACQUIRE) == NULL) {
     return;
   }
 
@@ -152,7 +152,7 @@ void HM_foreachPublic (
     return;
   }
 
-  HM_chunk chunk = (remSet->public).firstChunk;
+  HM_chunk chunk = __atomic_load_n(&(remSet->public).firstChunk, __ATOMIC_ACQUIRE);
   HM_chunk lastChunk = CC_getLastChunk (&(remSet->public));
   int array_size = 2 * s->numberOfProcs;
   FishyChunk* fishyChunks = malloc(sizeof(struct FishyChunk) * array_size);
@@ -162,20 +162,23 @@ void HM_foreachPublic (
     while (chunk != NULL)
     {
       pointer p = HM_getChunkStart(chunk);
-      pointer frontier = HM_getChunkFrontier(chunk);
+      pointer frontier = __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED);
       while (p < frontier && isPublishedEntry(p))
       {
         f->fun(s, (HM_remembered)p, f->env);
         p += sizeof(struct HM_remembered);
       }
-      if ((chunk->retireChunk || chunk->nextChunk == NULL))
+      /* nextChunk first: CC_appendConcList sets retireChunk before it
+       * publishes nextChunk with a release store. */
+      if (__atomic_load_n(&chunk->nextChunk, __ATOMIC_ACQUIRE) == NULL
+          || __atomic_load_n(&chunk->retireChunk, __ATOMIC_RELAXED))
       {
         if (numFishyChunks >= array_size) {
           fishyChunks = resizeFishyArray(fishyChunks, &array_size);
         }
         makeChunkFishy(fishyChunks, chunk, p, &numFishyChunks);
       }
-      chunk = chunk->nextChunk;
+      chunk = __atomic_load_n(&chunk->nextChunk, __ATOMIC_ACQUIRE);
     }
     checkFishyChunks(s, fishyChunks, numFishyChunks, f);
     lastChunk = CC_getLastChunk(&(remSet->public));

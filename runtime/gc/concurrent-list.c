@@ -1,3 +1,11 @@
+/* A public list is read without its mutex: by writers (the last chunk and
+ * its frontier; its limit is fixed before the chunk is published) and by
+ * walkers (HM_foreachPublic: the first chunk, each chunk's nextChunk,
+ * retireChunk and frontier). Those reads are atomic loads (acquire for the
+ * pointers), and the stores they can see are atomic (release for the
+ * pointers, which publish a zeroed chunk), also under the mutex. The entries
+ * themselves: see CC_storeInConcListWithPurpose. */
+
 void CC_initConcList(CC_concList concList) {
   concList->firstChunk = NULL;
   concList->lastChunk = NULL;
@@ -13,7 +21,7 @@ void allocateChunkInConcList(
   enum BlockPurpose purpose)
 {
   // pthread_mutex_lock(&concList->mutex);
-  if(concList->lastChunk != lastChunk) {
+  if(__atomic_load_n(&concList->lastChunk, __ATOMIC_ACQUIRE) != lastChunk) {
     // pthread_mutex_unlock(&concList->mutex);
     return;
   }
@@ -39,22 +47,20 @@ void allocateChunkInConcList(
   // concList->lastChunk = chunk;
 
   memset((void *)HM_getChunkStart(chunk), '\0', HM_getChunkLimit(chunk) - HM_getChunkStart(chunk));
-  /* Walkers follow nextChunk without the lock: the zeroed chunk must be
-   * visible before the pointer to it is (taking the lock below is only an
-   * acquire). */
-  __atomic_thread_fence(__ATOMIC_RELEASE);
 
+  /* The release stores below publish the zeroed chunk to the writers and
+   * walkers that read these pointers without the mutex. */
   bool success = false;
-  if(concList->lastChunk == lastChunk) {
+  if(__atomic_load_n(&concList->lastChunk, __ATOMIC_ACQUIRE) == lastChunk) {
     pthread_mutex_lock(&concList->mutex);
     if (concList->lastChunk == lastChunk) {
       if (concList->firstChunk == NULL) {
-        concList->firstChunk = chunk;
+        __atomic_store_n(&concList->firstChunk, chunk, __ATOMIC_RELEASE);
       }
       if(lastChunk != NULL) {
-        lastChunk->nextChunk = chunk;
+        __atomic_store_n(&lastChunk->nextChunk, chunk, __ATOMIC_RELEASE);
       }
-      concList->lastChunk = chunk;
+      __atomic_store_n(&concList->lastChunk, chunk, __ATOMIC_RELEASE);
       success = true;
     }
     pthread_mutex_unlock(&concList->mutex);
@@ -75,13 +81,13 @@ pointer CC_storeInConcListWithPurpose(GC_state s, CC_concList concList, void* p,
   assert(concList != NULL);
   // pthread_mutex_lock(&concList->mutex);
   while(TRUE) {
-    HM_chunk chunk = concList->lastChunk;
+    HM_chunk chunk = __atomic_load_n(&concList->lastChunk, __ATOMIC_ACQUIRE);
     if (NULL == chunk) {
       allocateChunkInConcList(s, concList, objSize, chunk, purpose);
       continue;
     }
     else {
-      pointer frontier = HM_getChunkFrontier(chunk);
+      pointer frontier = __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED);
       size_t sizePast = (size_t) (chunk->limit - frontier);
       if (sizePast < objSize) {
         allocateChunkInConcList(s, concList, objSize, chunk, purpose);
@@ -185,9 +191,9 @@ pointer CC_storeInConcListWithPurpose(GC_state s, CC_concList concList, void* p,
 void CC_popAsChunkList(CC_concList concList, HM_chunkList chunkList) {
   pthread_mutex_lock(&concList->mutex);
   chunkList->firstChunk = concList->firstChunk;
-  concList->firstChunk = NULL;
+  __atomic_store_n(&concList->firstChunk, NULL, __ATOMIC_RELEASE);
   chunkList->lastChunk = concList->lastChunk;
-  concList->lastChunk = NULL;
+  __atomic_store_n(&concList->lastChunk, NULL, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&concList->mutex);
 }
 
@@ -205,8 +211,8 @@ void CC_appendConcList(CC_concList concList1, CC_concList concList2) {
   pthread_mutex_lock(&concList2->mutex);
   firstChunk = concList2->firstChunk;
   lastChunk = concList2->lastChunk;
-  concList2->firstChunk = NULL;
-  concList2->lastChunk = NULL;
+  __atomic_store_n(&concList2->firstChunk, NULL, __ATOMIC_RELEASE);
+  __atomic_store_n(&concList2->lastChunk, NULL, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&concList2->mutex);
 
   if (firstChunk == NULL || lastChunk == NULL) {
@@ -216,14 +222,14 @@ void CC_appendConcList(CC_concList concList1, CC_concList concList2) {
 
   pthread_mutex_lock(&concList1->mutex);
   if (concList1->lastChunk == NULL) {
-    concList1->firstChunk = firstChunk;
-    concList1->lastChunk = lastChunk;
+    __atomic_store_n(&concList1->firstChunk, firstChunk, __ATOMIC_RELEASE);
+    __atomic_store_n(&concList1->lastChunk, lastChunk, __ATOMIC_RELEASE);
   }
   else {
-    concList1->lastChunk->nextChunk = firstChunk;
-    concList1->lastChunk->retireChunk = true;
+    __atomic_store_n(&concList1->lastChunk->retireChunk, true, __ATOMIC_RELAXED);
+    __atomic_store_n(&concList1->lastChunk->nextChunk, firstChunk, __ATOMIC_RELEASE);
     firstChunk->prevChunk = concList1->lastChunk;
-    concList1->lastChunk = lastChunk;
+    __atomic_store_n(&concList1->lastChunk, lastChunk, __ATOMIC_RELEASE);
   }
   pthread_mutex_unlock(&concList1->mutex);
 }
