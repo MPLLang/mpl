@@ -169,9 +169,18 @@ void HM_foreachPublic (
         p += sizeof(struct HM_remembered);
       }
       /* nextChunk first: CC_appendConcList sets retireChunk before it
-       * publishes nextChunk with a release store. */
+       * publishes nextChunk with a release store. A chunk with a successor is
+       * checked again too if the scan did not reach its final frontier: the
+       * scan stopped at an entry still being written, or writers filled the
+       * chunk past the frontier read before the scan. A chunk that
+       * allocateChunkInConcList gave a successor is full (every public entry
+       * is 16 bytes), so its frontier no longer moves, and the frontier
+       * reloaded after the acquire load of nextChunk is the final one;
+       * checkFishyChunks scans on to it, waiting for entries being written.
+       * (A chunk that CC_appendConcList linked is retired: fishy anyway.) */
       if (__atomic_load_n(&chunk->nextChunk, __ATOMIC_ACQUIRE) == NULL
-          || __atomic_load_n(&chunk->retireChunk, __ATOMIC_RELAXED))
+          || __atomic_load_n(&chunk->retireChunk, __ATOMIC_RELAXED)
+          || p < __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED))
       {
         if (numFishyChunks >= array_size) {
           fishyChunks = resizeFishyArray(fishyChunks, &array_size);
