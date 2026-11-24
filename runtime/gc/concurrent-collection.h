@@ -29,6 +29,9 @@ typedef struct ConcurrentCollectArgs {
   void* fromHead;
   size_t bytesSaved;
 	size_t numObjectsMarked;
+  /* Every object this collection marks, so that all of them can be unmarked
+   * at the end (see CC_collectWithRoots). */
+  struct HM_chunkList markedObjects;
 } ConcurrentCollectArgs;
 
 
