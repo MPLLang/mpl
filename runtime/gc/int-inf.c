@@ -130,6 +130,130 @@ void initIntInfRes (GC_state s, __mpz_struct *res,
 }
 
 /*
+ * An IntInf primitive asks for a bound on its result, computed at run time,
+ * and that can exceed a block. GC_collect then extends the thread into a
+ * chunk of several blocks, and the primitive builds its result at the start
+ * of that chunk, in its first block, as a large sequence is. Nothing else
+ * may follow it there: HM_getChunkOf finds an object's chunk from the
+ * object's block, so it works only for objects in a chunk's first block.
+ *
+ * So once the result is in place, a current chunk larger than a block is
+ * closed, and the thread continues in the chunk before it in the same heap
+ * when that one has room (as allocateLargeSequence returns to the thread's
+ * previous chunk), else in a fresh chunk. (GC_collect usually puts the
+ * chunk the thread was in just before the one it opens. Not when a signal
+ * handler runs first, the stack grows or a collection runs before the
+ * chunk is opened: then the chunk before is another one, and the tests
+ * below either find it fit to continue in or open a fresh chunk.) The
+ * room is what the code after the call may allocate before its next limit
+ * check: at most GC_LIMIT_CHECK_MAX_BYTES, slop included, the compiler's
+ * limit for one statically sized check (see heap.h). As for the closed
+ * chunk:
+ *   - if it's empty (a fixnum result), it is freed;
+ *   - if the result is its only object and fits, with that room after it,
+ *     in a chunk of one block, the result is moved to the chunk the thread
+ *     continues in and the chunk is freed, so a small result doesn't keep a
+ *     chunk sized for its bound;
+ *   - otherwise it stays, marked single-object when the result is its only
+ *     object, like a large sequence's chunk.
+ *
+ * Nothing here can trigger a collection, so it is safe in a call that
+ * doesn't enter the runtime. Returns the result, moved or not.
+ *
+ * The check before the call asked for at most bytes, the statically sized
+ * allocation after the call and the slop: bytes + GC_LIMIT_CHECK_MAX_BYTES.
+ * If that fits in a block, it didn't open a chunk larger than a block:
+ * mayBeInOversizedChunk is the test every call makes, inline, and only the
+ * others get here.
+ */
+static inline bool mayBeInOversizedChunk (GC_state s, size_t bytes) {
+  return bytes + GC_LIMIT_CHECK_MAX_BYTES + sizeof(struct HM_chunk)
+         > s->controls->blockSize;
+}
+
+static __attribute__((noinline))
+objptr leaveOversizedChunk (GC_state s, pointer resultStart, objptr result) {
+  GC_thread thread = getThreadCurrent(s);
+  HM_chunk chunk = thread->currentChunk;
+  if ((size_t)(HM_getChunkLimit(chunk) - (pointer)chunk)
+      <= s->controls->blockSize)
+    return result;
+
+  size_t bytesAfter = GC_LIMIT_CHECK_MAX_BYTES;
+  pointer start = HM_getChunkStart(chunk);
+  size_t used = (size_t)(s->frontier - start);
+  bool onlyResult = (resultStart == start);
+  HM_chunkList list = HM_HH_getChunkList(HM_getLevelHead(chunk));
+  HM_chunk prev = chunk->prevChunk;
+  /* Not a chunk larger than a block, though: one closed here with other
+   * objects before the result (below) stays able to hold several objects,
+   * and its frontier can be past its first block. */
+  if (NULL != prev
+      and not (prev->mightContainMultipleObjects
+               and HM_getLevelHead(prev) == HM_getLevelHead(chunk)
+               and (size_t)(HM_getChunkLimit(prev) - (pointer)prev)
+                   <= s->controls->blockSize
+               and HM_getChunkSizePastFrontier(prev) >= bytesAfter))
+    prev = NULL;
+
+  if (0 == used
+      or (onlyResult
+          and used + bytesAfter + sizeof(struct HM_chunk)
+              <= s->controls->blockSize)) {
+    /* empty, or a result small enough to move: free the chunk. A fresh
+     * chunk also takes a result that the chunk before can't: otherwise,
+     * once that one's room is between bytesAfter and used + bytesAfter,
+     * every such result would keep a chunk sized for its bound. */
+    if (NULL != prev
+        and HM_getChunkSizePastFrontier(prev) >= used + bytesAfter)
+      thread->currentChunk = prev;
+    else if (!HM_HH_extend(s, thread, used + bytesAfter))
+      DIE("Ran out of space after an IntInf result");
+    pointer dst = HM_getChunkFrontier(thread->currentChunk);
+    if (used > 0) {
+      GC_memcpy (start, dst, used);
+      result = pointerToObjptr (objptrToPointer (result, NULL) - start + dst,
+                                NULL);
+      HM_HH_updateValues(thread, dst + used);
+    }
+    /* HM_HH_extend counted the chunk as allocated when it was opened; a
+     * freed chunk shouldn't bring the next collection closer. */
+    size_t chunkSize = HM_getChunkSize(chunk);
+    thread->bytesAllocatedSinceLastCollection -=
+      min(chunkSize, thread->bytesAllocatedSinceLastCollection);
+    HM_unlinkChunk(list, chunk);
+    HM_freeChunkWithInfo(s, chunk, NULL, BLOCK_FOR_HEAP_CHUNK);
+  } else {
+    HM_HH_updateValues(thread, s->frontier);
+    if (onlyResult)
+      chunk->mightContainMultipleObjects = FALSE;
+    if (NULL != prev)
+      thread->currentChunk = prev;
+    else if (!HM_HH_extend(s, thread, bytesAfter))
+      DIE("Ran out of space after an IntInf result");
+  }
+
+  s->frontier = HM_HH_getFrontier(thread);
+  s->limitPlusSlop = HM_HH_getLimit(thread);
+  s->limit = s->limitPlusSlop - GC_HEAP_LIMIT_SLOP;
+  /* A heartbeat that arrived during the call set the limit to 0; keep it.
+   * The store of the limit above has to come before the read of
+   * signalIsPending: a handler that ran before the store had its limit of 0
+   * overwritten, but its flag is seen here; one that runs after the store
+   * sets the limit itself. The fence keeps the compiler from moving the read
+   * before the store, which would let a heartbeat that arrives between them
+   * go unnoticed until the next one. */
+  __atomic_signal_fence(__ATOMIC_SEQ_CST);
+  if (0 == s->atomicState and s->signalsInfo.signalIsPending)
+    s->limit = 0;
+  /* The next runtime call sets bytesNeeded for itself; what's left here is
+   * only read by checks such as invariantForMutatorFrontier before then, and
+   * bytesAfter could be more than the room left by the time one runs. */
+  thread->bytesNeeded = 0;
+  return result;
+}
+
+/*
  * Given an __mpz_struct pointer which reflects the answer, set
  * gcState.frontier and return the answer.
  * If the answer fits in a fixnum, we return that, with the frontier
@@ -223,6 +347,19 @@ objptr finiIntInfRes (GC_state s, __mpz_struct *res, size_t bytes) {
   return pointerToObjptr ((pointer)&bp->obj, NULL);
 }
 
+/* What an IntInf primitive returns: the result finiIntInfRes made, once the
+ * thread has left a chunk larger than a block (see leaveOversizedChunk). */
+static inline objptr leaveIntInfRes (GC_state s, __mpz_struct *res,
+                                     size_t bytes, objptr result) {
+  if (mayBeInOversizedChunk (s, bytes)) {
+    pointer resultStart =
+      (pointer)res->_mp_d
+      - (offsetof(struct GC_intInf, obj) + offsetof(struct GC_intInf_obj, limbs));
+    return leaveOversizedChunk (s, resultStart, result);
+  }
+  return result;
+}
+
 objptr IntInf_binop (GC_state s,
                      objptr lhs, objptr rhs, size_t bytes,
                      void(*binop)(__mpz_struct *resmpz,
@@ -238,7 +375,8 @@ objptr IntInf_binop (GC_state s,
   fillIntInfArg (s, lhs, &lhsmpz, lhsspace);
   fillIntInfArg (s, rhs, &rhsmpz, rhsspace);
   binop (&resmpz, &lhsmpz, &rhsmpz);
-  return finiIntInfRes (s, &resmpz, bytes);
+  return leaveIntInfRes (s, &resmpz, bytes,
+                         finiIntInfRes (s, &resmpz, bytes));
 }
 
 objptr IntInf_unop (GC_state s,
@@ -255,7 +393,8 @@ objptr IntInf_unop (GC_state s,
  initIntInfRes (s, &resmpz, bytes);
  fillIntInfArg (s, arg, &argmpz, argspace);
  unop (&resmpz, &argmpz);
- return finiIntInfRes (s, &resmpz, bytes);
+ return leaveIntInfRes (s, &resmpz, bytes,
+                        finiIntInfRes (s, &resmpz, bytes));
 }
 
 objptr IntInf_shop (GC_state s,
@@ -274,7 +413,8 @@ objptr IntInf_shop (GC_state s,
   initIntInfRes (s, &resmpz, bytes);
   fillIntInfArg (s, arg, &argmpz, argspace);
   shop (&resmpz, &argmpz, (unsigned long)shift);
-  return finiIntInfRes (s, &resmpz, bytes);
+  return leaveIntInfRes (s, &resmpz, bytes,
+                         finiIntInfRes (s, &resmpz, bytes));
 }
 
 Int32_t IntInf_cmpop (GC_state s, objptr lhs, objptr rhs,
@@ -324,6 +464,9 @@ objptr IntInf_strop (GC_state s, objptr arg, Int32_t base, size_t bytes,
   sp->length = (GC_sequenceLength)size;
   sp->header = GC_STRING8_HEADER;
   // sp->fwdptr = BOGUS_OBJPTR;
+  if (mayBeInOversizedChunk (s, bytes))
+    return leaveOversizedChunk (s, (pointer)sp,
+                                pointerToObjptr ((pointer)&sp->obj, NULL));
   return pointerToObjptr ((pointer)&sp->obj, NULL);
 }
 

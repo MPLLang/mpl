@@ -141,11 +141,41 @@ void GC_collect (GC_state s, size_t bytesRequested, bool force) {
    */
   bytesRequested += GC_HEAP_LIMIT_SLOP;
 
-  assert(bytesRequested + sizeof(struct HM_chunk) <= s->controls->blockSize);
+  /* A request can exceed a block: the limit check before an IntInf
+   * primitive asks for a bound on its result computed at run time.
+   * HM_ensureHierarchicalHeapAssurances then extends the thread into a
+   * chunk of several blocks, with the result at its start, and the
+   * primitive closes that chunk once the result is in place (see
+   * leaveOversizedChunk in int-inf.c). So there is no assertion here that
+   * the request fits in a block: this function can't tell that request from
+   * a statically sized one that is too large. enter() asserts instead that
+   * the mutator never comes back in a chunk larger than a block, which is
+   * where such a request would leave it. */
 
   getThreadCurrent(s)->bytesNeeded = bytesRequested;
   HM_HH_maybeRequestCC(s);
   switchToSignalHandlerThreadIfNonAtomicAndSignalPending(s);
+
+  /* The chunk opened for a request larger than a block goes at the end of
+   * the heap's chunk list. Put the thread's current chunk there first, so
+   * that it is the chunk just before the new one, which is where
+   * leaveOversizedChunk looks for the chunk to go back to. Otherwise it would
+   * find whatever was put in the list since: the chunk of the previous large
+   * result, or of a large sequence. This is the usual path, not every one: a
+   * pending signal switches to the handler first, and the original thread's
+   * request is served later by GC_switchToThread; the stack can also grow,
+   * or a collection run, before the chunk is opened. leaveOversizedChunk
+   * doesn't rely on it. */
+  {
+    GC_thread thread = getThreadCurrent(s);
+    HM_chunk current = thread->currentChunk;
+    if (thread->bytesNeeded + sizeof(struct HM_chunk) > s->controls->blockSize
+        && NULL != current->nextChunk) {
+      HM_chunkList list = HM_HH_getChunkList(HM_getLevelHead(current));
+      HM_unlinkChunkPreserveLevelHead(list, current);
+      HM_appendChunk(list, current);
+    }
+  }
 
   /* SAM_NOTE: don't use HM_HH_getFrontier here, because invariant is possibly
    * violated (might have frontier == limitPlusSlop)
