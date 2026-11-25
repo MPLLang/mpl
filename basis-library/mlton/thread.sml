@@ -82,21 +82,23 @@ struct
   type clear_set = MLtonPointer.t
   type finished_clear_set_grain = MLtonPointer.t
 
-  fun forceLeftHeap (myId, t) = Prim.forceLeftHeap(Word32.fromInt myId, t)
+  fun forceLeftHeap (myId, t) = Prim.forceLeftHeap(gcState (), Word32.fromInt myId, t)
   fun forceNewChunk () = Prim.forceNewChunk (gcState ())
-  fun registerCont (kl, kr, k, t, {atPar}) = Prim.registerCont(kl, kr, k, t, atPar)
+  fun registerCont (kl, kr, k, t, {atPar}) = Prim.registerCont(gcState (), kl, kr, k, t, atPar)
   fun resetList (t) = Prim.resetList(t)
 
   fun cancelCC (t, hh) = Prim.cancelCC (gcState (), t, hh)
-  fun collectThreadRoot (t, hh) = Prim.collectThreadRoot (t, hh)
-  fun getRoot t = Prim.getRoot t
+  fun collectThreadRoot (t, hh) = Prim.collectThreadRoot (gcState (), t, hh)
+  fun getRoot t = Prim.getRoot (gcState (), t)
 
-  fun getDepth t = Word32.toInt (Prim.getDepth t)
-  fun setDepth (t, d) = Prim.setDepth (t, Word32.fromInt d)
+  fun getDepth t = Word32.toInt (Prim.getDepth (gcState (), t))
+  fun setDepth (t, d) = Prim.setDepth (gcState (), t, Word32.fromInt d)
   fun setMinLocalCollectionDepth (t, d) =
-    Prim.setMinLocalCollectionDepth (t, Word32.fromInt d)
+    Prim.setMinLocalCollectionDepth (gcState (), t, Word32.fromInt d)
+  fun mergeThreads (t, child) = Prim.mergeThreads (gcState (), t, child)
+  fun promoteChunks t = Prim.promoteChunks (gcState (), t)
   fun moveNewThreadToDepth (t, tid, d) =
-    Prim.moveNewThreadToDepth (t, tid, Word32.fromInt d)
+    Prim.moveNewThreadToDepth (gcState (), t, tid, Word32.fromInt d)
   fun checkFinishedCCReadyToJoin () =
     Prim.checkFinishedCCReadyToJoin (gcState ())
 

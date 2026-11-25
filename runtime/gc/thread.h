@@ -118,11 +118,11 @@ typedef struct GC_thread *GC_thread;
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE Word32 GC_HH_getDepth(pointer thread);
-PRIVATE void GC_HH_setDepth(pointer thread, Word32 depth);
-PRIVATE void GC_HH_mergeThreads(pointer threadp, pointer childp);
-PRIVATE void GC_HH_promoteChunks(pointer thread);
-PRIVATE void GC_HH_setMinLocalCollectionDepth(pointer thread, Word32 depth);
+PRIVATE Word32 GC_HH_getDepth(GC_state s, pointer thread);
+PRIVATE void GC_HH_setDepth(GC_state s, pointer thread, Word32 depth);
+PRIVATE void GC_HH_mergeThreads(GC_state s, pointer threadp, pointer childp);
+PRIVATE void GC_HH_promoteChunks(GC_state s, pointer thread);
+PRIVATE void GC_HH_setMinLocalCollectionDepth(GC_state s, pointer thread, Word32 depth);
 
 // If youngest, then pick the youngest promotable frame. This is used in
 // the scheduler for an optimization in a special case.
@@ -144,7 +144,7 @@ PRIVATE objptr GC_HH_forkThread(GC_state s, Bool youngestOptimization, pointer t
  * This essentially puts the thread (and its stack) into the hierarchy.
  * Also sets the depth of the thread.
  */
-PRIVATE void GC_HH_moveNewThreadToDepth(pointer thread, Word64 tidParent, Word32 depth);
+PRIVATE void GC_HH_moveNewThreadToDepth(GC_state s, pointer thread, Word64 tidParent, Word32 depth);
 
 PRIVATE void GC_HH_clearSuspectsAtDepth(GC_state s, pointer threadp, uint32_t depth);
 

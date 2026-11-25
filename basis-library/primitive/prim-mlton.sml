@@ -189,17 +189,17 @@ structure GC =
 
 structure HM =
     struct
-        val registerQueue: Word32.word * 'a array -> unit =
+        val registerQueue: GCState.t * Word32.word * 'a array -> unit =
             _import "GC_registerQueue" runtime private:
-            Word32.word * 'a array -> unit;
+            GCState.t * Word32.word * 'a array -> unit;
 
-        val registerQueueTop: Word32.word * Word64.word ref -> unit =
+        val registerQueueTop: GCState.t * Word32.word * Word64.word ref -> unit =
             _import "GC_registerQueueTop" runtime private:
-            Word32.word * Word64.word ref -> unit;
+            GCState.t * Word32.word * Word64.word ref -> unit;
 
-        val registerQueueBot: Word32.word * Word32.word ref -> unit =
+        val registerQueueBot: GCState.t * Word32.word * Word32.word ref -> unit =
             _import "GC_registerQueueBot" runtime private:
-            Word32.word * Word32.word ref -> unit;
+            GCState.t * Word32.word * Word32.word ref -> unit;
 
         val arrayUpdateNoBarrier : 'a array * SeqIndex.int * 'a -> unit =
             _prim "Array_update_noWriteBarrier" : 'a array * SeqIndex.int * 'a -> unit;
@@ -368,24 +368,24 @@ structure Thread =
       val handlerEnterHeapOfThread = _import "GC_handlerEnterHeapOfThread" runtime private: GCState.t * thread -> Word64.word;
       val handlerLeaveHeapOfThread = _import "GC_handlerLeaveHeapOfThread" runtime private: GCState.t * thread * Word64.word -> unit;
 
-      val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: Word32.word * thread -> unit;
+      val forceLeftHeap = _import "HM_HH_forceLeftHeap" runtime private: GCState.t * Word32.word * thread -> unit;
       val forceNewChunk = _import "HM_HH_forceNewChunk" runtime private: GCState.t -> unit;
       val registerCont =
         _import "HM_HH_registerCont" runtime private:
-        'a ref * 'b ref * 'c ref * thread * bool -> bool;
+        GCState.t * 'a ref * 'b ref * 'c ref * thread * bool -> bool;
       val cancelCC =
         _import "HM_HH_cancelCC" runtime private:
         GCState.t * thread * Word64.word -> unit;
       val resetList: thread -> unit =  _import "HM_HH_resetList" runtime private: thread -> unit;
-      val collectThreadRoot = _import "CC_collectAtRoot" runtime private: thread * Word64.word -> unit;
+      val collectThreadRoot = _import "CC_collectAtRoot" runtime private: GCState.t * thread * Word64.word -> unit;
 
-      val getDepth = _import "GC_HH_getDepth" runtime private: thread -> Word32.word;
-      val getRoot = _import "HM_HH_getRoot" runtime private: thread -> Word64.word;
+      val getDepth = _import "GC_HH_getDepth" runtime private: GCState.t * thread -> Word32.word;
+      val getRoot = _import "HM_HH_getRoot" runtime private: GCState.t * thread -> Word64.word;
 
-      val setDepth = _import "GC_HH_setDepth" runtime private: thread * Word32.word -> unit;
-      val setMinLocalCollectionDepth = _import "GC_HH_setMinLocalCollectionDepth" runtime private: thread * Word32.word -> unit;
-      val mergeThreads = _import "GC_HH_mergeThreads" runtime private: thread * thread -> unit;
-      val promoteChunks = _import "GC_HH_promoteChunks" runtime private: thread -> unit;
+      val setDepth = _import "GC_HH_setDepth" runtime private: GCState.t * thread * Word32.word -> unit;
+      val setMinLocalCollectionDepth = _import "GC_HH_setMinLocalCollectionDepth" runtime private: GCState.t * thread * Word32.word -> unit;
+      val mergeThreads = _import "GC_HH_mergeThreads" runtime private: GCState.t * thread * thread -> unit;
+      val promoteChunks = _import "GC_HH_promoteChunks" runtime private: GCState.t * thread -> unit;
       val clearSuspectsAtDepth = _import "GC_HH_clearSuspectsAtDepth" runtime private: 
         GCState.t * thread * Word32.word -> unit;
       val numSuspectsAtDepth = _import "GC_HH_numSuspectsAtDepth" runtime private:
@@ -432,7 +432,7 @@ structure Thread =
         *)
       val decheckMaxDepth = _import "GC_HH_decheckMaxDepth" runtime private: Word32.word ref -> bool;
 
-      val moveNewThreadToDepth = _import "GC_HH_moveNewThreadToDepth" runtime private: thread * Word64.word * Word32.word -> unit;
+      val moveNewThreadToDepth = _import "GC_HH_moveNewThreadToDepth" runtime private: GCState.t * thread * Word64.word * Word32.word -> unit;
       val checkFinishedCCReadyToJoin = _import "GC_HH_checkFinishedCCReadyToJoin" runtime private: GCState.t -> bool;
 
       val joinIntoParentBeforeFastClone =

@@ -510,8 +510,7 @@ bool claimHeap(HM_HierarchicalHeap heap) {
   return TRUE;
 }
 
-void CC_collectAtRoot(pointer threadp, pointer hhp) {
-  GC_state s = pthread_getspecific (gcstate_key);
+void CC_collectAtRoot(GC_state s, pointer threadp, pointer hhp) {
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   HM_HierarchicalHeap heap = (HM_HierarchicalHeap)hhp;
 
