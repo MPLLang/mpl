@@ -7,6 +7,7 @@
 structure MLtonParallel:> MLTON_PARALLEL =
   struct
     structure Prim = Primitive.MLton.Parallel
+    val gcState = Primitive.MLton.GCState.gcState
 
     structure Deprecated =
       struct
@@ -35,10 +36,13 @@ structure MLtonParallel:> MLTON_PARALLEL =
                          _import "Parallel_lockInit" runtime private:
                          Word32.word ref -> unit;(* ) *)
 
+        val lockTake =
+            _import "Parallel_lockTake" runtime private:
+            Primitive.MLton.GCState.t * Word32.word ref -> unit;
+
         val takeLock: Word32.word ref -> unit =
             (* msgWrapper1 ("takeLock", *)
-                         _import "Parallel_lockTake" runtime private:
-                         Word32.word ref -> unit;(* ) *)
+                         fn l => lockTake (gcState (), l)(* ) *)
 
         val releaseLock: Word32.word ref -> unit =
             (* msgWrapper1 ("releaseLock", *)
@@ -89,8 +93,13 @@ structure MLtonParallel:> MLTON_PARALLEL =
           (_export "Parallel_run": (unit -> unit) -> unit;) f'
         end
 
-    val initializeProcessors: unit -> unit =
-        _import "Parallel_init" runtime private: unit -> unit;
+    local
+      val init =
+          _import "Parallel_init" runtime private:
+          Primitive.MLton.GCState.t -> unit;
+    in
+      fun initializeProcessors () = init (gcState ())
+    end
 
     (* ========================== compareAndSwap ========================== *)
 

@@ -1,20 +1,20 @@
 
 #if (defined (MLTON_GC_INTERNAL_BASIS))
 
-PRIVATE void Parallel_init (void);
+PRIVATE void Parallel_init (GC_state s);
 
 PRIVATE void Parallel_lockInit (Pointer);
-PRIVATE void Parallel_lockTake (Pointer);
+PRIVATE void Parallel_lockTake (GC_state, Pointer);
 PRIVATE void Parallel_lockRelease (Pointer);
-PRIVATE bool Parallel_alreadyLockedByMe (Pointer);
-PRIVATE void Parallel_dekkerTake (Bool, Pointer, Pointer, Pointer);
+PRIVATE bool Parallel_alreadyLockedByMe (GC_state, Pointer);
+PRIVATE void Parallel_dekkerTake (GC_state, Bool, Pointer, Pointer, Pointer);
 PRIVATE void Parallel_dekkerRelease (Bool, Pointer, Pointer, Pointer);
 
-PRIVATE Word32 Parallel_processorNumber (void);
-PRIVATE Word32 Parallel_numberOfProcessors (void);
+PRIVATE Word32 Parallel_processorNumber (GC_state s);
+PRIVATE Word32 Parallel_numberOfProcessors (GC_state s);
 PRIVATE Word64 Parallel_maxBytesLive (void);
 PRIVATE void Parallel_resetBytesLive (void);
-PRIVATE Word64 Parallel_getTimeInGC (void);
+PRIVATE Word64 Parallel_getTimeInGC (GC_state s);
 
 PRIVATE Int8 Parallel_fetchAndAdd8 (pointer p, Int8 v);
 PRIVATE Int16 Parallel_fetchAndAdd16 (pointer p, Int16 v);
