@@ -11,4 +11,4 @@ MPL features a work-stealing scheduler which assigns tasks to processors.
 {: .todo}
 ...
 
-Main source location: [`basis-library/schedulers/par-pcall/`](https://github.com/MPLLang/mpl/tree/main/basis-library/schedulers/par-pcall/)
+Main source location: [`basis-library/schedulers/spork/`](https://github.com/MPLLang/mpl/tree/main/basis-library/schedulers/spork/)
