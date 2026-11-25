@@ -419,6 +419,7 @@ void HM_HH_promoteChunks(
        * so continue allocating in a fresh chunk of hh instead. */
       if (HM_getLevelHead(thread->currentChunk) != hh) {
         HM_chunk chunk = HM_allocateChunkWithPurpose(
+          s,
           HM_HH_getChunkList(hh),
           GC_HEAP_LIMIT_SLOP,
           BLOCK_FOR_HEAP_CHUNK);
@@ -523,8 +524,8 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh)
 
 HM_HierarchicalHeap HM_HH_new(GC_state s, uint32_t depth)
 {
-  HM_UnionFindNode uf = allocateFixedSize(getUFAllocator(s));
-  HM_HierarchicalHeap hh = allocateFixedSize(getHHAllocator(s));
+  HM_UnionFindNode uf = allocateFixedSize(s, getUFAllocator(s));
+  HM_HierarchicalHeap hh = allocateFixedSize(s, getHHAllocator(s));
 
   uf->dependant1 = NULL;
   uf->dependant2 = NULL;
@@ -633,6 +634,7 @@ bool HM_HH_extend(GC_state s, GC_thread thread, size_t bytesRequested)
   }
 
   chunk = HM_allocateChunkWithPurpose(
+    s,
     HM_HH_getChunkList(hh),
     bytesRequested,
     BLOCK_FOR_HEAP_CHUNK);
@@ -740,6 +742,7 @@ void splitHeapForCC(GC_state s, GC_thread thread) {
   HM_HierarchicalHeap newHH = HM_HH_new(s, HM_HH_getDepth(hh));
   thread->hierarchicalHeap = newHH;
   HM_chunk chunk = HM_allocateChunkWithPurpose(
+    s,
     HM_HH_getChunkList(newHH),
     GC_HEAP_LIMIT_SLOP,
     BLOCK_FOR_HEAP_CHUNK);
@@ -1027,6 +1030,7 @@ objptr copyStackOfThread(GC_state s, GC_thread thread) {
   size_t stackSize = sizeofStackWithMetaData(s, reserved, promoReserved);
 
   HM_chunk newChunk = HM_allocateChunkWithPurpose(
+    s,
     HM_HH_getChunkList(hh),
     stackSize,
     BLOCK_FOR_HEAP_CHUNK);
@@ -1392,10 +1396,10 @@ void HM_HH_addRootForCollector(GC_state s, HM_HierarchicalHeap hh, pointer p) {
   }
 }
 
-void HM_HH_rememberAtLevel(HM_HierarchicalHeap hh, HM_remembered remElem, bool conc) {
+void HM_HH_rememberAtLevel(GC_state s, HM_HierarchicalHeap hh, HM_remembered remElem, bool conc) {
   assert(hh != NULL);
   if (!conc) {
-    HM_remember(HM_HH_getRemSet(hh), remElem, conc);
+    HM_remember(s, HM_HH_getRemSet(hh), remElem, conc);
   } else {
     HM_UnionFindNode cursor = HM_HH_getUFNode(hh);
     while(true) {
@@ -1409,7 +1413,7 @@ void HM_HH_rememberAtLevel(HM_HierarchicalHeap hh, HM_remembered remElem, bool c
         assert (false);
         continue;
       }
-      HM_remember(HM_HH_getRemSet(hh), remElem, conc);
+      HM_remember(s, HM_HH_getRemSet(hh), remElem, conc);
       if (NULL == cursor->representative) {
         return;
       }

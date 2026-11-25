@@ -198,7 +198,7 @@ void Assignable_writeBarrier(
         assert(NULL != shh);
         assert(HM_HH_getConcurrentPack(shh)->ccstate == CC_UNREG);
 
-        HM_HH_rememberAtLevel(shh, remElem, false);
+        HM_HH_rememberAtLevel(s, shh, remElem, false);
         LOG(LM_HH_PROMOTION, LL_INFO,
             "remembered downptr %" PRIu32 "->%" PRIu32 " from " FMTOBJPTR " to " FMTOBJPTR,
             dstHH->depth, srcHH->depth,

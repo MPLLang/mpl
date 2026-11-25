@@ -95,6 +95,7 @@ GC_objectTypeTag computeObjectCopyParameters(GC_state s, GC_header header,
                                              size_t *metaDataSize);
 
 objptr copyNonStackObject(
+  GC_state s,
   pointer p,  // pointer to beginning of metadata
   size_t metadataSize,
   size_t objectSizeIncludingMetadata,
@@ -1115,6 +1116,7 @@ objptr relocateObject(
   } else {
     newPointer =
       copyNonStackObject(
+        s,
         p - metaDataBytes,
         metaDataBytes,
         objectBytes,
@@ -1176,6 +1178,7 @@ void copySuspect(
   }
   uint32_t opDepth = args->toDepth;
   HM_storeInChunkListWithPurpose(
+    s,
     HM_HH_getSuspects(toSpaceHH(s, args, opDepth)),
     &new_ptr,
     sizeof(objptr),
@@ -1369,7 +1372,7 @@ void addEntangledToRemSet(
   {
     markObj(p);
     struct HM_remembered remElem_ = {.object = op, .from = BOGUS_OBJPTR};
-    HM_remember (HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), &remElem_, true);
+    HM_remember (s, HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), &remElem_, true);
 
     size_t metaDataBytes;
     size_t objectBytes;
@@ -1595,7 +1598,7 @@ void tryUnpinOrKeepPinned(GC_state s, HM_remembered remElem, void *rawArgs)
    * and use the rememebered set later for unmarking.
    */
   if (remElem->from != BOGUS_OBJPTR) {
-    HM_remember(HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), remElem, false);
+    HM_remember(s, HM_HH_getRemSet(toSpaceHH(s, args, opDepth)), remElem, false);
   }
   // if (remElem->from != BOGUS_OBJPTR) {
   //   uint32_t fromDepth = HM_getObjptrDepth(remElem->from);
@@ -1851,6 +1854,7 @@ void forwardHHObjptr(
 
 
 HM_chunk ensureSpaceInTargetHeap(
+  GC_state s,
   size_t objectSize,
   HM_HierarchicalHeap tgtHeap,
   decheck_tid_t decheckState)
@@ -1883,6 +1887,7 @@ HM_chunk ensureSpaceInTargetHeap(
      * the object came from, as all objects in the same heap can be safely
      * reassigned to any dechecker state of that heap. */
     chunk = HM_allocateChunkWithPurpose(
+      s,
       tgtChunkList,
       objectSize,
       BLOCK_FOR_HEAP_CHUNK);
@@ -1900,6 +1905,7 @@ HM_chunk ensureSpaceInTargetHeap(
 
 
 objptr copyNonStackObject(
+  GC_state s,
   pointer p,  // pointer to beginning of metadata
   size_t metaDataSize,
   size_t objectSizeIncludingMetadata,
@@ -1909,6 +1915,7 @@ objptr copyNonStackObject(
   assert(copySize <= objectSizeIncludingMetadata);
   HM_chunk chunk =
     ensureSpaceInTargetHeap(
+      s,
       objectSizeIncludingMetadata,
       tgtHeap,
       HM_getChunkOf(p)->decheckState
@@ -1928,6 +1935,7 @@ objptr copyStackObject(
 {
   HM_chunk chunk =
     ensureSpaceInTargetHeap(
+      s,
       objectSizeIncludingMetadata,
       tgtHeap,
       HM_getChunkOf(p)->decheckState

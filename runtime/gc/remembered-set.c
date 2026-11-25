@@ -9,12 +9,12 @@ void HM_initRemSet(HM_remSet remSet) {
   CC_initConcList(&(remSet->public));
 }
 
-void HM_remember(HM_remSet remSet, HM_remembered remElem, bool conc) {
+void HM_remember(GC_state s, HM_remSet remSet, HM_remembered remElem, bool conc) {
   if (!conc) {
-    HM_storeInChunkListWithPurpose(&(remSet->private), (void*)remElem, sizeof(struct HM_remembered), BLOCK_FOR_REMEMBERED_SET);
+    HM_storeInChunkListWithPurpose(s, &(remSet->private), (void*)remElem, sizeof(struct HM_remembered), BLOCK_FOR_REMEMBERED_SET);
   }
   else {
-    CC_storeInConcListWithPurpose(&(remSet->public), (void *)remElem, sizeof(struct HM_remembered), BLOCK_FOR_REMEMBERED_SET);
+    CC_storeInConcListWithPurpose(s, &(remSet->public), (void *)remElem, sizeof(struct HM_remembered), BLOCK_FOR_REMEMBERED_SET);
   }
 }
 

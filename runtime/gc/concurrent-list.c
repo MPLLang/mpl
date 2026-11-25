@@ -6,13 +6,12 @@ void CC_initConcList(CC_concList concList) {
 
 
 void allocateChunkInConcList(
+  GC_state s,
   CC_concList concList,
   size_t objSize,
   HM_chunk lastChunk,
   enum BlockPurpose purpose)
 {
-  GC_state s = pthread_getspecific(gcstate_key);
-
   // pthread_mutex_lock(&concList->mutex);
   if(concList->lastChunk != lastChunk) {
     // pthread_mutex_unlock(&concList->mutex);
@@ -68,20 +67,20 @@ void allocateChunkInConcList(
 }
 
 
-pointer CC_storeInConcListWithPurpose(CC_concList concList, void* p, size_t objSize, enum BlockPurpose purpose){
+pointer CC_storeInConcListWithPurpose(GC_state s, CC_concList concList, void* p, size_t objSize, enum BlockPurpose purpose){
   assert(concList != NULL);
   // pthread_mutex_lock(&concList->mutex);
   while(TRUE) {
     HM_chunk chunk = concList->lastChunk;
     if (NULL == chunk) {
-      allocateChunkInConcList(concList, objSize, chunk, purpose);
+      allocateChunkInConcList(s, concList, objSize, chunk, purpose);
       continue;
     }
     else {
       pointer frontier = HM_getChunkFrontier(chunk);
       size_t sizePast = (size_t) (chunk->limit - frontier);
       if (sizePast < objSize) {
-        allocateChunkInConcList(concList, objSize, chunk, purpose);
+        allocateChunkInConcList(s, concList, objSize, chunk, purpose);
         continue;
       }
 

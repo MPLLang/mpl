@@ -25,7 +25,7 @@ struct CC_concList {
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
 void CC_initConcList(CC_concList concList);
-pointer CC_storeInConcListWithPurpose(CC_concList concList, void* p, size_t objSize, enum BlockPurpose purpose);
+pointer CC_storeInConcListWithPurpose(GC_state s, CC_concList concList, void* p, size_t objSize, enum BlockPurpose purpose);
 
 // void CC_foreachObjInList(CC_concList concList, size_t objSize, HM_foreachObjClosure f);
 // void CC_foreachRemInConc(GC_state s, CC_concList concList, struct HM_foreachDownptrClosure* f);

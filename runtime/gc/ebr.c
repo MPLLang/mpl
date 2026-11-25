@@ -154,6 +154,7 @@ void EBR_retire(GC_state s, EBR_shared ebr, void *ptr)
   // slow path: allocate new chunk
 
   chunk = HM_allocateChunkWithPurpose(
+    s,
     limboBag,
     sizeof(void *),
     BLOCK_FOR_EBR);

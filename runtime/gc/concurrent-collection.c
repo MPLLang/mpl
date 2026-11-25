@@ -178,9 +178,11 @@ void markObj(pointer p) {
 }
 
 /* Record that this collection marked op, so that it is unmarked at the end. */
-static inline void rememberMarked(ConcurrentCollectArgs* args, objptr op) {
+static inline void rememberMarked(
+  GC_state s, ConcurrentCollectArgs* args, objptr op)
+{
   HM_storeInChunkListWithPurpose(
-    &(args->markedObjects), &op, sizeof(objptr), BLOCK_FOR_GC_WORKLIST);
+    s, &(args->markedObjects), &op, sizeof(objptr), BLOCK_FOR_GC_WORKLIST);
 }
 
 // This function is exactly the same as in chunk.c.
@@ -330,7 +332,7 @@ void tryMarkAndAddToWorkList(
 
   if (!CC_isPointerMarked(p)) {
     markObj(p);
-    rememberMarked(args, op);
+    rememberMarked(s, args, op);
     args->bytesSaved += sizeofObject(s, p);
     args->numObjectsMarked++;
     assert(CC_isPointerMarked(p));
@@ -438,7 +440,7 @@ void forceForward(GC_state s, objptr *opp, void* rawArgs) {
   if(saved && !CC_isPointerMarked(p)) {
     assert(getTransitivePtr(p, rawArgs) == p);
     markObj(p);
-    rememberMarked(args, op);
+    rememberMarked(s, args, op);
     assert(CC_isPointerMarked(p));
     args->bytesSaved += sizeofObject(s, p);
     args->numObjectsMarked++;
@@ -604,7 +606,7 @@ struct CC_tryUnpinOrKeepPinnedArgs {
 };
 
 void CC_tryUnpinOrKeepPinned(
-    __attribute__((unused)) GC_state s,
+    GC_state s,
     HM_remembered remElem,
     void *rawArgs)
 {
@@ -624,7 +626,7 @@ void CC_tryUnpinOrKeepPinned(
       * move on.
       */
     assert(s->controls->manageEntanglement);
-    HM_remember(args->newRemSet, remElem);
+    HM_remember(s, args->newRemSet, remElem, false);
     return;
   }
 #endif
@@ -641,7 +643,7 @@ void CC_tryUnpinOrKeepPinned(
       * entry. It will be merged and handled properly later.
       */
 
-    HM_remember(args->newRemSet, remElem, false);
+    HM_remember(s, args->newRemSet, remElem, false);
     return;
   }
 
@@ -682,7 +684,7 @@ void CC_tryUnpinOrKeepPinned(
     }
   }
 
-  HM_remember(args->newRemSet, remElem, false);
+  HM_remember(s, args->newRemSet, remElem, false);
 
   /** SAM_NOTE: The goal of the following was to filter remset entries
     * to only keep the "shallowest" entries. But this is really tricky,

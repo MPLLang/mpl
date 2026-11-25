@@ -166,11 +166,13 @@ GC_thread newThreadWithHeap(
   HM_HierarchicalHeap hh = HM_HH_new(s, depth);
 
   HM_chunk tChunk = HM_allocateChunkWithPurpose(
+    s,
     HM_HH_getChunkList(hh),
     threadSize,
     BLOCK_FOR_HEAP_CHUNK);
     
   HM_chunk sChunk = HM_allocateChunkWithPurpose(
+    s,
     HM_HH_getChunkList(hh),
     stackSize,
     BLOCK_FOR_HEAP_CHUNK);

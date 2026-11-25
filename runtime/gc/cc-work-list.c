@@ -4,13 +4,14 @@
 
 
 void CC_workList_init(
-  __attribute__((unused)) GC_state s,
+  GC_state s,
   CC_workList w)
 {
   HM_chunkList c = &(w->storage);
   HM_initChunkList(c);
   // arbitrary, just need an initial chunk
   w->currentChunk = HM_allocateChunkWithPurpose(
+    s,
     c,
     sizeof(struct CC_workList_elem),
     BLOCK_FOR_GC_WORKLIST);
@@ -136,8 +137,9 @@ void CC_workList_push(
     if (chunk->nextChunk != NULL) {
       chunk = chunk->nextChunk; // this will be an empty chunk
     } else {
-      // chunk = HM_allocateChunk(list, elemSize);
+      // chunk = HM_allocateChunk(s, list, elemSize);
       chunk = HM_allocateChunkWithPurpose(
+        s,
         list,
         elemSize,
         BLOCK_FOR_GC_WORKLIST);

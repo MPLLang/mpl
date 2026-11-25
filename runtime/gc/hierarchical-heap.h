@@ -126,7 +126,7 @@ bool HM_HH_isLevelHead(HM_HierarchicalHeap hh);
 
 bool HM_HH_isCCollecting(HM_HierarchicalHeap hh);
 void HM_HH_addRootForCollector(GC_state s, HM_HierarchicalHeap hh, pointer p);
-void HM_HH_rememberAtLevel(HM_HierarchicalHeap hh, HM_remembered remElem, bool conc);
+void HM_HH_rememberAtLevel(GC_state s, HM_HierarchicalHeap hh, HM_remembered remElem, bool conc);
 
 void HM_HH_merge(GC_state s, GC_thread parent, GC_thread child);
 void HM_HH_promoteChunks(GC_state s, GC_thread thread);
