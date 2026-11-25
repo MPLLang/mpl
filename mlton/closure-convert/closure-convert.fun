@@ -224,6 +224,97 @@ val traceLoopBind =
                    ("exp", SprimExp.layout exp)],
     Unit.layout)
 
+(* similar to lambdaSize in polyvariance *)
+fun sxmlLambdaSize (l: Slambda.t): int =
+   let
+      fun loopExp (e: Sexp.t, n: int): int =
+         List.fold
+         (Sexp.decs e, n, fn (d, n) =>
+          case d of
+             Sdec.MonoVal {exp, ...} => loopPrimExp (exp, n + 1)
+           | Sdec.PolyVal {exp, ...} => loopExp (exp, n + 1)
+           | Sdec.Fun {decs, ...} => Vector.fold (decs, n, fn ({lambda, ...}, n) =>
+                                             loopLambda (lambda, n))
+           | Sdec.Exception _ => n + 1)
+      and loopLambda (l: Slambda.t, n): int =
+         let val m = loopExp (Slambda.body l, 0)
+         in m + n
+         end
+      and loopPrimExp (e: SprimExp.t, n: int): int =
+         case e of
+            SprimExp.Case {cases, default, ...} =>
+               let
+                  val n = n + 1
+               in
+                  Scases.fold
+                  (cases,
+                   (case default of
+                       NONE => n
+                     | SOME e => loopExp (e, n)),
+                   loopExp)
+               end
+          | SprimExp.Handle {try, handler, ...} =>
+               loopExp (try, loopExp (handler, n + 1))
+          | SprimExp.Lambda l => loopLambda (l, n + 1)
+          | SprimExp.Profile _ => n
+          | _ => n + 1
+   in
+      loopExp (Slambda.body l, 0)
+   end
+
+fun analyzeLambdaBody (l: Slambda.t): unit =
+   let
+      val counts = ref []
+      fun addCount (name: string) = List.push (counts, name)
+
+      fun loopExp (e: Sexp.t): unit =
+         List.foreach
+         (Sexp.decs e, fn d =>
+          case d of
+             Sdec.MonoVal {exp, var, ...} =>
+               (addCount (concat ["MonoVal(", Var.toString var, ")"])
+                ; loopPrimExp exp)
+           | Sdec.PolyVal {exp, ...} =>
+               (addCount "PolyVal"
+                ; loopExp exp)
+           | Sdec.Fun {decs, ...} =>
+               (addCount (concat ["Fun(", Int.toString (Vector.length decs), " lambdas)"])
+                ; Vector.foreach (decs, fn {lambda, ...} => loopLambda lambda))
+           | Sdec.Exception _ => addCount "Exception")
+      and loopLambda (l: Slambda.t): unit =
+         (addCount "Lambda"
+          ; loopExp (Slambda.body l))
+      and loopPrimExp (e: SprimExp.t): unit =
+         case e of
+            SprimExp.App {func, ...} =>
+               addCount (concat ["App(", Layout.toString (SvarExp.layout func), ")"])
+          | SprimExp.Case _ => (addCount "Case"; (* would need to recurse into cases *) ())
+          | SprimExp.ConApp {con, ...} =>
+               addCount (concat ["ConApp(", Con.toString con, ")"])
+          | SprimExp.Const c => addCount (concat ["Const(", Const.toString c, ")"])
+          | SprimExp.Handle _ => (addCount "Handle"; (* would need to recurse *) ())
+          | SprimExp.Lambda l => loopLambda l
+          | SprimExp.PrimApp {prim, ...} =>
+               addCount (concat ["PrimApp(", Prim.toString prim, ")"])
+          | SprimExp.Profile _ => ()
+          | SprimExp.Raise _ => addCount "Raise"
+          | SprimExp.Select {offset, ...} =>
+               addCount (concat ["Select(#", Int.toString offset, ")"])
+          | SprimExp.Tuple xs =>
+               addCount (concat ["Tuple(", Int.toString (Vector.length xs), ")"])
+          | SprimExp.Var x => addCount (concat ["Var(", Layout.toString (SvarExp.layout x), ")"])
+      val _ = loopExp (Slambda.body l)
+      val _ = Control.diagnostics
+        (fn display =>
+         List.foreach
+         (rev (!counts), fn name =>
+          display (let open Layout
+                   in seq [str "  - ", str name]
+                   end)))
+   in
+      ()
+   end
+
 fun closureConvert
    (program as Sxml.Program.T {datatypes, body}): Ssa.Program.t =
    let
@@ -476,6 +567,30 @@ fun closureConvert
                      in
                        ()
                      end
+                    | PrimApp {prim = Prim.Spork_choose, targs, args} =>
+                      (* spork_choose: ('u -> 'a) -> (unit -> 'a) -> (unit -> 'a) -> 'a
+                       * model as applying regular to unit *)
+                      let
+                         fun arg i = Vector.sub (args, i)
+                         val regular = arg 2
+                         val unrolled = arg 1
+                         val unitTy = Stype.tuple (Vector.new0 ())
+                         val unitArg = Value.fromType unitTy
+                         val result = new ()
+                         val _ = Value.addHandler
+                         (* !TODO *)
+                            (varExp regular, fn l =>
+                             let
+                                val lambda = Value.Lambda.dest l
+                                val {arg = formal, body, ...} = Lambda.dest lambda
+                             in
+                                Value.coerce {from = unitArg, to = value formal}
+                                ; Value.coerce {from = expValue body, to = result}
+                                (* ! body is not really needed for result here *)
+                             end)
+                      in
+                         ()
+                      end
                    | PrimApp {prim, args, ...} =>
                         set (Value.primApply {prim = prim,
                                               args = varExps args,
@@ -812,7 +927,7 @@ fun closureConvert
              cases =
              Dexp.Con
              (Vector.map
-              (cons, fn {lambda, con} =>
+            (cons, fn {lambda, con} =>
                let
                   val {arg = param, body, ...} = Slambda.dest lambda
                   val info as LambdaInfo.T {name, ...} = lambdaInfo lambda
@@ -1255,6 +1370,194 @@ fun closureConvert
                in
                  (exp, ac)
                end
+             | SprimExp.PrimApp {prim = Prim.Spork_choose, targs, args} =>
+               (* spork_choose: ('u -> 'a) -> (unit -> 'a) -> (unit -> 'a) -> 'a *)
+               let
+                 fun arg i = Vector.sub (args, i)
+                 val loopBodyVar = arg 0
+                 val unrolled = arg 1
+                 val regular = arg 2
+
+                 val loopBodyInfo = varExpInfo loopBodyVar
+                 val loopBodySize =
+                   let
+                     val v = #value loopBodyInfo
+                     fun extractLambda (v: Value.t): Slambda.t option =
+                       case Value.dest v of
+                          Value.Lambdas ls =>
+                            (case Lambdas.toList ls of
+                                l :: _ => SOME (Value.Lambda.dest l)
+                              | [] => NONE)
+                        | _ => NONE
+                   in
+                     case extractLambda v of
+                        SOME l =>
+                          let
+                            val size = sxmlLambdaSize l
+                            val _ = Control.diagnostics
+                              (fn display =>
+                               display (let open Layout
+                                        in seq [str "spork_choose loop body size: ",
+                                               Int.layout size]
+                                        end))
+                            val _ = analyzeLambdaBody l
+                          in
+                            size
+                          end
+                      | NONE =>
+                          let
+                            val _ = Control.diagnostics
+                              (fn display =>
+                               display (let open Layout
+                                        in seq [str "spork_choose: no lambda found for ",
+                                               SvarExp.layout loopBodyVar]
+                                        end))
+                          in
+                            0
+                          end
+                   end
+
+                 (* choose between unrolled and regular based on loop body size *)
+                 val threshold = !Control.sporkChooseThreshold
+                 val chosenImpl = if loopBodySize <= threshold then unrolled else regular
+                 val _ = Control.diagnostics
+                   (fn display =>
+                    display (let open Layout
+                             in seq [str "  Decision: using ",
+                                    str (if loopBodySize <= threshold then "UNROLLED" else "REGULAR"),
+                                    str " (threshold=", Int.layout threshold, str ")"]
+                             end))
+
+                 (* apply the chosen implementation to unit *)
+                 val func = varExpInfo chosenImpl
+                 val funcVal = VarInfo.value func
+                 (* unit value *)
+                 val unitTy = Type.tuple (Vector.new0 ()) (* TODO: refactor as SType.unit *)
+                 val unitExp = Dexp.tuple {exps = Vector.new0 (), ty = unitTy} (* ! Dexp.unit = val unit = Tuple {exps = Vector.new0 (), ty = Type.unit} *)
+                 val unitVal = Value.fromType (Stype.tuple (Vector.new0 ()))
+                 val {cons, ...} = valueLambdasInfo funcVal
+               in
+                 (* ! heavy code duplication from apply *)
+                 (Dexp.casee
+                   {test = convertVarInfo func,
+                    ty = ty,
+                    default = NONE,
+                    cases =
+                    Dexp.Con
+                    (Vector.map
+                      (cons, fn {lambda, con} =>
+                       let
+                         val {arg = param, body, ...} = Slambda.dest lambda
+                         val info as LambdaInfo.T {name, ...} = lambdaInfo lambda
+                         val result = expValue body
+                         val env = (Var.newString "env", lambdaInfoType info)
+                       in {con = con,
+                           args = Vector.new1 env,
+                           body = coerce (Dexp.call
+                                         {func = name,
+                                          args = Vector.new2 (Dexp.var env,
+                                                             coerce (unitExp, unitVal,
+                                                                    value param)),
+                                          inline = InlineAttr.Auto,
+                                          ty = valueType result},
+                                         result, v)}
+                       end))},
+                  ac)
+               end
+             | SprimExp.PrimApp {prim = Prim.Loop_choose, targs, args} =>
+               (* loop_choose: ('u -> 'a) -> (unit -> 'a) -> (unit -> 'a) -> 'a *)
+               let
+                 fun arg i = Vector.sub (args, i)
+                 val loopBodyVar = arg 0
+                 val unrolled = arg 1
+                 val regular = arg 2
+
+                 val loopBodyInfo = varExpInfo loopBodyVar
+                 val loopBodySize =
+                   let
+                     val v = #value loopBodyInfo
+                     fun extractLambda (v: Value.t): Slambda.t option =
+                       case Value.dest v of
+                          Value.Lambdas ls =>
+                            (case Lambdas.toList ls of
+                                l :: _ => SOME (Value.Lambda.dest l)
+                              | [] => NONE)
+                        | _ => NONE
+                   in
+                     case extractLambda v of
+                        SOME l =>
+                          let
+                            val size = sxmlLambdaSize l
+                            val _ = Control.diagnostics
+                              (fn display =>
+                               display (let open Layout
+                                        in seq [str "loop_choose loop body size: ",
+                                               Int.layout size]
+                                        end))
+                            val _ = analyzeLambdaBody l
+                          in
+                            size
+                          end
+                      | NONE =>
+                          let
+                            val _ = Control.diagnostics
+                              (fn display =>
+                               display (let open Layout
+                                        in seq [str "loop_choose: no lambda found for ",
+                                               SvarExp.layout loopBodyVar]
+                                        end))
+                          in
+                            0
+                          end
+                   end
+
+                 (* choose between unrolled and regular based on loop body size *)
+                 val threshold = 100  (* hardcoded for now *)
+                 val chosenImpl = if loopBodySize <= threshold then unrolled else regular
+                 val _ = Control.diagnostics
+                   (fn display =>
+                    display (let open Layout
+                             in seq [str "  Decision: using ",
+                                    str (if loopBodySize <= threshold then "UNROLLED" else "REGULAR"),
+                                    str " (threshold=100)"]
+                             end))
+
+                 (* apply the chosen implementation to unit *)
+                 val func = varExpInfo chosenImpl
+                 val funcVal = VarInfo.value func
+                 (* unit value *)
+                 val unitTy = Type.tuple (Vector.new0 ())
+                 val unitExp = Dexp.tuple {exps = Vector.new0 (), ty = unitTy}
+                 val unitVal = Value.fromType (Stype.tuple (Vector.new0 ()))
+                 val {cons, ...} = valueLambdasInfo funcVal
+               in
+                 (* ! heavy code duplication from apply *)
+                 (Dexp.casee
+                   {test = convertVarInfo func,
+                    ty = ty,
+                    default = NONE,
+                    cases =
+                    Dexp.Con
+                    (Vector.map
+                      (cons, fn {lambda, con} =>
+                       let
+                         val {arg = param, body, ...} = Slambda.dest lambda
+                         val info as LambdaInfo.T {name, ...} = lambdaInfo lambda
+                         val result = expValue body
+                         val env = (Var.newString "env", lambdaInfoType info)
+                       in {con = con,
+                           args = Vector.new1 env,
+                           body = coerce (Dexp.call
+                                         {func = name,
+                                          args = Vector.new2 (Dexp.var env,
+                                                             coerce (unitExp, unitVal,
+                                                                    value param)),
+                                          inline = InlineAttr.Auto,
+                                          ty = valueType result},
+                                         result, v)}
+                       end))},
+                  ac)
+               end
              | SprimExp.PrimApp {prim, targs, args} =>
                   let
                      val prim = Prim.map (prim, convertType)
@@ -1340,6 +1643,7 @@ fun closureConvert
                                          v1 (coerce (convertVarInfo y,
                                                      VarInfo.value y, v)))
                              end
+                             (* TODO: loopy stuff? *)
                         | Prim.Spork_forkThreadAndSetData _ =>
                              let
                                 val t = varExpInfo (arg 0)

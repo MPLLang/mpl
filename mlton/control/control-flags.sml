@@ -230,6 +230,11 @@ val closureConvertShrink = control {name = "closureConvertShrink",
                                     default = true,
                                     toString = Bool.toString}
 
+val sporkChooseThreshold: int ref =
+   control {name = "spork choose threshold",
+            default = 100,
+            toString = Int.toString}
+
 structure Codegen =
    struct
       datatype t =

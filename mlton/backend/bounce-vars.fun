@@ -435,6 +435,7 @@ fun transform p =
                      end
                in
                   case kind of
+                  (* TODO: isLoop probably not here *)
                      Kind.SporkSpwn _ => split ()
                    | Kind.SpoinSync _ => split ()
                    | _ => Block.T {args = args,

@@ -131,6 +131,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                     (Cases.foreach (cases, visitLabelArgs)
                      ; Option.app (default, visitLabelArgs))
                | Goto {dst, args} => flowVarsLabelArgs (args, dst)
+               (* TODO: loopy stuff? *)
                | Spork {spid, cont, spwn} =>
                     (visitLabelArgs cont; visitLabelArgs spwn)
                | Spoin {spid, seq, sync} =>

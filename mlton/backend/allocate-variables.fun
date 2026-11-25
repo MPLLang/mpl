@@ -293,7 +293,7 @@ structure Info =
 (* ------------------------------------------------- *)
 (*                     allocate                      *)
 (* ------------------------------------------------- *)
-
+(* TODO: Mess with isLoop stuff?  *)
 fun allocate {function = f: Rssa.Function.t,
               paramOffsets: (Rssa.Var.t * Rssa.Type.t) vector -> {offset: Bytes.t, ty: Rssa.Type.t, volatile: bool} vector,
               sporkNesting = {maxSporkNestLength: int,
