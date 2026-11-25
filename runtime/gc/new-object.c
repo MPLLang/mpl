@@ -35,7 +35,7 @@ pointer newObject(GC_state s,
      * array, which crossed a block boundary. */
     GC_thread thread = getThreadCurrent(s);
     assert(HM_getChunkOf(frontier) == thread->currentChunk);
-    HM_HH_updateValues(thread, s->frontier);
+    HM_HH_updateValues(s, thread, s->frontier);
     // requesting `GC_HEAP_LIMIT_SLOP` is arbitrary; we just need a new chunk.
     HM_HH_extend(s, thread, GC_HEAP_LIMIT_SLOP);
     s->frontier = HM_HH_getFrontier(thread);

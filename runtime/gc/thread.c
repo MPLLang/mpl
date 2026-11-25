@@ -23,7 +23,7 @@ Bool GC_HH_checkFinishedCCReadyToJoin(GC_state s) {
   GC_thread thread = getThreadCurrent(s);
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   thread->exnStack = s->exnStack;
-  HM_HH_updateValues(thread, s->frontier);
+  HM_HH_updateValues(s, thread, s->frontier);
   HM_HierarchicalHeap hh = thread->hierarchicalHeap;
 
   /** Check that we are immediately below a root CC.
@@ -150,7 +150,7 @@ void GC_HH_promoteChunks(GC_state s, pointer threadp) {
 void GC_HH_clearSuspectsAtDepth(GC_state s, pointer threadp, uint32_t depth) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HM_HH_updateValues(s, getThreadCurrent(s), s->frontier);
   assert(threadAndHeapOkay(s));
 
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
@@ -162,7 +162,7 @@ void GC_HH_clearSuspectsAtDepth(GC_state s, pointer threadp, uint32_t depth) {
 Word64 GC_HH_numSuspectsAtDepth(GC_state s, pointer threadp, uint32_t targetDepth) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HM_HH_updateValues(s, getThreadCurrent(s), s->frontier);
   assert(threadAndHeapOkay(s));
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   assert(thread != NULL);
@@ -186,7 +186,7 @@ Pointer /*ES_clearSet*/
 GC_HH_takeClearSetAtDepth(GC_state s, pointer threadp, uint32_t targetDepth) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HM_HH_updateValues(s, getThreadCurrent(s), s->frontier);
   assert(threadAndHeapOkay(s));
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   assert(thread != NULL);
@@ -206,7 +206,7 @@ GC_HH_processClearSetGrain(GC_state s, pointer clearSet, Word64 start, Word64 st
 void GC_HH_commitFinishedClearSetGrain(GC_state s, pointer threadp, pointer finClearSetGrain) {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HM_HH_updateValues(s, getThreadCurrent(s), s->frontier);
   assert(threadAndHeapOkay(s));
   GC_thread thread = threadObjptrToStruct(s, pointerToObjptr(threadp, NULL));
   ES_commitFinishedClearSetGrain(s, thread, (ES_finishedClearSetGrain)finClearSetGrain);

@@ -196,9 +196,8 @@ uint32_t minDepthWithoutCC(GC_thread thread)
   return HM_HH_getDepth(cursor);
 }
 
-void HM_HHC_collectLocal(uint32_t desiredScope)
+void HM_HHC_collectLocal(GC_state s, uint32_t desiredScope)
 {
-  GC_state s = pthread_getspecific(gcstate_key);
   GC_thread thread = getThreadCurrent(s);
   struct HM_HierarchicalHeap *hh = thread->hierarchicalHeap;
 

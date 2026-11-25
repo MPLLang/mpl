@@ -21,7 +21,7 @@ void enter (GC_state s) {
   setPromoStackOfCurrentThread(s, s->promoStackBot, s->promoStackTop);
   getThreadCurrent(s)->exnStack = s->exnStack;
   getThreadCurrent(s)->spareHeartbeatTokens = s->spareHeartbeatTokens;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HM_HH_updateValues(s, getThreadCurrent(s), s->frontier);
   HH_EBR_leaveQuiescentState(s);
   HM_EBR_leaveQuiescentState(s);
   beginAtomic(s);

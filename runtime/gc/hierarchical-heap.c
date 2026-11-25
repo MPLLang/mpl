@@ -1281,7 +1281,7 @@ pointer HM_HH_getLimit(GC_thread thread) {
   return HM_getChunkLimit(thread->currentChunk);
 }
 
-void HM_HH_updateValues(GC_thread thread, pointer frontier) {
+void HM_HH_updateValues(GC_state s, GC_thread thread, pointer frontier) {
   /* Count the program's allocation here: every frontier advance in the
    * thread's current chunk, whether by the mutator (synced on entry to the
    * runtime) or by the runtime on the program's behalf (sequences), is
@@ -1293,7 +1293,6 @@ void HM_HH_updateValues(GC_thread thread, pointer frontier) {
   HM_chunk chunk = thread->currentChunk;
   pointer oldFrontier = HM_getChunkFrontier(chunk);
   if (oldFrontier < frontier && frontier <= HM_getChunkLimit(chunk)) {
-    GC_state s = pthread_getspecific(gcstate_key);
     s->cumulativeStatistics->bytesAllocated += (size_t)(frontier - oldFrontier);
   }
   HM_updateChunkFrontierInList(

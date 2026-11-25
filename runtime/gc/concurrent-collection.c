@@ -804,7 +804,7 @@ void CC_collectWithRoots(
 {
   getStackCurrent(s)->used = sizeofGCStateCurrentStackUsed(s);
   getThreadCurrent(s)->exnStack = s->exnStack;
-  HM_HH_updateValues(getThreadCurrent(s), s->frontier);
+  HM_HH_updateValues(s, getThreadCurrent(s), s->frontier);
 
   struct timespec startTime;
   struct timespec stopTime;

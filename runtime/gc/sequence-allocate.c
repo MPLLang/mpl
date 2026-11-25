@@ -60,7 +60,7 @@ pointer allocateSmallSequence(
 
   GC_thread thread = getThreadCurrent(s);
   pointer result = HM_HH_getFrontier(thread);
-  HM_HH_updateValues(thread, result + sequenceSizeAligned);
+  HM_HH_updateValues(s, thread, result + sequenceSizeAligned);
 
   thread->bytesNeeded = ensureBytesFree;
   if (HM_getChunkSizePastFrontier(thread->currentChunk) < ensureBytesFree ||
@@ -104,7 +104,7 @@ pointer allocateLargeSequence(
   pointer result = HM_HH_getFrontier(thread);
   HM_chunk newChunk = thread->currentChunk;
   assert(HM_getChunkStart(newChunk) == result);
-  HM_HH_updateValues(thread, result + sequenceSizeAligned);
+  HM_HH_updateValues(s, thread, result + sequenceSizeAligned);
   assert(newChunk->mightContainMultipleObjects);
   newChunk->mightContainMultipleObjects = FALSE;
 
