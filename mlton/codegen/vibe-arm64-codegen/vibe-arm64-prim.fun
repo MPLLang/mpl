@@ -395,8 +395,12 @@ fun primApp ({access, emit = e}: t,
                   ; emit (I.LocalLabel 2)
                   ; (case ct of
                         CType.Objptr =>
-                           (mov (0, obj, ct)
-                            ; emit (I.Un (I.MOV, R.X 1, R.X 5))
+                           (* Assignable_decheckObjptr (s, obj, x5); obj
+                            * may be in x0, x1 or x2, so read it first.
+                            *)
+                           (mov (1, obj, ct)
+                            ; emit (I.Un (I.MOV, R.X 2, R.X 5))
+                            ; emit (I.Un (I.MOV, R.X 0, R.X 19))
                             ; callRuntime "Assignable_decheckObjptr"
                             ; mov (d, 0, ct))
                       | _ => if isReal ct

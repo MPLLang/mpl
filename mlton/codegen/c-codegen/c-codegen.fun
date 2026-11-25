@@ -1151,10 +1151,23 @@ fun outputWith {program as Machine.Program.T {chunks, frameInfos, main, ...},
                                         ty = Operand.ty dst}))
                    | PrimApp {args, dst, prim} =>
                         let
+                           (* A compare-and-swap of an objptr calls
+                            * Assignable_decheckObjptr, which needs the
+                            * GC_state; see RefP_cas and ArrayP_cas in
+                            * c-chunk.h.
+                            *)
+                           val gcStateArg =
+                              case prim of
+                                 Prim.Array_cas (SOME CType.Objptr) =>
+                                    [operandToString Operand.GCState]
+                               | Prim.Ref_cas (SOME CType.Objptr) =>
+                                    [operandToString Operand.GCState]
+                               | _ => []
                            fun call (): string =
                               C.callNoSemi
                               (Prim.toString prim,
-                               Vector.toListMap (args, fetchOperand))
+                               gcStateArg
+                               @ Vector.toListMap (args, fetchOperand))
                            val _ = print "\t"
                         in
                            case dst of

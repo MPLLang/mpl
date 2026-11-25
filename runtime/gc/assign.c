@@ -8,9 +8,8 @@
  */
 #ifdef DETECT_ENTANGLEMENT
 
-objptr Assignable_decheckObjptr(objptr dst, objptr src)
+objptr Assignable_decheckObjptr(GC_state s, objptr dst, objptr src)
 {
-  GC_state s = pthread_getspecific(gcstate_key);
   s->cumulativeStatistics->numDisentanglementChecks++;
   objptr new_src = src;
   pointer dstp = objptrToPointer(dst, NULL);
@@ -74,7 +73,8 @@ objptr Assignable_readBarrier(
 
 #else
 
-objptr Assignable_decheckObjptr(objptr dst, objptr src) {
+objptr Assignable_decheckObjptr(GC_state s, objptr dst, objptr src) {
+  (void) s;
   (void) dst;
   return src;
 }
