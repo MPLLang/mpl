@@ -592,8 +592,13 @@ fun primApp ({access, emit = e}: t,
                         CType.Objptr =>
                            (callRuntime
                             ("Assignable_decheckObjptr", fn () =>
-                             (load (a 0, rdi, [rcx, rdx])
-                              ; mov (rsi, rax, ct)))
+                             (* Assignable_decheckObjptr (s, obj, rax); load
+                              * obj first, since loading it may use rdx as a
+                              * scratch.
+                              *)
+                             (load (a 0, rsi, [rcx, rdx])
+                              ; mov (rdx, rax, ct)
+                              ; mov (rdi, Emit.gcState, CType.CPointer)))
                             ; done rax)
                       | _ =>
                            if isReal ct
