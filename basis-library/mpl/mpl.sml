@@ -11,7 +11,11 @@ struct
 
   structure ArrayAos = ArrayAos
   structure ArrayAosSlice = ArrayAosSlice
+  structure ArraySoa = ArraySoa
+  structure ArraySoaSlice = ArraySoaSlice
 
   structure VectorAos = VectorAos
   structure VectorAosSlice = VectorAosSlice
+  structure VectorSoa = VectorSoa
+  structure VectorSoaSlice = VectorSoaSlice
 end

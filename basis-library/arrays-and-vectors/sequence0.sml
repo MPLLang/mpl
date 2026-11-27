@@ -653,6 +653,35 @@ structure ArrayAos = MakeArrayPrimSequence(
 )
          
 
+structure ArraySoa = MakeArrayPrimSequence(
+  type 'a sequence = 'a ArraySoa.t
+  type 'a elt = 'a
+  type 'a prim_array = 'a ArraySoa.t
+  type 'a prim_vector = 'a VectorSoa.t
+  val sameArray = op =
+  val copyUnsafe = Primitive.ArraySoa.copyArrayUnsafe
+  val fromArray = fn a => a
+  val isMutable = true
+  val length = Primitive.ArraySoa.length
+  val subUnsafe = Primitive.ArraySoa.subUnsafe
+  val uninitIsNop = Primitive.ArraySoa.uninitIsNop
+  val uninitUnsafe = Primitive.ArraySoa.uninitUnsafe
+  val updateUnsafe = Primitive.ArraySoa.updateUnsafe
+                                     
+  val primArrayAllocUnsafe = Primitive.ArraySoa.allocUnsafe
+  val primArraySubUnsafe = Primitive.ArraySoa.subUnsafe
+  val primArrayUpdateUnsafe = Primitive.ArraySoa.updateUnsafe
+  val primArrayLength = Primitive.ArraySoa.length
+  val primVectorFromArrayUnsafe = Primitive.VectorSoa.fromArrayUnsafe
+  
+  structure Raw =
+  struct
+    type 'a array = 'a ArraySoa.t
+    open Primitive.ArraySoa.Raw
+  end
+)
+         
+
 structure Vector = MakeVectorPrimSequence(
   exception Vector_uninitIsNop
   exception Vector_uninitUnsafe
@@ -710,6 +739,34 @@ structure VectorAos = MakeVectorPrimSequence(
   val primVectorFromArrayUnsafe = Primitive.VectorAos.fromArrayUnsafe
 )
 
+structure VectorSoa = MakeVectorPrimSequence(
+  exception VectorSoa_uninitIsNop
+  exception VectorSoa_uninitUnsafe
+  exception VectorSoa_updateUnsafe
+  type 'a sequence = 'a VectorSoa.t
+  type 'a elt = 'a
+  type 'a prim_array = 'a ArraySoa.t
+  type 'a prim_vector = 'a VectorSoa.t
+  val copyUnsafe = Primitive.ArraySoa.copyVectorUnsafe
+  val fromArray = Primitive.VectorSoa.fromArrayUnsafe
+  val isMutable = false
+  val length = VectorSoa.length
+  val sameArray = fn _ => false
+  val subUnsafe = Primitive.VectorSoa.subUnsafe
+  val uninitIsNop = fn _ =>
+                    raise VectorSoa_uninitIsNop
+  val uninitUnsafe = fn _ =>
+                    raise VectorSoa_uninitUnsafe
+  val updateUnsafe = fn _ =>
+                    raise VectorSoa_updateUnsafe
+                                                        
+  val primArrayAllocUnsafe = Primitive.ArraySoa.allocUnsafe
+  val primArraySubUnsafe = Primitive.ArraySoa.subUnsafe
+  val primArrayUpdateUnsafe = Primitive.ArraySoa.updateUnsafe
+  val primArrayLength = Primitive.ArraySoa.length
+  val primVectorFromArrayUnsafe = Primitive.VectorSoa.fromArrayUnsafe
+)
+
 end
 
 structure Array =
@@ -725,7 +782,15 @@ structure ArrayAos =
    struct
       type 'a t = 'a Primitive.ArrayAos.t
    end
+structure ArraySoa =
+   struct
+      type 'a t = 'a Primitive.ArraySoa.t
+   end
 structure VectorAos =
    struct
       type 'a t = 'a Primitive.VectorAos.t
+   end
+structure VectorSoa =
+   struct
+      type 'a t = 'a Primitive.VectorSoa.t
    end

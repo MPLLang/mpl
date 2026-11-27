@@ -1,7 +1,7 @@
 (* Memory layouts for arrays. *)
 structure ArrayLayout :>
 sig
-  datatype t = Default | Aos
+  datatype t = Default | Aos | Soa
 
   val equals: t * t -> bool
 
@@ -13,16 +13,18 @@ sig
   val toString: t -> string
 end =
 struct
-  datatype t = Default | Aos
+  datatype t = Default | Aos | Soa
 
   fun equals (Default, Default) = true
     | equals (Aos, Aos) = true
+    | equals (Soa, Soa) = true
     | equals _ = false
 
   fun toString lay =
     case lay of
       Default => "Default"
     | Aos => "Aos"
+    | Soa => "Soa"
 
   fun layout lay = Layout.str (toString lay)
 

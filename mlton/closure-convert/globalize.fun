@@ -29,9 +29,11 @@ fun globalize {program = Program.T {datatypes, body, ...},
          val _ = (Vector.foreach (datatypes, makeBig o #tycon)
                   ; makeBig (Tycon.array ArrayLayout.Default)
                   ; makeBig (Tycon.array ArrayLayout.Aos)
+                  ; makeBig (Tycon.array ArrayLayout.Soa)
                   ; makeBig Tycon.arrow
                   ; makeBig (Tycon.vector ArrayLayout.Default)
-                  ; makeBig (Tycon.vector ArrayLayout.Aos))
+                  ; makeBig (Tycon.vector ArrayLayout.Aos)
+                  ; makeBig (Tycon.vector ArrayLayout.Soa))
       in
          val tyconIsBig = get
          val destroyTycon = destroy

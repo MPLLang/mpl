@@ -43,6 +43,7 @@ structure ObjectCon =
                Con c => Con.layout c
              | Sequence ArrayLayout.Default => str "sequence"
              | Sequence ArrayLayout.Aos => str "sequence_aos"
+             | Sequence ArrayLayout.Soa => str "sequence_soa"
              | Tuple => str "tuple"
          end
 
@@ -50,6 +51,7 @@ structure ObjectCon =
          val conAlts = Vector.fromList
            [("sequence", Sequence ArrayLayout.Default),
             ("sequence_aos", Sequence ArrayLayout.Aos),
+            ("sequence_soa", Sequence ArrayLayout.Soa),
             ("tuple", Tuple)]
       in
          val parse = Con.parseAs (conAlts, Con)
@@ -209,6 +211,7 @@ structure Type =
          val tuple = newHash ()
          val sequenceDefault = newHash ()
          val sequenceFlat = newHash ()
+         val sequenceSoa = newHash ()
          fun hashProd (p, base) =
             Hash.combine (base, Hash.vectorMap (Prod.dest p, fn {elt, ...} => hash elt))
       in
@@ -219,6 +222,7 @@ structure Type =
                      Con c => Con.hash c
                    | Sequence ArrayLayout.Default => sequenceDefault
                    | Sequence ArrayLayout.Aos => sequenceFlat
+                   | Sequence ArrayLayout.Soa => sequenceSoa
                    | Tuple => tuple
                val hash = hashProd (args, base)
             in
@@ -297,10 +301,11 @@ structure Type =
              List.map (WordSize.all, fn ws => ("word" ^ WordSize.toString ws, word ws)) @
              List.map (RealSize.all, fn rs => ("real" ^ RealSize.toString rs, real rs)))
          val unary =
-            Con.parseAs (Vector.new4 (("sequence", sequence ArrayLayout.Default o Prod.new1Immutable),
+            Con.parseAs (Vector.fromList [("sequence", sequence ArrayLayout.Default o Prod.new1Immutable),
                                       ("sequence_aos", sequence ArrayLayout.Aos o Prod.new1Immutable),
+                                      ("sequence_soa", sequence ArrayLayout.Soa o Prod.new1Immutable),
                                       ("tuple", tuple o Prod.new1Immutable),
-                                      ("weak", weak)),
+                                      ("weak", weak)],
                          fn con => fn ty =>
                          conApp (con, Prod.new1Immutable ty))
       in

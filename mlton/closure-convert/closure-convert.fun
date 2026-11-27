@@ -570,6 +570,7 @@ fun closureConvert
                [(Tycon.arrow, fn _ => Error.bug "ClosureConvert.convertType.array"),
                 (Tycon.array ArrayLayout.Default, unary (Type.array ArrayLayout.Default)),
                 (Tycon.array ArrayLayout.Aos, unary (Type.array ArrayLayout.Aos)),
+                (Tycon.array ArrayLayout.Soa, unary (Type.array ArrayLayout.Soa)),
                 (Tycon.cpointer, nullary Type.cpointer),
                 (Tycon.intInf, nullary Type.intInf),
                 (Tycon.reff, unary Type.reff),
@@ -577,6 +578,7 @@ fun closureConvert
                 (Tycon.tuple, Type.tuple),
                 (Tycon.vector ArrayLayout.Default, unary (Type.vector ArrayLayout.Default)),
                 (Tycon.vector ArrayLayout.Aos, unary (Type.vector ArrayLayout.Aos)),
+                (Tycon.vector ArrayLayout.Soa, unary (Type.vector ArrayLayout.Soa)),
                 (Tycon.weak, unary Type.weak)]
                @ Vector.toListMap (Tycon.reals, fn (t, s) => (t, nullary (Type.real s)))
                @ Vector.toListMap (Tycon.words, fn (t, s) => (t, nullary (Type.word s)))

@@ -116,19 +116,23 @@ structure Type =
       in
          val arrayDefault = make (fn t => Array {elem = t, layout = ArrayLayout.Default})
          val arrayAos = make (fn t => Array {elem = t, layout = ArrayLayout.Aos})
+         val arraySoa = make (fn t => Array {elem = t, layout = ArrayLayout.Soa})
          fun array (layout: ArrayLayout.t) elem =
            case layout of
              ArrayLayout.Default => arrayDefault elem
            | ArrayLayout.Aos => arrayAos elem
+           | ArrayLayout.Soa => arraySoa elem
 
          val reff = make Ref
 
          val vectorDefault = make (fn t => Vector {elem = t, layout = ArrayLayout.Default})
          val vectorAos = make (fn t => Vector {elem = t, layout = ArrayLayout.Aos})
+         val vectorSoa = make (fn t => Vector {elem = t, layout = ArrayLayout.Soa})
          fun vector (layout: ArrayLayout.t) elem =
            case layout of
              ArrayLayout.Default => vectorDefault elem
            | ArrayLayout.Aos => vectorAos elem
+           | ArrayLayout.Soa => vectorSoa elem
 
          val weak = make Weak
       end
@@ -202,6 +206,7 @@ structure Type =
                        case layout of
                          ArrayLayout.Default => "array"
                        | ArrayLayout.Aos => "array_aos"
+                       | ArrayLayout.Soa => "array_soa"
                    in
                      unary (elem, name)
                    end
@@ -224,6 +229,7 @@ structure Type =
                        case layout of
                          ArrayLayout.Default => "vector"
                        | ArrayLayout.Aos => "vector_aos"
+                       | ArrayLayout.Soa => "vector_soa"
                    in
                      unary (elem, name)
                    end
@@ -247,10 +253,12 @@ structure Type =
          val unary =
             [array ArrayLayout.Default <$ P.kw "array",
              array ArrayLayout.Aos <$ P.kw "array_aos",
+             array ArrayLayout.Soa <$ P.kw "array_soa",
              reff <$ P.kw "ref",
              (tuple o Vector.new1) <$ P.kw "tuple",
              vector ArrayLayout.Default <$ P.kw "vector",
              vector ArrayLayout.Aos <$ P.kw "vector_aos",
+             vector ArrayLayout.Soa <$ P.kw "vector_soa",
              weak <$ P.kw "weak"]
       in
          fun parse () =

@@ -104,6 +104,38 @@ structure ArrayAos =
         end
    end
 
+structure ArraySoa =
+   struct
+      open ArraySoa
+      val allocUnsafe = _prim "Array_allocSoa": SeqIndex.int -> 'a array_soa;
+      val copyArrayUnsafe = _prim "Array_copyArray": 'a array_soa * SeqIndex.int * 'a array_soa * SeqIndex.int * SeqIndex.int -> unit;
+      val copyVectorUnsafe = _prim "Array_copyVector": 'a array_soa * SeqIndex.int * 'a VectorSoa.t * SeqIndex.int * SeqIndex.int -> unit;
+      val length = _prim "Array_length": 'a array_soa -> SeqIndex.int;
+      (* There is no maximum length on arrays, so maxLen' = SeqIndex.maxInt'. *)
+      (* val maxLen': SeqIndex.int = SeqIndex.maxInt' *)
+      val subUnsafe = _prim "Array_sub": 'a array_soa * SeqIndex.int -> 'a;
+      val uninitIsNop = _prim "Array_uninitIsNop": 'a array_soa -> bool;
+      val uninitUnsafe = _prim "Array_uninit": 'a array_soa * SeqIndex.int -> unit;
+      val updateUnsafe = _prim "Array_update": 'a array_soa * SeqIndex.int * 'a -> unit;
+
+      structure Raw :> sig
+                          type 'a rawarr
+                          val allocUnsafe: SeqIndex.int -> 'a rawarr
+                          val length: 'a rawarr -> SeqIndex.int
+                          val toArrayUnsafe: 'a rawarr -> 'a array_soa
+                          val uninitIsNop: 'a rawarr -> bool
+                          val uninitUnsafe: 'a rawarr * SeqIndex.int -> unit
+                       end =
+        struct
+           type 'a rawarr = 'a array_soa
+           val allocUnsafe = _prim "Array_allocRawSoa": SeqIndex.int -> 'a rawarr;
+           val length = length
+           val toArrayUnsafe = _prim "Array_toArray": 'a rawarr -> 'a array_soa;
+           val uninitIsNop = uninitIsNop
+           val uninitUnsafe = uninitUnsafe
+        end
+   end
+
 structure VectorAos =
    struct
       open VectorAos
@@ -114,6 +146,18 @@ structure VectorAos =
       val length = _prim "Vector_length": 'a vector_aos -> SeqIndex.int;
       val subUnsafe = _prim "Vector_sub": 'a vector_aos * SeqIndex.int -> 'a;
       val vector0 = _prim "Vector_vectorAos": unit -> 'a vector_aos;
+   end
+
+structure VectorSoa =
+   struct
+      open VectorSoa
+      (* Don't mutate the array after you apply fromArray, because vectors 
+       * are supposed to be immutable and the optimizer depends on this.  
+       *)
+      val fromArrayUnsafe = _prim "Array_toVector": 'a ArraySoa.t -> 'a vector_soa;
+      val length = _prim "Vector_length": 'a vector_soa -> SeqIndex.int;
+      val subUnsafe = _prim "Vector_sub": 'a vector_soa * SeqIndex.int -> 'a;
+      val vector0 = _prim "Vector_vectorSoa": unit -> 'a vector_soa;
    end
 
 end

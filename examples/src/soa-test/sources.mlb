@@ -1,0 +1,5 @@
+../../lib/sources.mlb
+ann "allowPrim true" in
+  prims.sml
+end
+test.sml

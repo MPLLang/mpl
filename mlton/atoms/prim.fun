@@ -235,16 +235,20 @@ fun toString (n: 'a t): string =
                case layout of
                  ArrayLayout.Default => name
                | ArrayLayout.Aos => name ^ "Aos"
+               | ArrayLayout.Soa => name ^ "Soa"
            in
              (* Array_alloc
               * Array_allocRaw
               * Array_allocAos
               * Array_allocRawAos
+              * Array_allocSoa
+              * Array_allocRawSoa
               *)
              name
            end
        | Array_array ArrayLayout.Default => "Array_array"
        | Array_array ArrayLayout.Aos => "Array_arrayAos"
+       | Array_array ArrayLayout.Soa => "Array_arraySoa"
        | Array_cas NONE => "Array_cas"
        | Array_cas (SOME ctype) => concat ["Array", CType.name ctype, "_cas"]
        | Array_copyArray => "Array_copyArray"
@@ -368,6 +372,7 @@ fun toString (n: 'a t): string =
        | Vector_sub => "Vector_sub"
        | Vector_vector ArrayLayout.Default => "Vector_vector"
        | Vector_vector ArrayLayout.Aos => "Vector_vectorAos"
+       | Vector_vector ArrayLayout.Soa => "Vector_vectorSoa"
        | Weak_canGet => "Weak_canGet"
        | Weak_get => "Weak_get"
        | Weak_new => "Weak_new"
@@ -1036,8 +1041,11 @@ in
        Array_alloc {raw = true, layout = ArrayLayout.Default},
        Array_alloc {raw = false, layout = ArrayLayout.Aos},
        Array_alloc {raw = true, layout = ArrayLayout.Aos},
+       Array_alloc {raw = false, layout = ArrayLayout.Soa},
+       Array_alloc {raw = true, layout = ArrayLayout.Soa},
        Array_array ArrayLayout.Default,
        Array_array ArrayLayout.Aos,
+       Array_array ArrayLayout.Soa,
        Array_cas NONE,
        Array_copyArray,
        Array_copyVector,
@@ -1125,6 +1133,7 @@ in
        Vector_sub,
        Vector_vector ArrayLayout.Default,
        Vector_vector ArrayLayout.Aos,
+       Vector_vector ArrayLayout.Soa,
        Weak_canGet,
        Weak_get,
        Weak_new,
@@ -1368,7 +1377,7 @@ fun 'a checkApp (prim: 'a t,
        * (Many array primitives are overloaded. Notably, CAS is not.)
        *)
       fun anyArrayLayout (f: ArrayLayout.t -> bool) : bool =
-        List.exists ([ArrayLayout.Default, ArrayLayout.Aos], f)
+        List.exists ([ArrayLayout.Default, ArrayLayout.Aos, ArrayLayout.Soa], f)
   in
       case prim of
          Array_alloc {layout, ...} =>

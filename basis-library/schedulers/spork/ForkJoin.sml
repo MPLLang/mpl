@@ -50,6 +50,16 @@ struct
       ArrayAosExtra.Raw.unsafeToArray a
     end
 
+  fun alloc_soa n =
+    let
+      val a = ArraySoaExtra.Raw.alloc n
+      val _ =
+        if ArraySoaExtra.Raw.uninitIsNop a then ()
+        else parfor 10000 (0, n) (fn i => ArraySoaExtra.Raw.unsafeUninit (a, i))
+    in
+      ArraySoaExtra.Raw.unsafeToArray a
+    end
+
   val maxForkDepthSoFar = Scheduler.maxForkDepthSoFar
   val numSpawnsSoFar = Scheduler.numSpawnsSoFar
   val numEagerSpawnsSoFar = Scheduler.numEagerSpawnsSoFar
@@ -236,6 +246,7 @@ sig
   val parfor: int -> (int * int) -> (int -> unit) -> unit
   val alloc: int -> 'a array
   val alloc_aos: int -> 'a MPL.ArrayAos.array
+  val alloc_soa: int -> 'a MPL.ArraySoa.array
 
   val idleTimeSoFar: unit -> Time.time
   val workTimeSoFar: unit -> Time.time

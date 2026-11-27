@@ -11,10 +11,14 @@ local
     signature ARRAY_SLICE_EXTRA
     signature ARRAY_AOS_EXTRA
     signature ARRAY_AOS_SLICE_EXTRA
+    signature ARRAY_SOA_EXTRA
+    signature ARRAY_SOA_SLICE_EXTRA
     structure ArrayExtra = Array
     structure ArraySliceExtra = ArraySlice
     structure ArrayAosExtra = ArrayAos
     structure ArrayAosSliceExtra = ArrayAosSlice
+    structure ArraySoaExtra = ArraySoa
+    structure ArraySoaSliceExtra = ArraySoaSlice
     structure Primitive
 
     functor Int_ChooseFromInt

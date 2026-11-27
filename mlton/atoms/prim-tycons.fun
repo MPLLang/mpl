@@ -21,10 +21,12 @@ local
 in
    val arrayDefault = make "array"
    val arrayAos = make "array_aos"
+   val arraySoa = make "array_soa"
    val array = fn lay =>
      case lay of
        ArrayLayout.Default => arrayDefault
      | ArrayLayout.Aos => arrayAos
+     | ArrayLayout.Soa => arraySoa
 
    val arrow = make "arrow"
    val bool = make "bool"
@@ -42,15 +44,18 @@ in
          case lay of
            ArrayLayout.Default => "vector"
          | ArrayLayout.Aos => "vector_aos"
+         | ArrayLayout.Soa => "vector_soa"
      in
        make name
      end
    val vectorDefault = make "vector"
    val vectorAos = make "vector_aos"
+   val vectorSoa = make "vector_soa"
    val vector = fn lay =>
      case lay of
        ArrayLayout.Default => vectorDefault
      | ArrayLayout.Aos => vectorAos
+     | ArrayLayout.Soa => vectorSoa
 
    val weak = make "weak"
 end
@@ -126,6 +131,7 @@ end
 val prims =
    List.map ([(array ArrayLayout.Default, Arity 1, Always),
               (array ArrayLayout.Aos, Arity 1, Always),
+              (array ArrayLayout.Soa, Arity 1, Always),
               (arrow, Arity 2, Never),
               (bool, Arity 0, Sometimes),
               (cpointer, Arity 0, Always),
@@ -137,6 +143,7 @@ val prims =
               (tuple, Nary, Sometimes),
               (vector ArrayLayout.Default, Arity 1, Sometimes),
               (vector ArrayLayout.Aos, Arity 1, Sometimes),
+              (vector ArrayLayout.Soa, Arity 1, Sometimes),
               (weak, Arity 1, Never)],
              fn ((name, tycon), kind, admitsEquality) =>
              {admitsEquality = admitsEquality,
@@ -191,16 +198,20 @@ val deIntX = fn c => if equals (c, intInf) then NONE else SOME (deIntX c)
 val isArray = fn c =>
   equals (c, array ArrayLayout.Default)
   orelse equals (c, array ArrayLayout.Aos)
+  orelse equals (c, array ArrayLayout.Soa)
 
 val isVector = fn c =>
   equals (c, vector ArrayLayout.Default)
   orelse equals (c, vector ArrayLayout.Aos)
+  orelse equals (c, vector ArrayLayout.Soa)
 
 fun deArrayLayout c =
   if equals (c, array ArrayLayout.Default)
     then ArrayLayout.Default
   else if equals (c, array ArrayLayout.Aos)
     then ArrayLayout.Aos
+  else if equals (c, array ArrayLayout.Soa)
+    then ArrayLayout.Soa
   else Error.bug "PrimTycons.deArrayLayout"
 
 fun deVectorLayout c =
@@ -208,6 +219,8 @@ fun deVectorLayout c =
     then ArrayLayout.Default
   else if equals (c, vector ArrayLayout.Aos)
     then ArrayLayout.Aos
+  else if equals (c, vector ArrayLayout.Soa)
+    then ArrayLayout.Soa
   else Error.bug "PrimTycons.deVectorLayout"
 
 local
