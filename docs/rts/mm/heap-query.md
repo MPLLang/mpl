@@ -21,7 +21,7 @@ h = HM_getLevelHead(HM_getChunkOf(op));
 Below is an illustration of a full heap query.
 ① We start with an `objptr` pointing to some object.
 ② The function call `HM_getChunkOf(...)` returns the chunk descriptor
-(see [Chunks](chunk.html)) for the chunk that contains that object. 
+(see [`HM_chunk`](https://github.com/MPLLang/mpl/blob/b64c5d2fb887768a80d010c9de6cc96ec41a4ba6/runtime/gc/chunk.h#L45) in `runtime/gc/chunk.h`) for the chunk that contains that object. 
 ③ Next, with the chunk descriptor in hand, we call
 `HM_getLevelHead` to traverse the union-find structure.
 ④ Finally, out of the union-find structure, we arrive at
