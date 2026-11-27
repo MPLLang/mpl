@@ -405,7 +405,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                   name
                end
       and vectorHashFunc (lay: ArrayLayout.t) (ty: Type.t): Func.t =
-         case getVectorHashFunc ty of
+         case getVectorHashFunc (Type.vector lay ty) of
             SOME f => f
           | NONE =>
                let
@@ -413,7 +413,7 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
                    * other that loops.
                    *)
                   val name = Func.newString "vectorHash"
-                  val _ = setVectorHashFunc (ty, SOME name)
+                  val _ = setVectorHashFunc (Type.vector lay ty, SOME name)
                   val loop = Func.newString "vectorHashLoop"
                   val vty = Type.vector lay ty
                   local

@@ -308,13 +308,15 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          in
             ()
          end
+      (* cached per vector type (not per element type), since vectors of
+       * different layouts with the same element type need distinct functions *)
       and vectorEqualFunc (layout: ArrayLayout.t) (ty: Type.t): Func.t =
-         case getVectorEqualFunc ty of
+         case getVectorEqualFunc (Type.vector layout ty) of
             SOME f => f
           | NONE =>
                let
                   val name = Func.newString "vectorEqual"
-                  val _ = setVectorEqualFunc (ty, SOME name)
+                  val _ = setVectorEqualFunc (Type.vector layout ty, SOME name)
                   val () = mkVectorEqualFunc {name = name, ty = ty, doEq = true, layout = layout}
                in
                   name

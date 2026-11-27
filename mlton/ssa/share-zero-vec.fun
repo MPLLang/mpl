@@ -43,9 +43,12 @@ fun transform (Program.T {datatypes, globals, functions, main}) =
          val hs: (Type.t, Var.t) HashTable.t =
             HashTable.new {hash = Type.hash, equals = Type.equals}
       in
+         (* keyed by the array type (not the element type), since arrays of
+          * different layouts with the same element type need distinct
+          * zero-length arrays *)
          fun getZeroArrVar (lay: ArrayLayout.t) (ty: Type.t): Var.t =
             HashTable.lookupOrInsert
-            (hs, ty,
+            (hs, Type.array lay ty,
              fn () =>
              let
                 val zeroArrVar = Var.newString "zeroArr"
