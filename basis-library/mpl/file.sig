@@ -11,6 +11,7 @@ sig
   exception Closed
 
   val openFile: string -> t
+  val openFileWriteable: string -> int -> {file : t, file_size: int}
   val closeFile: t -> unit
   val size: t -> int
 
@@ -21,4 +22,7 @@ sig
 
   val readChars: t -> int -> char ArraySlice.slice -> unit
   val readWord8s: t -> int -> Word8.word ArraySlice.slice -> unit
+  val writeChar : {file: t, file_offset: int} -> char -> unit
+  val writeWord8s : {file: t, file_offset: int} -> Word8.word ArraySlice.slice -> unit
+
 end
