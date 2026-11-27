@@ -18,6 +18,40 @@ void HM_remember(GC_state s, HM_remSet remSet, HM_remembered remElem, bool conc)
   }
 }
 
+/* An entry of a public list is complete once its object is non-zero: the
+ * writer publishes the object last, with a release store
+ * (CC_storeInConcListWithPurpose), so it is read with an acquire load. */
+static inline bool isPublishedEntry(pointer p) {
+  return __atomic_load_n(&(((HM_remembered)p)->object), __ATOMIC_ACQUIRE) != 0;
+}
+/* CC_storeInConcListWithPurpose publishes an entry's last 8-byte word: that
+ * must be the object. */
+COMPILE_TIME_ASSERT(HM_remembered__object_is_the_last_word,
+                    offsetof(struct HM_remembered, object) + sizeof(objptr)
+                      == sizeof(struct HM_remembered)
+                    && sizeof(objptr) == sizeof(uint64_t));
+
+/* Like HM_foreachPrivate, for chunks just taken from a public list, which
+ * a writer may still be filling. */
+static void foreachInPoppedChunks(
+  GC_state s,
+  HM_chunkList chunkList,
+  HM_foreachDownptrClosure f)
+{
+  HM_chunk chunk = HM_getChunkListFirstChunk(chunkList);
+  while (chunk != NULL)
+  {
+    pointer p = HM_getChunkStart(chunk);
+    pointer frontier = __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED);
+    while (p < frontier && isPublishedEntry(p))
+    {
+      f->fun(s, (HM_remembered)p, f->env);
+      p += sizeof(struct HM_remembered);
+    }
+    chunk = chunk->nextChunk;
+  }
+}
+
 void HM_foreachPrivate(
   GC_state s,
   HM_chunkList chunkList,
@@ -76,15 +110,15 @@ void checkFishyChunks(GC_state s,
     {
       HM_chunk chunk = fishyChunks[i].chunk;
       pointer p = fishyChunks[i].scanned;
-      pointer frontier = HM_getChunkFrontier(chunk);
+      pointer frontier = __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED);
       while (TRUE)
       {
-        while (p < frontier && ((HM_remembered)p)->object != 0)
+        while (p < frontier && isPublishedEntry(p))
         {
           f->fun(s, (HM_remembered)p, f->env);
           p += sizeof(struct HM_remembered);
         }
-        frontier = HM_getChunkFrontier(chunk);
+        frontier = __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED);
         if (p >= frontier) {
           break;
         }
@@ -105,7 +139,7 @@ void HM_foreachPublic (
   bool trackFishyChunks)
 {
 
-  if ((remSet->public).firstChunk == NULL) {
+  if (__atomic_load_n(&(remSet->public).firstChunk, __ATOMIC_ACQUIRE) == NULL) {
     return;
   }
 
@@ -113,12 +147,12 @@ void HM_foreachPublic (
     struct HM_chunkList _chunkList;
     HM_chunkList chunkList = &(_chunkList);
     CC_popAsChunkList(&(remSet->public), chunkList);
-    HM_foreachPrivate(s, chunkList, f);
+    foreachInPoppedChunks(s, chunkList, f);
     HM_appendChunkList(&(remSet->private), chunkList);
     return;
   }
 
-  HM_chunk chunk = (remSet->public).firstChunk;
+  HM_chunk chunk = __atomic_load_n(&(remSet->public).firstChunk, __ATOMIC_ACQUIRE);
   HM_chunk lastChunk = CC_getLastChunk (&(remSet->public));
   int array_size = 2 * s->numberOfProcs;
   FishyChunk* fishyChunks = malloc(sizeof(struct FishyChunk) * array_size);
@@ -128,20 +162,32 @@ void HM_foreachPublic (
     while (chunk != NULL)
     {
       pointer p = HM_getChunkStart(chunk);
-      pointer frontier = HM_getChunkFrontier(chunk);
-      while (p < frontier && ((HM_remembered)p)->object != 0)
+      pointer frontier = __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED);
+      while (p < frontier && isPublishedEntry(p))
       {
         f->fun(s, (HM_remembered)p, f->env);
         p += sizeof(struct HM_remembered);
       }
-      if ((chunk->retireChunk || chunk->nextChunk == NULL))
+      /* nextChunk first: CC_appendConcList sets retireChunk before it
+       * publishes nextChunk with a release store. A chunk with a successor is
+       * checked again too if the scan did not reach its final frontier: the
+       * scan stopped at an entry still being written, or writers filled the
+       * chunk past the frontier read before the scan. A chunk that
+       * allocateChunkInConcList gave a successor is full (every public entry
+       * is 16 bytes), so its frontier no longer moves, and the frontier
+       * reloaded after the acquire load of nextChunk is the final one;
+       * checkFishyChunks scans on to it, waiting for entries being written.
+       * (A chunk that CC_appendConcList linked is retired: fishy anyway.) */
+      if (__atomic_load_n(&chunk->nextChunk, __ATOMIC_ACQUIRE) == NULL
+          || __atomic_load_n(&chunk->retireChunk, __ATOMIC_RELAXED)
+          || p < __atomic_load_n(&chunk->frontier, __ATOMIC_RELAXED))
       {
         if (numFishyChunks >= array_size) {
           fishyChunks = resizeFishyArray(fishyChunks, &array_size);
         }
         makeChunkFishy(fishyChunks, chunk, p, &numFishyChunks);
       }
-      chunk = chunk->nextChunk;
+      chunk = __atomic_load_n(&chunk->nextChunk, __ATOMIC_ACQUIRE);
     }
     checkFishyChunks(s, fishyChunks, numFishyChunks, f);
     lastChunk = CC_getLastChunk(&(remSet->public));
