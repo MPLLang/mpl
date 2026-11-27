@@ -21,17 +21,17 @@ structure ObjectCon =
    struct
       datatype t =
          Con of Con.t
-       | Sequence
+       | Sequence of ArrayLayout.t
        | Tuple
 
       val equals: t * t -> bool =
          fn (Con c, Con c') => Con.equals (c, c')
-          | (Sequence, Sequence) => true
+          | (Sequence l, Sequence l') => ArrayLayout.equals (l, l')
           | (Tuple, Tuple) => true
           | _ => false
 
       val isSequence: t -> bool =
-         fn Sequence => true
+         fn Sequence _ => true
           | _ => false
 
       val layout: t -> Layout.t =
@@ -41,15 +41,21 @@ structure ObjectCon =
          in
             case oc of
                Con c => Con.layout c
-             | Sequence => str "sequence"
+             | Sequence ArrayLayout.Default => str "sequence"
+             | Sequence ArrayLayout.Aos => str "sequence_aos"
+             | Sequence ArrayLayout.Soa => str "sequence_soa"
              | Tuple => str "tuple"
          end
 
       local
-         val conAlts = Vector.fromList [("sequence", Sequence), ("tuple", Tuple)]
+         val conAlts = Vector.fromList
+           [("sequence", Sequence ArrayLayout.Default),
+            ("sequence_aos", Sequence ArrayLayout.Aos),
+            ("sequence_soa", Sequence ArrayLayout.Soa),
+            ("tuple", Tuple)]
       in
          val parse = Con.parseAs (conAlts, Con)
-         end
+      end
    end
 
 datatype z = datatype ObjectCon.t
@@ -88,8 +94,14 @@ structure Type =
       val deSequenceOpt: t -> t Prod.t option =
          fn t =>
          case dest t of
-            Object {args, con = Sequence} => SOME args
+            Object {args, con = Sequence _} => SOME args
           | _ => NONE
+
+      val deSequenceLayout: t -> ArrayLayout.t =
+         fn t =>
+         case dest t of
+            Object {con = Sequence l, ...} => l
+          | _ => Error.bug "SsaTree2.Type.deSequenceLayout"
 
       val deSequence1: t -> t =
          fn t =>
@@ -197,7 +209,9 @@ structure Type =
 
       local
          val tuple = newHash ()
-         val sequence = newHash ()
+         val sequenceDefault = newHash ()
+         val sequenceFlat = newHash ()
+         val sequenceSoa = newHash ()
          fun hashProd (p, base) =
             Hash.combine (base, Hash.vectorMap (Prod.dest p, fn {elt, ...} => hash elt))
       in
@@ -206,7 +220,9 @@ structure Type =
                val base =
                   case con of
                      Con c => Con.hash c
-                   | Sequence => sequence
+                   | Sequence ArrayLayout.Default => sequenceDefault
+                   | Sequence ArrayLayout.Aos => sequenceFlat
+                   | Sequence ArrayLayout.Soa => sequenceSoa
                    | Tuple => tuple
                val hash = hashProd (args, base)
             in
@@ -214,10 +230,10 @@ structure Type =
             end
       end
 
-      fun sequence p = object {args = p, con = Sequence}
+      fun sequence lay p = object {args = p, con = Sequence lay}
 
-      fun array1 ty = sequence (Prod.new1Mutable ty)
-      fun vector1 ty = sequence (Prod.new1Immutable ty)
+      fun array1 lay ty = sequence lay (Prod.new1Mutable ty)
+      fun vector1 lay ty = sequence lay (Prod.new1Immutable ty)
 
       fun ofConst c =
          let
@@ -229,7 +245,7 @@ structure Type =
              | Null => cpointer
              | Real r => real (RealX.size r)
              | Word w => word (WordX.size w)
-             | WordVector v => vector1 (word (WordXVector.elementSize v))
+             | WordVector v => vector1 ArrayLayout.Default (word (WordXVector.elementSize v))
          end
 
       fun conApp (con, args) = object {args = args, con = Con con}
@@ -285,9 +301,11 @@ structure Type =
              List.map (WordSize.all, fn ws => ("word" ^ WordSize.toString ws, word ws)) @
              List.map (RealSize.all, fn rs => ("real" ^ RealSize.toString rs, real rs)))
          val unary =
-            Con.parseAs (Vector.new3 (("sequence", sequence o Prod.new1Immutable),
+            Con.parseAs (Vector.fromList [("sequence", sequence ArrayLayout.Default o Prod.new1Immutable),
+                                      ("sequence_aos", sequence ArrayLayout.Aos o Prod.new1Immutable),
+                                      ("sequence_soa", sequence ArrayLayout.Soa o Prod.new1Immutable),
                                       ("tuple", tuple o Prod.new1Immutable),
-                                      ("weak", weak)),
+                                      ("weak", weak)],
                          fn con => fn ty =>
                          conApp (con, Prod.new1Immutable ty))
       in
@@ -357,13 +375,14 @@ structure Type =
             val seqIndex = word (WordSize.seqIndex ())
          in
             case prim of
-               Prim.Array_alloc _ =>
+               Prim.Array_alloc {layout, ...} =>
                   oneArg
                   (fn n =>
                    case deSequenceOpt result of
                       SOME resp =>
                          Prod.allAreMutable resp
                          andalso equals (n, seqIndex)
+                         andalso ArrayLayout.equals (deSequenceLayout result, layout)
                     | _ => false)
              | Prim.Array_copyArray =>
                   fiveArgs

@@ -13,6 +13,7 @@ struct
 open S
 
 structure DeepFlatten = DeepFlatten (S)
+structure FlattenIntoSequences = FlattenIntoSequences (S)
 structure DropSpork2 = DropSpork2 (S)
 structure Profile2 = Profile2 (S)
 structure RefFlatten = RefFlatten (S)
@@ -24,6 +25,7 @@ type pass = {name: string,
              execute: bool}
 
 val ssa2PassesDefault = 
+   {name = "flattenIntoSequences", doit = FlattenIntoSequences.transform2, execute = true} ::
    {name = "deepFlatten", doit = DeepFlatten.transform2, execute = true} ::
    {name = "refFlatten", doit = RefFlatten.transform2, execute = true} ::
    {name = "removeUnused5", doit = RemoveUnused2.transform2, execute = true} ::
@@ -51,7 +53,8 @@ local
 
 
    val passGens = 
-      List.map([("deepFlatten", DeepFlatten.transform2),
+      List.map([("flattenIntoSequences", FlattenIntoSequences.transform2),
+                ("deepFlatten", DeepFlatten.transform2),
                 ("refFlatten", RefFlatten.transform2),
                 ("removeUnused", RemoveUnused2.transform2),
                 ("zone", Zone.transform2),

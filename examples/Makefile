@@ -13,6 +13,9 @@ PROGRAMS= \
 	ray \
 	tokens \
 	nn \
+	nn-flat \
+	nn-soa \
+	soa-test \
 	dedup \
 	nqueens \
 	reverb \

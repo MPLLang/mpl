@@ -13,6 +13,7 @@ signature PRIM_SLICE =
       type 'a sequence
       type 'a elt
       type 'a slice
+      type 'a prim_array
       val length: 'a slice -> SeqIndex.int
       val sub: 'a slice * SeqIndex.int -> 'a elt
       val unsafeSub: 'a slice * SeqIndex.int -> 'a elt
@@ -21,8 +22,8 @@ signature PRIM_SLICE =
       val uninitIsNop: 'a slice -> bool
       val uninit: 'a slice * SeqIndex.int -> unit
       val unsafeUninit: 'a slice * SeqIndex.int -> unit
-      val copy: {dst: 'a elt array, di: SeqIndex.int, src: 'a slice} -> unit
-      val unsafeCopy: {dst: 'a elt array, di: SeqIndex.int, src: 'a slice} -> unit
+      val copy: {dst: 'a elt prim_array, di: SeqIndex.int, src: 'a slice} -> unit
+      val unsafeCopy: {dst: 'a elt prim_array, di: SeqIndex.int, src: 'a slice} -> unit
       val full: 'a sequence -> 'a slice
       val slice: 'a sequence * SeqIndex.int * SeqIndex.int option -> 'a slice
       val unsafeSlice: 'a sequence * SeqIndex.int * SeqIndex.int option -> 'a slice
