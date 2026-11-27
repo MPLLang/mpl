@@ -146,8 +146,12 @@ void HM_foreachPublic (
     checkFishyChunks(s, fishyChunks, numFishyChunks, f);
     lastChunk = CC_getLastChunk(&(remSet->public));
     if (lastChunk != fishyChunks[numFishyChunks - 1].chunk) {
-      assert (chunk->nextChunk != NULL);
-      chunk = chunk->nextChunk;
+      /* Chunks were appended after the last one scanned (here chunk is
+       * NULL): go on from the last chunk scanned, which stays in
+       * fishyChunks and is checked again with the others. The appender
+       * set its nextChunk under the list's mutex, which CC_getLastChunk
+       * has just taken; the atomic load is for tools that model it. */
+      chunk = __atomic_load_n(&fishyChunks[numFishyChunks - 1].chunk->nextChunk, __ATOMIC_ACQUIRE);
     }
   }
   free(fishyChunks);
