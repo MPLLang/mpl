@@ -52,9 +52,9 @@ struct
       Type.Object
         {con = ObjectCon.Sequence ArrayLayout.Aos, args: Type.t Prod.t} =>
         if
-          Vector.forall (Prod.dest args, fn {elt, isMutable} =>
-            Option.isNone (Option.andThen (try_rewrite_type elt, fn elt' =>
-              try_flatten_tuples {elt = elt', isMutable = isMutable})))
+          Vector.forall (Prod.dest args, fn x as {elt, ...} =>
+            Option.isNone (try_flatten_tuples x)
+            andalso Option.isNone (try_rewrite_type elt))
         then NONE
         else SOME (rewrite_sequence_aos_type args)
 
@@ -99,7 +99,7 @@ struct
             NONE => Vector.new1 x
           | SOME elements => elements)))
     in
-      Type.sequence ArrayLayout.Default flat_and_rewritten
+      Type.sequence ArrayLayout.Aos flat_and_rewritten
     end
 
 
